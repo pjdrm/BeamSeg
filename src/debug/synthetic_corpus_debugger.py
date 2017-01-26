@@ -47,7 +47,7 @@ def debug(vocab_dic, doc_synth_tt, desc, outDir, flags):
         print(doc_synth_tt.getText(vocab_dic))
         
 pi = 0.2
-alpha = 10
+alpha = 15
 beta = 0.6
 K = 10
 W = 15
@@ -67,6 +67,8 @@ doc_synth_tt = SyntheticTopicTrackingDoc(pi, alpha, beta, K, W, n_sents, sentenc
 doc_synth_tt.generate_doc()
 debug(vocab_dic, doc_synth_tt, "Topic Tracking", outDir, flags)
 
+'''
 doc_synth_rnd_tp = SyntheticRndTopicPropsDoc(pi, alpha, beta, K, W, n_sents, sentence_l)
 doc_synth_rnd_tp.generate_doc()
 debug(vocab_dic, doc_synth_rnd_tp, "Random Topic Proportions", outDir, flags)
+'''

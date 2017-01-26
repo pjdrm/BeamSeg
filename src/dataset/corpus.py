@@ -14,6 +14,10 @@ class SyntheticDocument(object):
         self.W = W
         self.sentence_l = sentence_l
         self.rho = np.random.binomial(1, pi, size=n_sents)
+        #I assume that a sentence u with rho_u = 1 belong to the previous segment.
+        #rho_u = 1 means a segment is coming next, this does not make sense for 
+        #the last sentence. Thus, we set it to 0.
+        self.rho[-1] = 0
         #need to append last sentence, otherwise last segment wont be taken into account
         self.rho_eq_1 = np.append(np.nonzero(self.rho)[0], [n_sents-1])
         self.phi = sparse.csr_matrix([np.random.dirichlet([beta]*W) for k in range(K)])
