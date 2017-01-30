@@ -12,7 +12,8 @@ class SyntheticDocument(object):
         self.alpha = alpha
         self.K = K
         self.W = W
-        self.sentence_l = sentence_l
+        self.n_sents = n_sents
+        self.sent_len = sentence_l
         self.rho = np.random.binomial(1, pi, size=n_sents)
         #I assume that a sentence u with rho_u = 1 belong to the previous segment.
         #rho_u = 1 means a segment is coming next, this does not make sense for 
@@ -25,8 +26,8 @@ class SyntheticDocument(object):
         self.theta = sparse.csr_matrix((self.n_segs, K))
         theta_S0 = np.random.dirichlet([self.alpha]*K)
         self.theta[0, :] = theta_S0
-        self.U_W_word_counts_matrix = sparse.csr_matrix((n_sents, W))
-        self.U_K_topics_counts_matrix = sparse.csr_matrix((n_sents, K))
+        self.U_W_counts = sparse.csr_matrix((n_sents, W))
+        self.U_K_counts = sparse.csr_matrix((n_sents, K))
         
     def get_Su_begin_end(self, Su_index):
         Su_end = self.rho_eq_1[Su_index] + 1
@@ -42,27 +43,27 @@ class SyntheticDocument(object):
     u_word_count - word vector representation of sentence u
     z_u_i - topic assignment of the ith word in sentence u
     '''
-    def generate_Su(self, Su, Su_index):
+    def generate_Su(self, Su_index):
         Su_begin, Su_end = self.get_Su_begin_end(Su_index)
         print("Generating words for %d - %d segment" % (Su_begin, Su_end))
         for u in range(Su_begin, Su_end):
             u_word_count = np.zeros(self.W)
             u_topic_counts = np.zeros(self.K)
-            for word_draw in range(self.sentence_l):
+            for word_draw in range(self.sent_len):
                 z_u_i = np.nonzero(np.random.multinomial(1, self.theta[Su_index, :].toarray()[0]))[0][0]
                 #print("Topic %d" % z_u_i)
                 u_topic_counts[z_u_i] += 1.0
                 w_u_i = np.nonzero(np.random.multinomial(1, self.phi[z_u_i].toarray()[0]))[0][0]
                 u_word_count[w_u_i] += 1.0
-            self.U_W_word_counts_matrix[u, :] = u_word_count
-            self.U_K_topics_counts_matrix[u, :] = u_topic_counts
+            self.U_W_counts[u, :] = u_word_count
+            self.U_K_counts[u, :] = u_topic_counts
             
     def getText(self, vocab_dic):
         print(self.rho)
         str_text = "==========\n"
         for i, rho in enumerate(self.rho):
             for j in range(self.W):
-                n_words = self.U_W_word_counts_matrix[i, j]
+                n_words = self.U_W_counts[i, j]
                 #so inificient... there must be a way to iterate just non zero entries
                 if n_words == 0:
                     continue
@@ -85,30 +86,29 @@ class SyntheticTopicTrackingDoc(SyntheticDocument):
         I am not sure of tis though, it could make sense to update
         just alpha (or both) assuming phi = phi t - 1
         '''
-        self.generate_Su(self.rho_eq_1[0], 0)
+        self.generate_Su(0)
         
         '''
         Generating remaining segments
         Note: Su is the index of the last sentence in the segment
         '''
-        for Su_index, Su in enumerate(self.rho_eq_1[1:], 1):
+        for Su_index in range(1, self.n_segs):
             #print("Su_index %d Su %d" % (Su_index, Su))
-            theta_Su = self.generate_theta(Su, Su_index, self.alpha)
+            theta_Su = self.generate_theta(Su_index, self.alpha)
             self.theta[Su_index, :] = theta_Su
-            self.generate_Su(Su, Su_index)
-            self.alpha = self.update_alpha(Su, Su_index, self.alpha)
-            self.theta[Su_index, :] = self.update_theta(Su, Su_index, self.alpha)
+            self.generate_Su(Su_index)
+            self.alpha = self.update_alpha(Su_index, self.alpha)
+            self.theta[Su_index, :] = self.update_theta(Su_index, self.alpha)
     
-    def generate_theta(self, Su, Su_index, alpha):
+    def generate_theta(self, Su_index, alpha):
         theta_t_minus_1 = self.theta[Su_index - 1, :]
         theta = np.random.dirichlet((([alpha]*self.K)*theta_t_minus_1.toarray())[0])
         return theta
             
-    def update_theta(self, Su, Su_index, alpha):
+    def update_theta(self, Su_index, alpha):
         theta_t_minus_1 = self.theta[Su_index - 1, :]
         Su_begin, Su_end = self.get_Su_begin_end(Su_index)
-        #print ("Su: %d Su_begin %d Su_end %d" % (Su, Su_begin, Su_end))
-        n_tk_vec = np.sum(self.U_K_topics_counts_matrix[Su_begin:Su_end, :], axis=0)
+        n_tk_vec = np.sum(self.U_K_counts[Su_begin:Su_end, :], axis=0)
         n_t = np.sum(n_tk_vec)
         f1 = n_tk_vec + alpha*theta_t_minus_1
         f2 = n_t + alpha
@@ -117,10 +117,10 @@ class SyntheticTopicTrackingDoc(SyntheticDocument):
     '''
     Su - segment index
     '''        
-    def update_alpha(self, Su, Su_index, alpha):
+    def update_alpha(self, Su_index, alpha):
         theta_t_minus_1 = self.theta[Su_index - 1, :]
         Su_begin, Su_end = self.get_Su_begin_end(Su_index)
-        n_tk_vec = np.sum(self.U_K_topics_counts_matrix[Su_begin:Su_end, :], axis=0)
+        n_tk_vec = np.sum(self.U_K_counts[Su_begin:Su_end, :], axis=0)
         n_t = np.sum(n_tk_vec)
         alpha_times_theta_t_minus_1 = alpha*theta_t_minus_1
         #I have no idea why I need .toarray() ...
@@ -133,12 +133,12 @@ class SyntheticRndTopicPropsDoc(SyntheticDocument):
         SyntheticDocument.__init__(self, pi, alpha, beta, K, W, n_sents, sentence_l)
 
     def generate_doc(self):
-        for Su_index, Su in enumerate(self.rho_eq_1):
+        for Su_index in range(self.n_segs):
             #print("Su_index %d Su %d" % (Su_index, Su))
-            self.theta[Su_index, :] = self.generate_theta(Su, Su_index, self.alpha)
-            self.generate_Su(Su, Su_index)
+            self.theta[Su_index, :] = self.generate_theta(self.alpha)
+            self.generate_Su(Su_index)
     
-    def generate_theta(self, Su, Su_index, alpha):
+    def generate_theta(self, alpha):
         theta = np.random.dirichlet([alpha]*self.K)
         return theta
     
