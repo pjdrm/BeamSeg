@@ -7,7 +7,7 @@ of the topic tracking model.
 @author: root
 '''
 from dataset.corpus import SyntheticTopicTrackingDoc
-from models.topic_tracking import TopicTrackingModel
+from model.topic_tracking import TopicTrackingModel
 import numpy as np
 from debug.debug_tools import print_matrix_heat_map
 

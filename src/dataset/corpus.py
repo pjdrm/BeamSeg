@@ -6,6 +6,7 @@ Created on Jan 20, 2017
 import numpy as np
 from scipy import sparse
 from scipy.special import digamma
+from model.topic_tracking import TopicTrackingModel
 
 class SyntheticDocument(object):
     def __init__(self, pi, alpha, beta, K, W, n_sents, sentence_l):
@@ -28,7 +29,7 @@ class SyntheticDocument(object):
         self.theta[0, :] = theta_S0
         self.U_W_counts = sparse.csr_matrix((n_sents, W))
         self.U_K_counts = sparse.csr_matrix((n_sents, K))
-        
+    
     def get_Su_begin_end(self, Su_index):
         Su_end = self.rho_eq_1[Su_index] + 1
         if Su_index == 0:
@@ -51,7 +52,6 @@ class SyntheticDocument(object):
             u_topic_counts = np.zeros(self.K)
             for word_draw in range(self.sent_len):
                 z_u_i = np.nonzero(np.random.multinomial(1, self.theta[Su_index, :].toarray()[0]))[0][0]
-                #print("Topic %d" % z_u_i)
                 u_topic_counts[z_u_i] += 1.0
                 w_u_i = np.nonzero(np.random.multinomial(1, self.phi[z_u_i].toarray()[0]))[0][0]
                 u_word_count[w_u_i] += 1.0
@@ -74,7 +74,12 @@ class SyntheticDocument(object):
         str_text += "=========="
         return str_text   
     
-class SyntheticTopicTrackingDoc(SyntheticDocument):
+'''
+Making this class to inherit from TopicTrackingModel
+to use the draw_theta, update_alpha, and update_theta.
+Otherwise I would have to repeat the code.
+'''
+class SyntheticTopicTrackingDoc(SyntheticDocument, TopicTrackingModel):
     def __init__(self, pi, alpha, beta, K, W, n_sents, sentence_l):
         SyntheticDocument.__init__(self, pi, alpha, beta, K, W, n_sents, sentence_l)
         
@@ -90,43 +95,17 @@ class SyntheticTopicTrackingDoc(SyntheticDocument):
         
         '''
         Generating remaining segments
-        Note: Su is the index of the last sentence in the segment
+        Note: Su_index is the index of the segment.
+        Su_index = 0 - first segment
+        Su_index = 1 - second segment
+        ...
         '''
         for Su_index in range(1, self.n_segs):
-            #print("Su_index %d Su %d" % (Su_index, Su))
-            theta_Su = self.generate_theta(Su_index, self.alpha)
+            theta_Su = self.draw_theta(Su_index)
             self.theta[Su_index, :] = theta_Su
             self.generate_Su(Su_index)
-            self.alpha = self.update_alpha(Su_index, self.alpha)
-            self.theta[Su_index, :] = self.update_theta(Su_index, self.alpha)
-    
-    def generate_theta(self, Su_index, alpha):
-        theta_t_minus_1 = self.theta[Su_index - 1, :]
-        theta = np.random.dirichlet((([alpha]*self.K)*theta_t_minus_1.toarray())[0])
-        return theta
-            
-    def update_theta(self, Su_index, alpha):
-        theta_t_minus_1 = self.theta[Su_index - 1, :]
-        Su_begin, Su_end = self.get_Su_begin_end(Su_index)
-        n_tk_vec = np.sum(self.U_K_counts[Su_begin:Su_end, :], axis=0)
-        n_t = np.sum(n_tk_vec)
-        f1 = n_tk_vec + alpha*theta_t_minus_1
-        f2 = n_t + alpha
-        return f1[0] / f2
-    
-    '''
-    Su - segment index
-    '''        
-    def update_alpha(self, Su_index, alpha):
-        theta_t_minus_1 = self.theta[Su_index - 1, :]
-        Su_begin, Su_end = self.get_Su_begin_end(Su_index)
-        n_tk_vec = np.sum(self.U_K_counts[Su_begin:Su_end, :], axis=0)
-        n_t = np.sum(n_tk_vec)
-        alpha_times_theta_t_minus_1 = alpha*theta_t_minus_1
-        #I have no idea why I need .toarray() ...
-        f1 = np.sum(theta_t_minus_1.multiply(digamma(n_tk_vec + alpha_times_theta_t_minus_1) - digamma(alpha_times_theta_t_minus_1.toarray())))
-        f2 = digamma(n_t + alpha) - digamma(alpha)
-        return alpha * (f1 / f2)
+            self.update_alpha(Su_index)
+            self.update_theta(Su_index, self.alpha)
     
 class SyntheticRndTopicPropsDoc(SyntheticDocument):
     def __init__(self, pi, alpha, beta, K, W, n_sents, sentence_l):
@@ -135,10 +114,10 @@ class SyntheticRndTopicPropsDoc(SyntheticDocument):
     def generate_doc(self):
         for Su_index in range(self.n_segs):
             #print("Su_index %d Su %d" % (Su_index, Su))
-            self.theta[Su_index, :] = self.generate_theta(self.alpha)
+            self.theta[Su_index, :] = self.draw_theta(self.alpha)
             self.generate_Su(Su_index)
     
-    def generate_theta(self, alpha):
+    def draw_theta(self, alpha):
         theta = np.random.dirichlet([alpha]*self.K)
         return theta
     

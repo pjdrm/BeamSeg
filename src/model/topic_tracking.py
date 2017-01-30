@@ -14,10 +14,12 @@ class TopicTrackingModel(object):
         self.beta = beta
         self.K = K
         self.W = doc.W
+        
+        #Initializing with a random state
         self.pi = np.random.beta(gamma, gamma)
         self.rho = np.random.binomial(1, self.pi, size=doc.n_sents)
         self.rho[-1] = 0
-        #need to append last sentence, otherwise last segment wont be taken into account
+        #Need to append last sentence, otherwise last segment wont be taken into account
         self.rho_eq_1 = np.append(np.nonzero(self.rho)[0], [doc.n_sents-1])
         self.n_segs = len(self.rho_eq_1)
         self.phi = sparse.csr_matrix([np.random.dirichlet([self.beta]*self.W) for k in range(self.K)])
@@ -30,7 +32,7 @@ class TopicTrackingModel(object):
         self.W_K_counts = sparse.csr_matrix((self.W, self.K))
         
         '''
-        Initializing with a random state
+        Generating first segment
         Note: for the first segment (the one outside the for loop)
         there is no t - 1, thus, I think we should not perform
         update_alpha and update_theta
@@ -38,12 +40,20 @@ class TopicTrackingModel(object):
         theta_S0 = np.random.dirichlet([self.alpha]*self.K)
         self.theta[0, :] = theta_S0
         self.init_Z_Su(0)
+        
+        '''
+        Generating remaining segments
+        Note: Su_index is the index of the segment.
+        Su_index = 0 - first segment
+        Su_index = 1 - second segment
+        ...
+        '''
         for Su_index in range(1, self.n_segs):
-            theta_Su = self.draw_theta(Su_index, self.alpha)
+            theta_Su = self.draw_theta(Su_index)
             self.theta[Su_index, :] = theta_Su
             self.init_Z_Su(Su_index)
-            self.alpha = self.update_alpha(Su_index, self.alpha)
-            self.theta[Su_index, :] = self.update_theta(Su_index, self.alpha)
+            self.update_alpha(Su_index)
+            self.update_theta(Su_index, self.alpha)
         
     def get_Su_begin_end(self, Su_index):
         Su_end = self.rho_eq_1[Su_index] + 1
@@ -53,9 +63,9 @@ class TopicTrackingModel(object):
             Su_begin = self.rho_eq_1[Su_index - 1] + 1
         return (Su_begin, Su_end)
         
-    def draw_theta(self, Su_index, alpha):
+    def draw_theta(self, Su_index):
         theta_t_minus_1 = self.theta[Su_index - 1, :]
-        theta = np.random.dirichlet((([alpha]*self.K)*theta_t_minus_1.toarray())[0])
+        theta = np.random.dirichlet((([self.alpha]*self.K)*theta_t_minus_1.toarray())[0])
         return theta
     
     def update_theta(self, Su_index, alpha):
@@ -65,19 +75,19 @@ class TopicTrackingModel(object):
         n_t = np.sum(n_tk_vec)
         f1 = n_tk_vec + alpha*theta_t_minus_1
         f2 = n_t + alpha
-        return f1[0] / f2
+        self.theta[Su_index, :] = f1[0] / f2
     
-    def update_alpha(self, Su_index, alpha):
+    def update_alpha(self, Su_index):
         theta_t_minus_1 = self.theta[Su_index - 1, :]
         Su_begin, Su_end = self.get_Su_begin_end(Su_index)
         n_tk_vec = np.sum(self.U_K_counts[Su_begin:Su_end, :], axis=0)
         n_t = np.sum(n_tk_vec)
-        alpha_times_theta_t_minus_1 = alpha*theta_t_minus_1
+        alpha_times_theta_t_minus_1 = self.alpha*theta_t_minus_1
         #I have no idea why I need .toarray() ...
         f1 = np.sum(theta_t_minus_1.multiply(digamma(n_tk_vec + alpha_times_theta_t_minus_1)\
                                               - digamma(alpha_times_theta_t_minus_1.toarray())))
-        f2 = digamma(n_t + alpha) - digamma(alpha)
-        return alpha * (f1 / f2)
+        f2 = digamma(n_t + self.alpha) - digamma(self.alpha)
+        self.alpha = self.alpha * (f1 / f2)
     
     def init_Z_Su(self, Su_index):
         Su_begin, Su_end = self.get_Su_begin_end(Su_index)
