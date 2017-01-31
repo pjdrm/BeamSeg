@@ -14,6 +14,11 @@ class TopicTrackingModel(object):
         self.beta = beta
         self.K = K
         self.W = doc.W
+        '''
+        Array with the length of each sentence.
+        Note that the length of the sentences is variable
+        '''
+        self.sents_len = doc.sents_len
         
         #Initializing with a random state
         self.pi = np.random.beta(gamma, gamma)
@@ -26,6 +31,10 @@ class TopicTrackingModel(object):
         self.theta = sparse.csr_matrix((self.n_segs, self.K))
         #Matrix with the counts of the words in each sentence 
         self.U_W_counts = doc.U_W_counts
+        #Matrix with the topics of the ith word in each u sentence 
+        self.U_I_topics = doc.U_I_topics
+        #Matrix with the word index of the ith word in each u sentence 
+        self.U_I_words = doc.U_I_words
         #Matrix with the counts of the topic assignments in each sentence 
         self.U_K_counts = sparse.csr_matrix((doc.n_sents, self.K))
         #Matrix with the number of times each word in the vocab was assigned with topic k
@@ -93,11 +102,19 @@ class TopicTrackingModel(object):
         Su_begin, Su_end = self.get_Su_begin_end(Su_index)
         for u in range(Su_begin, Su_end):
             u_topic_counts = np.zeros(self.K)
-            for w in range(self.W):
-                n_w = self.U_W_counts[u, w]
-                if n_w == 0:
-                    continue
-                z_u_w = np.random.multinomial(n_w, self.theta[Su_index, :].toarray()[0])
-                u_topic_counts += z_u_w
-                self.W_K_counts[w, :] += z_u_w
+            for i in range(self.sents_len[u]):
+                z_u_i = np.nonzero(np.random.multinomial(1, self.theta[Su_index, :].toarray()[0]))[0][0]
+                u_topic_counts[z_u_i] += 1.0
+                self.U_I_topics[u, i] = z_u_i
+                w_u_i = self.U_I_words[u, i]
+                self.W_K_counts[w_u_i, z_u_i] += 1.0
             self.U_K_counts[u, :] = u_topic_counts
+    
+    '''
+    This function samples the topic assignment z of word u,i
+    u - sentence number
+    i - ith word from u to be sampled
+    '''
+    def sample_z_ui(self, u, i):
+        return
+        

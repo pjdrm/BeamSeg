@@ -34,6 +34,23 @@ assert np.array_equal(np.sum(tt_model.U_W_counts, axis = 0),\
                       
 assert tt_model.phi.shape == (K, W), "The shape of phi must match [W, K]"
 
+topic_counts = np.zeros(K)
+word_counts = np.zeros(W)
+for u in range(n_sents):
+    for i in range(sentence_l):
+        z_ui = tt_model.U_I_topics[u, i]
+        w_ui = tt_model.U_I_words[u, i]
+        topic_counts[z_ui] += 1
+        word_counts[w_ui] += 1
+        
+assert np.array_equal(topic_counts,\
+                      np.array(np.sum(tt_model.W_K_counts, axis = 0))[0, :]),\
+                      "Topic Counts in U_I_topics are different from W_K"
+                      
+assert np.array_equal(word_counts,\
+                      np.array(np.sum(tt_model.W_K_counts, axis = 1))[:, 0]),\
+                      "Word Counts in U_I_words are different from W_K"
+                      
 '''
 Note: check the image file to see if the
 evolution of the topics seems like

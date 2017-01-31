@@ -5,16 +5,17 @@ Created on Jan 20, 2017
 '''
 import numpy as np
 from scipy import sparse
-from scipy.special import digamma
+from scipy import int8
 from model.topic_tracking import TopicTrackingModel
 
 class SyntheticDocument(object):
-    def __init__(self, pi, alpha, beta, K, W, n_sents, sentence_l):
+    def __init__(self, pi, alpha, beta, K, W, n_sents, sent_len):
         self.alpha = alpha
         self.K = K
         self.W = W
         self.n_sents = n_sents
-        self.sent_len = sentence_l
+        self.sent_len = sent_len
+        self.sents_len = [sent_len]*n_sents
         self.rho = np.random.binomial(1, pi, size=n_sents)
         #I assume that a sentence u with rho_u = 1 belong to the previous segment.
         #rho_u = 1 means a segment is coming next, this does not make sense for 
@@ -27,8 +28,10 @@ class SyntheticDocument(object):
         self.theta = sparse.csr_matrix((self.n_segs, K))
         theta_S0 = np.random.dirichlet([self.alpha]*K)
         self.theta[0, :] = theta_S0
-        self.U_W_counts = sparse.csr_matrix((n_sents, W))
-        self.U_K_counts = sparse.csr_matrix((n_sents, K))
+        self.U_W_counts = sparse.csr_matrix((n_sents, W), dtype=int8)
+        self.U_K_counts = sparse.csr_matrix((n_sents, K), dtype=int8)
+        self.U_I_topics = sparse.csr_matrix((n_sents, sent_len), dtype=int8)
+        self.U_I_words = sparse.csr_matrix((n_sents, sent_len), dtype=int8)
     
     def get_Su_begin_end(self, Su_index):
         Su_end = self.rho_eq_1[Su_index] + 1
@@ -52,22 +55,20 @@ class SyntheticDocument(object):
             u_topic_counts = np.zeros(self.K)
             for word_draw in range(self.sent_len):
                 z_u_i = np.nonzero(np.random.multinomial(1, self.theta[Su_index, :].toarray()[0]))[0][0]
-                u_topic_counts[z_u_i] += 1.0
+                u_topic_counts[z_u_i] += 1
                 w_u_i = np.nonzero(np.random.multinomial(1, self.phi[z_u_i].toarray()[0]))[0][0]
-                u_word_count[w_u_i] += 1.0
+                u_word_count[w_u_i] += 1
+                self.U_I_topics[u, word_draw] = z_u_i
+                self.U_I_words[u, word_draw] = w_u_i
             self.U_W_counts[u, :] = u_word_count
             self.U_K_counts[u, :] = u_topic_counts
             
     def getText(self, vocab_dic):
-        print(self.rho)
         str_text = "==========\n"
         for i, rho in enumerate(self.rho):
-            for j in range(self.W):
-                n_words = self.U_W_counts[i, j]
-                #so inificient... there must be a way to iterate just non zero entries
-                if n_words == 0:
-                    continue
-                str_text += ((vocab_dic[j]+" ")*n_words)
+            for j in range(self.sents_len[i]):
+                w_ij = self.U_I_words[i, j]
+                str_text += vocab_dic[w_ij] + " "
             str_text += "\n"
             if rho == 1:
                 str_text += "==========\n"
