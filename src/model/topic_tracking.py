@@ -111,10 +111,46 @@ class TopicTrackingModel(object):
             self.U_K_counts[u, :] = u_topic_counts
     
     '''
+    This function gives the topic assignment z of word u,i probability
+    given topic k.
+    w_ui - index (in the vocab) of sentence ith word in sentence u
+    k - topic
+    Note: this function does not modify the w_ui counts.
+    '''
+    def prob_z_ui_k(self, w_ui, k, Su_index):
+        n_k_ui = self.W_K_counts[w_ui, k]
+        n_t = self.W_K_counts[:, k].sum()
+        f1 = (n_k_ui+self.beta)/(n_t + self.W*self.beta)
+        
+        Su_begin, Su_end = self.get_Su_begin_end(Su_index)
+        n_Su_z_ui = self.U_K_counts[Su_begin:Su_end, k].sum()
+        n_Su = self.U_K_counts[Su_begin:Su_end, k].sum()
+        #TODO: need to take care of the Su_index = 0 case
+        theta_Su_k_t_minus_1 = self.theta[Su_index - 1, k]
+        f2 = (n_Su_z_ui+theta_Su_k_t_minus_1*self.alpha)/(n_Su + self.K*self.alpha)
+        
+        return f1 / f2
+    
+    '''
     This function samples the topic assignment z of word u,i
+    according to the probability of the possible topics in K.
     u - sentence number
     i - ith word from u to be sampled
     '''
-    def sample_z_ui(self, u, i):
-        return
+    def sample_z_ui(self, u, i, Su_index):
+        '''
+        Since this is for the Gibbs Sampler, we need to remove
+        word w_ui from segment and topic counts
+        '''
+        w_ui = self.U_I_words[u, i]
+        z_ui = self.U_I_topics[u, i]
+        self.W_K_counts[w_ui, z_ui] -= 1
+        self.U_K_counts[u, z_ui] -= 1
         
+        topic_probs = []
+        for k in range(self.K):
+            topic_probs.append(self.prob_z_ui_k(w_ui, k, Su_index))
+        topic_probs = topic_probs / np.sum(topic_probs)
+        z_ui_t_plus_1 = np.nonzero(np.random.multinomial(1, topic_probs))[0][0]
+        self.W_K_counts[w_ui, z_ui_t_plus_1] += 1
+        self.U_K_counts[u, z_ui_t_plus_1] += 1
