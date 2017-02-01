@@ -102,11 +102,13 @@ class SyntheticTopicTrackingDoc(SyntheticDocument, TopicTrackingModel):
         ...
         '''
         for Su_index in range(1, self.n_segs):
-            theta_Su = self.draw_theta(Su_index)
+            Su_begin, Su_end = self.get_Su_begin_end(Su_index)
+            theta_t_minus_1 = self.theta[Su_index - 1, :]
+            theta_Su = self.draw_theta(Su_index, self.alpha)
             self.theta[Su_index, :] = theta_Su
             self.generate_Su(Su_index)
-            self.update_alpha(Su_index)
-            self.update_theta(Su_index, self.alpha)
+            self.alpha = self.update_alpha(theta_t_minus_1, self.alpha, Su_begin, Su_end)
+            self.theta[Su_index, :] = self.update_theta(theta_t_minus_1, self.alpha, Su_begin, Su_end)
     
 class SyntheticRndTopicPropsDoc(SyntheticDocument):
     def __init__(self, pi, alpha, beta, K, W, n_sents, sentence_l):

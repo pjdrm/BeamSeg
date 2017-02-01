@@ -83,7 +83,7 @@ tt_model = TopicTrackingModel(gamma, alpha, beta, K, doc_synth_tt)
 
 outFile = "debug/topic_tracking_model/topic_tracking_theta_heat_map_initial.png"
 test_initialization(tt_model, outFile)
-test_z_ui_sampling(tt_model)
+#test_z_ui_sampling(tt_model)
 
 
 
