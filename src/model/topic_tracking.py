@@ -5,12 +5,13 @@ Created on Jan 27, 2017
 '''
 import numpy as np
 from scipy import sparse
-from scipy.special import digamma, gamma
+from scipy.special import digamma, gamma, gammaln
+from scipy import exp
 
 class TopicTrackingModel(object):
     def __init__(self, gamma, alpha, beta, K, doc):
         self.gamma = gamma
-        self.alpha = alpha
+        #self.alpha = alpha
         self.beta = beta
         self.K = K
         self.W = doc.W
@@ -52,15 +53,17 @@ class TopicTrackingModel(object):
         
         '''
         Generating first segment
-        Note: for the first segment (the one outside the for loop)
-        there is no t - 1, thus, I think we should not perform
-        update_alpha and update_theta
+        Note: for the first alpha/theta update we use the values
+        obtained from the Dirichlet.
         '''
         Su_index = 0
         theta_S0 = np.random.dirichlet([self.alpha_array[Su_index]]*self.K)
         self.theta[Su_index, :] = theta_S0
         Su_begin, Su_end = self.get_Su_begin_end(Su_index)
         self.init_Z_Su(theta_S0, Su_begin, Su_end)
+        alpha = self.update_alpha(theta_S0, alpha, Su_begin, Su_end)
+        self.alpha_array[Su_index] = alpha
+        self.theta[Su_index, :] = self.update_theta(theta_S0, alpha, Su_begin, Su_end)
         
         '''
         Generating remaining segments
@@ -149,6 +152,8 @@ class TopicTrackingModel(object):
     according to the probability of the possible topics in K.
     u - sentence number
     i - ith word from u to be sampled
+    TODO: check if I should be doing an update on alpha and theta
+    after the new z assignment
     '''
     def sample_z_ui(self, u, i, Su_index):
         '''
@@ -167,3 +172,193 @@ class TopicTrackingModel(object):
         z_ui_t_plus_1 = np.nonzero(np.random.multinomial(1, topic_probs))[0][0]
         self.W_K_counts[w_ui, z_ui_t_plus_1] += 1
         self.U_K_counts[u, z_ui_t_plus_1] += 1
+    
+    '''
+    This function assumes the states of the variables is
+    already such as rho_u = 0. This is aspect is similar
+    to prob_z_ui_k.
+    '''    
+    def log_prob_rho_u_eq_0(self, Su_begin, Su_end, Su_index):
+        n0 = self.n_sents - self.n_segs
+        log_f1 = np.log(n0 + self.gamma) - np.log(self.n_sents + 2.0*self.gamma)
+        
+        #TODO: check if we should be hiding the z_u counts (I think not).
+        S_u0 = np.sum(self.U_K_counts[Su_begin:Su_end, :], axis = 0)
+        alpha = self.alpha_array[Su_index-1]
+        theta_Su_t_minus_1 = self.theta[Su_index - 1]
+        #Note: applying log trick to gamma function 
+        f2_num = (gammaln(S_u0+theta_Su_t_minus_1*alpha)).sum()
+        n_Su_0 = S_u0.sum()
+        f2_dem = gammaln(n_Su_0+self.K*alpha)
+        log_f2 = f2_num - f2_dem
+        
+        return log_f1 + log_f2
+    
+    def log_prob_rho_u_eq_1(self, Su_minus_1_begin, Su_minus_1_end, alpha_Su_t_minus_1, theta_Su_t_minus_1,\
+                              Su_begin, Su_end, theta_Su, alpha_Su):
+        #Note: doing the log trick
+        n1 = self.n_segs
+        log_f1 = np.log(n1 + self.gamma) - np.log(self.n_sents + 2.0*self.gamma)
+        
+        log_f2 = gammaln(self.K*alpha_Su) - gammaln(alpha_Su*theta_Su).sum()
+        
+        #TODO: deal with the Su_index = 0 case
+        S_u1_minus_1 = np.sum(self.U_K_counts[Su_minus_1_begin:Su_minus_1_end, :], axis = 0)
+        log_f3_num = gammaln(S_u1_minus_1+theta_Su_t_minus_1*alpha_Su_t_minus_1).sum()
+        n_Su1_minus_1 = S_u1_minus_1.sum()
+        log_f3_dem = gammaln(n_Su1_minus_1+self.K*alpha_Su_t_minus_1)
+        log_f3 = log_f3_num - log_f3_dem
+        
+        S_u1 = np.sum(self.U_K_counts[Su_begin:Su_end, :], axis = 0)
+        #TODO: probably I will have to use the log trick here
+        log_f4_num = gammaln(S_u1+theta_Su*alpha_Su).sum()
+        n_Su_1 = S_u1.sum()
+        log_f4_dem = gammaln(n_Su_1+self.K*alpha_Su)
+        log_f4 = log_f4_num - log_f4_dem
+        
+        return log_f1 + log_f2 + log_f3 + log_f4
+    
+    '''
+    This function computes the begin and end of the segment
+    merged at sentence u.
+    
+    Note: this function assumes that rho_u = 1.
+    If rho_u = 0 then there would be no segments to merge
+    and this method should just not be called.
+    
+    Note: we only worry about the begin and end of the merged
+    segment because we only need this information to sample
+    rho_u = 0. Its not necessary to change theta at all. 
+    '''
+    def merge_segments(self, Su_index):
+        Su_begin, Su_end = self.get_Su_begin_end(Su_index)
+        Su_plus_1_begin, Su_pus_1_end = self.get_Su_begin_end(Su_index+1)
+        return Su_begin, Su_pus_1_end
+    
+    '''
+    This function splits segment Su_index at sentence u
+    '''
+    def split_segments(self, u, Su_index):
+        begin, end = self.get_Su_begin_end(Su_index)
+        Su_minus_1_begin = begin
+        Su_minus_1_end = u
+        Su_begin = u + 1
+        Su_end = end
+        
+        theta_t_minus_1 = self.theta[Su_index - 1, :]
+        alpha_Su_t_minus_1 = self.update_alpha(theta_t_minus_1,\
+                                               self.alpha_array[Su_index - 1],\
+                                               Su_minus_1_begin, Su_minus_1_end)
+        theta_Su_t_minus_1 = self.update_theta(theta_t_minus_1, alpha_Su_t_minus_1,\
+                                               Su_minus_1_begin, Su_minus_1_end)
+        
+        alpha_Su = self.update_alpha(theta_Su_t_minus_1,\
+                                     alpha_Su_t_minus_1,\
+                                     Su_begin, Su_end)
+        theta_Su = self.update_theta(theta_Su_t_minus_1, alpha_Su,\
+                                     Su_begin, Su_end)
+        
+        return Su_minus_1_begin, Su_minus_1_end, theta_Su_t_minus_1, alpha_Su_t_minus_1,\
+               Su_begin, Su_end, theta_Su, alpha_Su
+               
+    def commit_merge(self, u, Su_index):
+        self.rho[u] = 0
+        self.rho_eq_1 = np.append(np.nonzero(self.rho)[0], [self.n_sents-1])
+        #Note: I don't think I need to reshape here
+        #self.reshape_alpha_theta_update(Su_index)
+        
+    def commit_split(self, u, Su_index):
+        self.n_segs += 1
+        self.rho[u] = 1
+        self.rho_eq_1 = np.append(np.nonzero(self.rho)[0], [self.n_sents-1])
+        self.reshape_alpha_theta_update(Su_index)       
+        
+    '''
+    This method is called when split/merge of segments occur
+    during the sampling of rho_u.
+    
+    I am assuming I only need to worry about alpha/theta values
+    up to segment Su_index, since rho_u will keep being sampled
+    and possibly new splits and merges can occur. Thus, I just 
+    reshape alpha and theta (I know when this method is called the
+    number of segments has changed) and copy the values up to Su_index
+    (exclusive) and calculate alpha and theta only for Su_index only.
+    Thus, the segments after Su_index have alpha and theta equal to 0.
+    '''
+    def reshape_alpha_theta_update(self, Su_index):
+        new_alpha_array = np.zeros(self.n_segs)
+        new_alpha_array[0:Su_index-1] = self.alpha_array[0:Su_index-1]
+        
+        new_theta_mat = sparse.csr_matrix((self.n_segs, self.K))
+        new_theta_mat[0:Su_index-1, :] = self.theta[0:Su_index-1, :]
+        
+        Su_begin, Su_end = self.get_Su_begin_end(Su_index)
+        theta_t_minus_1 = self.new_theta_mat[Su_index-1, :]
+        alpha = self.update_alpha(theta_t_minus_1,\
+                                  new_alpha_array[Su_index-1],\
+                                  Su_begin, Su_end)
+        new_alpha_array[Su_index] = alpha
+        new_theta_mat[Su_index, :] = self.update_theta(theta_t_minus_1, alpha, Su_begin, Su_end)
+            
+        self.alpha_array = new_alpha_array
+        self.theta = new_theta_mat
+               
+    def sample_rho_u(self, u, Su_index):
+        rho_u = self.rho[u]
+        if rho_u == 1:
+            self.n_segs -= 1
+        self.n_sents -= 1
+        
+        if rho_u == 0:
+            #Case where we do not need to merge segments
+            Su_begin, Su_end = self.get_Su_begin_end(Su_index)
+        else:
+            Su_begin, Su_end = self.merge_segments(Su_index)
+        log_prob_0 = self.log_prob_rho_u_eq_0(Su_begin, Su_end, Su_index)
+        
+        if rho_u == 1:
+            #Case where we do not need to split segments
+            Su_minus_1_begin, Su_minus_1_end = self.get_Su_begin_end(Su_index)
+            alpha_Su_t_minus_1 = self.alpha_array[Su_index]
+            theta_Su_t_minus_1 = self.theta[Su_index, :].toarray()
+            Su_begin, Su_end = self.get_Su_begin_end(Su_index + 1)
+            theta_Su = self.theta[Su_index + 1, :].toarray()
+            alpha_Su = self.alpha_array[Su_index + 1]
+        else:
+            Su_minus_1_begin, Su_minus_1_end, alpha_Su_t_minus_1, theta_Su_t_minus_1,\
+            Su_begin, Su_end, theta_Su, alpha_Su = self.split_segments(u, Su_index)
+            
+        log_prob_1 = self.log_prob_rho_u_eq_1(Su_minus_1_begin, Su_minus_1_end, alpha_Su_t_minus_1, theta_Su_t_minus_1,\
+                                      Su_begin, Su_end, theta_Su, alpha_Su)
+        
+        prob_1 = np.exp(log_prob_1 - np.logaddexp(log_prob_0, log_prob_1))
+        rho_u_new = np.random.binomial(1, prob_1)
+        
+        #Commit the changes according to rho_u_new
+        self.n_sents += 1
+        
+        if rho_u == rho_u_new:
+            '''
+            Case where we sampled the same segmentation, thus,
+            we only need to restore the n_segs variable.
+            '''
+            if rho_u == 1:
+                self.n_segs += 1
+                '''
+                Note: it is crucial to update alpha/theta when we pass
+                a segment and we are going to split/merge because
+                the actual split/merge operations zero alpha/theta
+                for the following segments.
+                '''
+                Su_begin, Su_end = self.get_Su_begin_end(Su_index)
+                theta_t_minus_1 = self.theta[Su_index-1, :]
+                alpha = self.update_alpha(theta_t_minus_1,\
+                                          self.alpha_array[Su_index-1],\
+                                          Su_begin, Su_end)
+                self.alpha_array[Su_index] = alpha
+                self.theta[Su_index, :] = self.update_theta(theta_t_minus_1, alpha, Su_begin, Su_end)
+        else:
+            if rho_u == 0:
+                self.commit_merge(u, Su_index)
+            else:
+                self.commit_split(u, Su_index)

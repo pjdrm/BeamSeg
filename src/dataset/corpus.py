@@ -87,12 +87,15 @@ class SyntheticTopicTrackingDoc(SyntheticDocument, TopicTrackingModel):
     def generate_doc(self):
         '''
         Generating the first segment.
-        Since its the first one I don't think it makes sense to update 
-        alpha and phi because there is no t - 1.
-        I am not sure of tis though, it could make sense to update
-        just alpha (or both) assuming phi = phi t - 1
+        Assumes theta t - 1 is the draw from the
+        Dirichlet in the beginning.
         '''
-        self.generate_Su(0)
+        Su_index = 0
+        Su_begin, Su_end = self.get_Su_begin_end(Su_index)
+        theta_S0 = self.theta[Su_index, :]
+        self.generate_Su(Su_index)
+        self.alpha = self.update_alpha(theta_S0, self.alpha, Su_begin, Su_end)
+        self.theta[Su_index, :] = self.update_theta(theta_S0, self.alpha, Su_begin, Su_end)
         
         '''
         Generating remaining segments
