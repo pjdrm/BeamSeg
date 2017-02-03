@@ -57,13 +57,15 @@ class TopicTrackingModel(object):
         obtained from the Dirichlet.
         '''
         Su_index = 0
-        theta_S0 = np.random.dirichlet([self.alpha_array[Su_index]]*self.K)
-        self.theta[Su_index, :] = theta_S0
+        self.theta[Su_index, :] = np.random.dirichlet([self.alpha_array[Su_index]]*self.K)
+        #These are the alpha_t_minus_1 and theta_t_minus_1 values of the first segment
+        self.theta_S0_t_minus_1 = self.theta[Su_index, :]
+        self.alpha_S0_t_minus_1 = alpha
         Su_begin, Su_end = self.get_Su_begin_end(Su_index)
-        self.init_Z_Su(theta_S0, Su_begin, Su_end)
-        alpha = self.update_alpha(theta_S0, alpha, Su_begin, Su_end)
+        self.init_Z_Su(self.theta_S0_t_minus_1.toarray()[0], Su_begin, Su_end)
+        alpha = self.update_alpha(self.theta_S0_t_minus_1, self.alpha_S0_t_minus_1, Su_begin, Su_end)
         self.alpha_array[Su_index] = alpha
-        self.theta[Su_index, :] = self.update_theta(theta_S0, alpha, Su_begin, Su_end)
+        self.theta[Su_index, :] = self.update_theta(self.theta_S0_t_minus_1, alpha, Su_begin, Su_end)
         
         '''
         Generating remaining segments
@@ -143,7 +145,8 @@ class TopicTrackingModel(object):
         n_Su = self.U_K_counts[Su_begin:Su_end, k].sum()
         #TODO: need to take care of the Su_index = 0 case
         theta_Su_k_t_minus_1 = self.theta[Su_index - 1, k]
-        f2 = (n_Su_z_ui+theta_Su_k_t_minus_1*self.alpha)/(n_Su + self.K*self.alpha)
+        alpha = self.alpha_array[Su_index]
+        f2 = (n_Su_z_ui+theta_Su_k_t_minus_1*alpha)/(n_Su + self.K*alpha)
         
         return f1 / f2
     
@@ -172,7 +175,41 @@ class TopicTrackingModel(object):
         z_ui_t_plus_1 = np.nonzero(np.random.multinomial(1, topic_probs))[0][0]
         self.W_K_counts[w_ui, z_ui_t_plus_1] += 1
         self.U_K_counts[u, z_ui_t_plus_1] += 1
-    
+        self.U_I_topics[u, i] = z_ui_t_plus_1
+        
+    '''
+    Samples all Z variables.
+    '''
+    def sample_z(self):
+        Su_index = 0
+        for u, rho_u in zip(range(self.n_sents), self.rho):
+            for i in range(self.sents_len[u]):
+                self.sample_z_ui(u, i, Su_index)
+            if rho_u == 1:
+                Su_index += 1
+        
+        '''
+        Updating all alpha/theta after the new Z assignments.
+        
+        Note: the S0 segment is outside the loop because its
+        alpha/theta t-1 variables are not in the regular arrays.
+        
+        #TODO: check if I should be doing update at all or if
+        it is necessary to do this after each new sampled z.
+        '''
+        Su_index = 0
+        Su_begin, Su_end = self.get_Su_begin_end(Su_index)
+        alpha = self.update_alpha(self.theta_S0_t_minus_1, self.alpha_S0_t_minus_1, Su_begin, Su_end)
+        self.alpha_array[Su_index] = alpha
+        self.theta[Su_index, :] = self.update_theta(self.theta_S0_t_minus_1, alpha, Su_begin, Su_end)
+        
+        for Su_index in range(1, self.n_segs):
+            Su_begin, Su_end = self.get_Su_begin_end(Su_index)
+            theta_t_minus_1 = self.theta[Su_index - 1, :]
+            alpha = self.alpha_array[Su_index - 1]
+            alpha = self.update_alpha(theta_t_minus_1, alpha, Su_begin, Su_end)
+            self.alpha_array[Su_index] = alpha
+            self.theta[Su_index, :] = self.update_theta(theta_t_minus_1, alpha, Su_begin, Su_end)
     '''
     This function assumes the states of the variables is
     already such as rho_u = 0. This is aspect is similar

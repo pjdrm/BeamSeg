@@ -68,6 +68,13 @@ def test_z_ui_sampling(tt_model):
     topic_probs = topic_probs / np.sum(topic_probs)
     assert str(topic_probs.sum()) == "1.0", "The topic probabilities from which we are going to sample z_ui need to sum to 1"
     
+def test_Z_sampling(tt_model, outFile):
+    try:
+        tt_model.sample_z()
+    except:
+        print("ERROR: sampling all Z variables is broken")
+    test_initialization(tt_model, outFile)
+    
 def test_rho_u_sampling(tt_model):
     Su_index = 1
     Su_begin, Su_end = tt_model.get_Su_begin_end(Su_index)
@@ -90,7 +97,8 @@ tt_model = TopicTrackingModel(gamma, alpha, beta, K, doc_synth_tt)
 outFile = "debug/topic_tracking_model/topic_tracking_theta_heat_map_initial.png"
 #test_initialization(tt_model, outFile)
 #test_z_ui_sampling(tt_model)
-test_rho_u_sampling(tt_model)
+test_Z_sampling(tt_model, outFile)
+#test_rho_u_sampling(tt_model)
 
 
 
