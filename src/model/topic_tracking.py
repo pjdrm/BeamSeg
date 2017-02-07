@@ -5,8 +5,8 @@ Created on Jan 27, 2017
 '''
 import numpy as np
 from scipy import sparse
-from scipy.special import digamma, gamma, gammaln
-from scipy import exp
+from scipy.special import digamma, gammaln
+import math
 
 class TopicTrackingModel(object):
     def __init__(self, gamma, alpha, beta, K, doc):
@@ -34,12 +34,20 @@ class TopicTrackingModel(object):
         alpha_array[0] = alpha_t_eq_0
         alpha_array[1] = alpha_t_eq_1
         ...
-        TODO: need to update this array throughout the code
+        
+        Note: the + 1 is because I am going to store
+        alpha/theta t - 1 for the first segment.
+        Thus, Su_index = 0 is not a segment, the first
+        segments starts at Su_index = 1
+        
+        TODO: make sure all code complies with previous note.
         '''
-        self.alpha_array = np.zeros(self.n_segs)
+        self.alpha_array = np.zeros(self.n_segs+1)
         self.alpha_array[0] = alpha
         self.phi = sparse.csr_matrix([np.random.dirichlet([self.beta]*self.W) for k in range(self.K)])
-        self.theta = sparse.csr_matrix((self.n_segs, self.K))
+        #Note: + 1 is for the reason explained above in alpha
+        self.theta = sparse.csr_matrix((self.n_segs+1, self.K))
+        self.theta[0, :] = np.random.dirichlet([self.alpha_array[0]]*self.K)
         #Matrix with the counts of the words in each sentence 
         self.U_W_counts = doc.U_W_counts
         #Matrix with the topics of the ith word in each u sentence 
@@ -50,34 +58,19 @@ class TopicTrackingModel(object):
         self.U_K_counts = sparse.csr_matrix((doc.n_sents, self.K))
         #Matrix with the number of times each word in the vocab was assigned with topic k
         self.W_K_counts = sparse.csr_matrix((self.W, self.K))
-        
+                
         '''
-        Generating first segment
-        Note: for the first alpha/theta update we use the values
-        obtained from the Dirichlet.
-        '''
-        Su_index = 0
-        self.theta[Su_index, :] = np.random.dirichlet([self.alpha_array[Su_index]]*self.K)
-        #These are the alpha_t_minus_1 and theta_t_minus_1 values of the first segment
-        self.theta_S0_t_minus_1 = self.theta[Su_index, :]
-        self.alpha_S0_t_minus_1 = alpha
-        Su_begin, Su_end = self.get_Su_begin_end(Su_index)
-        self.init_Z_Su(self.theta_S0_t_minus_1.toarray()[0], Su_begin, Su_end)
-        alpha = self.update_alpha(self.theta_S0_t_minus_1, self.alpha_S0_t_minus_1, Su_begin, Su_end)
-        self.alpha_array[Su_index] = alpha
-        self.theta[Su_index, :] = self.update_theta(self.theta_S0_t_minus_1, alpha, Su_begin, Su_end)
-        
-        '''
-        Generating remaining segments
+        Generating all segments
         Note: Su_index is the index of the segment.
-        Su_index = 0 - first segment
-        Su_index = 1 - second segment
+        Su_index = 0 - DOES NOT EXIST
+        Su_index = 1 - first segment
+        Su_index = 2 - second segment
         ...
         '''
-        for Su_index in range(1, self.n_segs):
+        for Su_index in range(1, self.n_segs+1):
             Su_begin, Su_end = self.get_Su_begin_end(Su_index)
-            theta_t_minus_1 = self.theta[Su_index - 1, :]
-            alpha = self.alpha_array[Su_index - 1]
+            theta_t_minus_1 = self.theta[Su_index-1, :]
+            alpha = self.alpha_array[Su_index-1]
             theta_Su = self.draw_theta(Su_index, alpha)
             self.theta[Su_index, :] = theta_Su
             self.init_Z_Su(theta_Su, Su_begin, Su_end)
@@ -86,6 +79,11 @@ class TopicTrackingModel(object):
             self.theta[Su_index, :] = self.update_theta(theta_t_minus_1, alpha, Su_begin, Su_end)
         
     def get_Su_begin_end(self, Su_index):
+        '''
+        Compensating for the fact that Segments
+        start at Su_index = 1
+        '''
+        Su_index = Su_index - 1
         Su_end = self.rho_eq_1[Su_index] + 1
         if Su_index == 0:
             Su_begin = 0
@@ -143,8 +141,7 @@ class TopicTrackingModel(object):
         Su_begin, Su_end = self.get_Su_begin_end(Su_index)
         n_Su_z_ui = self.U_K_counts[Su_begin:Su_end, k].sum()
         n_Su = self.U_K_counts[Su_begin:Su_end, k].sum()
-        #TODO: need to take care of the Su_index = 0 case
-        theta_Su_k_t_minus_1 = self.theta[Su_index - 1, k]
+        theta_Su_k_t_minus_1 = self.theta[Su_index-1, k]
         alpha = self.alpha_array[Su_index]
         f2 = (n_Su_z_ui+theta_Su_k_t_minus_1*alpha)/(n_Su + self.K*alpha)
         
@@ -181,7 +178,8 @@ class TopicTrackingModel(object):
     Samples all Z variables.
     '''
     def sample_z(self):
-        Su_index = 0
+        #Recall that segments start at Su_index = 1
+        Su_index = 1
         for u, rho_u in zip(range(self.n_sents), self.rho):
             for i in range(self.sents_len[u]):
                 self.sample_z_ui(u, i, Su_index)
@@ -191,38 +189,29 @@ class TopicTrackingModel(object):
         '''
         Updating all alpha/theta after the new Z assignments.
         
-        Note: the S0 segment is outside the loop because its
-        alpha/theta t-1 variables are not in the regular arrays.
-        
         #TODO: check if I should be doing update at all or if
         it is necessary to do this after each new sampled z.
         '''
-        Su_index = 0
-        Su_begin, Su_end = self.get_Su_begin_end(Su_index)
-        alpha = self.update_alpha(self.theta_S0_t_minus_1, self.alpha_S0_t_minus_1, Su_begin, Su_end)
-        self.alpha_array[Su_index] = alpha
-        self.theta[Su_index, :] = self.update_theta(self.theta_S0_t_minus_1, alpha, Su_begin, Su_end)
-        
-        for Su_index in range(1, self.n_segs):
+        for Su_index in range(1, self.n_segs+1):
             Su_begin, Su_end = self.get_Su_begin_end(Su_index)
             theta_t_minus_1 = self.theta[Su_index - 1, :]
             alpha = self.alpha_array[Su_index - 1]
             alpha = self.update_alpha(theta_t_minus_1, alpha, Su_begin, Su_end)
             self.alpha_array[Su_index] = alpha
             self.theta[Su_index, :] = self.update_theta(theta_t_minus_1, alpha, Su_begin, Su_end)
+            
     '''
     This function assumes the states of the variables is
     already such as rho_u = 0. This is aspect is similar
     to prob_z_ui_k.
     '''    
-    def log_prob_rho_u_eq_0(self, Su_begin, Su_end, Su_index):
+    def log_prob_rho_u_eq_0(self, alpha, theta_Su_t_minus_1, Su_begin, Su_end):
         n0 = self.n_sents - self.n_segs
         log_f1 = np.log(n0 + self.gamma) - np.log(self.n_sents + 2.0*self.gamma)
         
         #TODO: check if we should be hiding the z_u counts (I think not).
         S_u0 = np.sum(self.U_K_counts[Su_begin:Su_end, :], axis = 0)
-        alpha = self.alpha_array[Su_index-1]
-        theta_Su_t_minus_1 = self.theta[Su_index - 1]
+        
         #Note: applying log trick to gamma function 
         f2_num = (gammaln(S_u0+theta_Su_t_minus_1*alpha)).sum()
         n_Su_0 = S_u0.sum()
@@ -231,26 +220,24 @@ class TopicTrackingModel(object):
         
         return log_f1 + log_f2
     
-    def log_prob_rho_u_eq_1(self, Su_minus_1_begin, Su_minus_1_end, alpha_Su_t_minus_1, theta_Su_t_minus_1,\
-                              Su_begin, Su_end, theta_Su, alpha_Su):
+    def log_prob_rho_u_eq_1(self, Su_minus_1_begin, Su_minus_1_end, alpha_t_minus_1, theta_t_minus_2,\
+                              Su_begin, Su_end, theta_t_minus_1, alpha):
         #Note: doing the log trick
         n1 = self.n_segs
         log_f1 = np.log(n1 + self.gamma) - np.log(self.n_sents + 2.0*self.gamma)
         
-        log_f2 = gammaln(self.K*alpha_Su) - gammaln(alpha_Su*theta_Su).sum()
+        log_f2 = gammaln(self.K*alpha) - gammaln(alpha*theta_t_minus_1).sum()
         
-        #TODO: deal with the Su_index = 0 case
         S_u1_minus_1 = np.sum(self.U_K_counts[Su_minus_1_begin:Su_minus_1_end, :], axis = 0)
-        log_f3_num = gammaln(S_u1_minus_1+theta_Su_t_minus_1*alpha_Su_t_minus_1).sum()
+        log_f3_num = gammaln(S_u1_minus_1+theta_t_minus_2*alpha_t_minus_1).sum()
         n_Su1_minus_1 = S_u1_minus_1.sum()
-        log_f3_dem = gammaln(n_Su1_minus_1+self.K*alpha_Su_t_minus_1)
+        log_f3_dem = gammaln(n_Su1_minus_1+self.K*alpha_t_minus_1)
         log_f3 = log_f3_num - log_f3_dem
         
         S_u1 = np.sum(self.U_K_counts[Su_begin:Su_end, :], axis = 0)
-        #TODO: probably I will have to use the log trick here
-        log_f4_num = gammaln(S_u1+theta_Su*alpha_Su).sum()
+        log_f4_num = gammaln(S_u1+theta_t_minus_1*alpha).sum()
         n_Su_1 = S_u1.sum()
-        log_f4_dem = gammaln(n_Su_1+self.K*alpha_Su)
+        log_f4_dem = gammaln(n_Su_1+self.K*alpha)
         log_f4 = log_f4_num - log_f4_dem
         
         return log_f1 + log_f2 + log_f3 + log_f4
@@ -270,7 +257,11 @@ class TopicTrackingModel(object):
     def merge_segments(self, Su_index):
         Su_begin, Su_end = self.get_Su_begin_end(Su_index)
         Su_plus_1_begin, Su_pus_1_end = self.get_Su_begin_end(Su_index+1)
-        return Su_begin, Su_pus_1_end
+        theta_t_minus_1 = self.theta[Su_index-1, :]
+        alpha = self.update_alpha(theta_t_minus_1,\
+                                   self.alpha_array[Su_index-1],\
+                                   Su_begin, Su_pus_1_end)
+        return alpha, Su_begin, Su_pus_1_end
     
     '''
     This function splits segment Su_index at sentence u
@@ -278,29 +269,59 @@ class TopicTrackingModel(object):
     def split_segments(self, u, Su_index):
         begin, end = self.get_Su_begin_end(Su_index)
         Su_minus_1_begin = begin
-        Su_minus_1_end = u
+        '''
+        Note: when slicing matrix mat[0:1] give only
+        the first line of the matrix. Thus, if we
+        the slice with the u sentence we need to
+        have the end at u + 1.         
+        '''
+        Su_minus_1_end = u + 1
         Su_begin = u + 1
         Su_end = end
         
-        theta_t_minus_1 = self.theta[Su_index - 1, :]
-        alpha_Su_t_minus_1 = self.update_alpha(theta_t_minus_1,\
-                                               self.alpha_array[Su_index - 1],\
+        theta_t_minus_2 = self.theta[Su_index-1, :]
+        alpha_t_minus_1 = self.update_alpha(theta_t_minus_2,\
+                                               self.alpha_array[Su_index-1],\
                                                Su_minus_1_begin, Su_minus_1_end)
-        theta_Su_t_minus_1 = self.update_theta(theta_t_minus_1, alpha_Su_t_minus_1,\
+        theta_t_minus_1 = self.update_theta(theta_t_minus_2, alpha_t_minus_1,\
                                                Su_minus_1_begin, Su_minus_1_end)
+        theta_t_minus_1_smat = sparse.csr_matrix(theta_t_minus_1)
         
-        alpha_Su = self.update_alpha(theta_Su_t_minus_1,\
-                                     alpha_Su_t_minus_1,\
-                                     Su_begin, Su_end)
-        theta_Su = self.update_theta(theta_Su_t_minus_1, alpha_Su,\
+        alpha = self.update_alpha(theta_t_minus_1_smat,\
+                                     alpha_t_minus_1,\
                                      Su_begin, Su_end)
         
-        return Su_minus_1_begin, Su_minus_1_end, theta_Su_t_minus_1, alpha_Su_t_minus_1,\
-               Su_begin, Su_end, theta_Su, alpha_Su
+        #theta = self.update_theta(theta_t_minus_1_smat, alpha,\
+        #                             Su_begin, Su_end)
+        
+        #TODO: check that the returned alpha/theta values are correct.
+        return Su_minus_1_begin, Su_minus_1_end, theta_t_minus_2, alpha_t_minus_1,\
+               Su_begin, Su_end, theta_t_minus_1, alpha
                
     def commit_merge(self, u, Su_index):
         self.rho[u] = 0
         self.rho_eq_1 = np.append(np.nonzero(self.rho)[0], [self.n_sents-1])
+        '''
+        Note: I am updating alpha when merging segments because I need
+        its value to e correct when estimating rho_u = 0. Theta is not
+        necessary because we only need theta - 1 value.
+        '''
+        Su_begin, Su_end = self.get_Su_begin_end(Su_index)
+        theta_Su_t_minus_1 = self.theta[Su_index-1, :]
+        alpha_Su_t_minus_1 = self.alpha_array[Su_index-1]
+        alpha_Su = self.update_alpha(theta_Su_t_minus_1,\
+                                     alpha_Su_t_minus_1,\
+                                     Su_begin, Su_end)
+        '''
+        TODO: before I was using self.alpha_array[Su_index-1] in merges,
+        but now I think it should be self.alpha_array[Su_index].
+        Alpha depends on Z (which does not change during the sampling
+        of rho) and theta t - 1. Thus, probably I should be using the
+        value of alpha of the actual segment and not the previous one.
+        This idea is currently also done when considering splits. Check
+        that I am thinking correctly.
+        '''
+        self.alpha_array[Su_index] = alpha_Su
         #Note: I don't think I need to reshape here
         #self.reshape_alpha_theta_update(Su_index)
         
@@ -323,50 +344,84 @@ class TopicTrackingModel(object):
     Thus, the segments after Su_index have alpha and theta equal to 0.
     '''
     def reshape_alpha_theta_update(self, Su_index):
-        new_alpha_array = np.zeros(self.n_segs)
-        new_alpha_array[0:Su_index-1] = self.alpha_array[0:Su_index-1]
+        print("Reshaping matrix")
+        '''
+        Note: the + 1 accounts for the alpha_t_minus_1/theta t - 1
+        of the first segment.
+        '''
+        new_alpha_array = np.zeros(self.n_segs+1)
+        #Note: we dont need Su_index-1 because slicing excludes Su_index
+        new_alpha_array[0:Su_index] = self.alpha_array[0:Su_index]
         
-        new_theta_mat = sparse.csr_matrix((self.n_segs, self.K))
-        new_theta_mat[0:Su_index-1, :] = self.theta[0:Su_index-1, :]
+        new_theta_mat = sparse.csr_matrix((self.n_segs+1, self.K))
+        new_theta_mat[0:Su_index, :] = self.theta[0:Su_index, :]
         
-        Su_begin, Su_end = self.get_Su_begin_end(Su_index)
-        theta_t_minus_1 = self.new_theta_mat[Su_index-1, :]
+        Su_begin_t_minus_1, Su_end_t_minus_1 = self.get_Su_begin_end(Su_index)
+        theta_t_minus_2 = new_theta_mat[Su_index-1, :]
+        alpha_t_minus_2 = new_alpha_array[Su_index-1]
+        alpha_t_minus_1 = self.update_alpha(theta_t_minus_2,\
+                                  alpha_t_minus_2,\
+                                  Su_begin_t_minus_1, Su_end_t_minus_1)
+        new_alpha_array[Su_index] = alpha_t_minus_1
+        theta_t_minus_1 = self.update_theta(theta_t_minus_2,\
+                                            alpha_t_minus_1,\
+                                            Su_begin_t_minus_1, Su_end_t_minus_1)
+        theta_t_minus_1 = sparse.csr_matrix(theta_t_minus_1)
+        new_theta_mat[Su_index, :] = theta_t_minus_1
+        
+        Su_begin, Su_end = self.get_Su_begin_end(Su_index+1)
         alpha = self.update_alpha(theta_t_minus_1,\
-                                  new_alpha_array[Su_index-1],\
+                                  alpha_t_minus_1,\
                                   Su_begin, Su_end)
-        new_alpha_array[Su_index] = alpha
-        new_theta_mat[Su_index, :] = self.update_theta(theta_t_minus_1, alpha, Su_begin, Su_end)
+        theta = self.update_theta(theta_t_minus_1,\
+                                            alpha,\
+                                            Su_begin, Su_end)
+        new_theta_mat[Su_index+1, :] = theta
+        new_alpha_array[Su_index+1] = alpha
             
         self.alpha_array = new_alpha_array
         self.theta = new_theta_mat
                
     def sample_rho_u(self, u, Su_index):
         rho_u = self.rho[u]
+        print("rho_u %d" % (rho_u))
         if rho_u == 1:
             self.n_segs -= 1
         self.n_sents -= 1
         
+        theta_t_minus_2 = self.theta[Su_index-1, :]
         if rho_u == 0:
             #Case where we do not need to merge segments
             Su_begin, Su_end = self.get_Su_begin_end(Su_index)
+            alpha = self.alpha_array[Su_index]
         else:
-            Su_begin, Su_end = self.merge_segments(Su_index)
-        log_prob_0 = self.log_prob_rho_u_eq_0(Su_begin, Su_end, Su_index)
+            alpha, Su_begin, Su_end = self.merge_segments(Su_index)
+        log_prob_0 = self.log_prob_rho_u_eq_0(alpha, theta_t_minus_2, Su_begin, Su_end)
         
         if rho_u == 1:
             #Case where we do not need to split segments
-            Su_minus_1_begin, Su_minus_1_end = self.get_Su_begin_end(Su_index)
-            alpha_Su_t_minus_1 = self.alpha_array[Su_index]
-            theta_Su_t_minus_1 = self.theta[Su_index, :].toarray()
-            Su_begin, Su_end = self.get_Su_begin_end(Su_index + 1)
-            theta_Su = self.theta[Su_index + 1, :].toarray()
-            alpha_Su = self.alpha_array[Su_index + 1]
-        else:
-            Su_minus_1_begin, Su_minus_1_end, alpha_Su_t_minus_1, theta_Su_t_minus_1,\
-            Su_begin, Su_end, theta_Su, alpha_Su = self.split_segments(u, Su_index)
+            theta_t_minus_2 = self.theta[Su_index-1, :].toarray()
             
-        log_prob_1 = self.log_prob_rho_u_eq_1(Su_minus_1_begin, Su_minus_1_end, alpha_Su_t_minus_1, theta_Su_t_minus_1,\
-                                      Su_begin, Su_end, theta_Su, alpha_Su)
+            Su_minus_1_begin, Su_minus_1_end = self.get_Su_begin_end(Su_index)
+            alpha_t_minus_1 = self.alpha_array[Su_index]
+            theta_t_minus_1 = self.theta[Su_index, :].toarray()
+            theta_t_minus_1_smat = sparse.csr_matrix(theta_t_minus_1)
+            
+            Su_begin, Su_end = self.get_Su_begin_end(Su_index+1)
+            alpha = self.update_alpha(theta_t_minus_1_smat, alpha_t_minus_1,\
+                                         Su_begin, Su_end)
+        else:
+            Su_minus_1_begin, Su_minus_1_end, theta_t_minus_2, alpha_t_minus_1,\
+            Su_begin, Su_end, theta_t_minus_1, alpha = self.split_segments(u, Su_index)
+            
+        log_prob_1 = self.log_prob_rho_u_eq_1(Su_minus_1_begin, Su_minus_1_end, alpha_t_minus_1, theta_t_minus_2,\
+                                      Su_begin, Su_end, theta_t_minus_1, alpha)
+        
+        '''
+        if math.isnan(log_prob_1):
+            log_prob_1 = self.log_prob_rho_u_eq_1(Su_minus_1_begin, Su_minus_1_end, alpha_t_minus_1, theta_t_minus_2,\
+                                      Su_begin, Su_end, theta_t_minus_1, alpha)
+        '''
         
         prob_1 = np.exp(log_prob_1 - np.logaddexp(log_prob_0, log_prob_1))
         rho_u_new = np.random.binomial(1, prob_1)
@@ -375,16 +430,18 @@ class TopicTrackingModel(object):
         self.n_sents += 1
         
         if rho_u == rho_u_new:
+            print("Segmentation does not change")
             '''
             Case where we sampled the same segmentation, thus,
             we only need to restore the n_segs variable.
             '''
             if rho_u == 1:
+                print("Updating alpha/theta")
                 self.n_segs += 1
                 '''
-                Note: it is crucial to update alpha/theta when we pass
+                Note: it is crucial to update alpha/theta_t_minus_1 when we pass
                 a segment and we are going to split/merge because
-                the actual split/merge operations zero alpha/theta
+                the actual split/merge operations zero alpha/theta_t_minus_1
                 for the following segments.
                 '''
                 Su_begin, Su_end = self.get_Su_begin_end(Su_index)
@@ -395,7 +452,29 @@ class TopicTrackingModel(object):
                 self.alpha_array[Su_index] = alpha
                 self.theta[Su_index, :] = self.update_theta(theta_t_minus_1, alpha, Su_begin, Su_end)
         else:
-            if rho_u == 0:
+            if rho_u_new == 0:
+                print("Performing MERGE")
                 self.commit_merge(u, Su_index)
             else:
+                print("Performing SPLIT")
                 self.commit_split(u, Su_index)
+                
+    '''
+    Samples all rho variables.
+    '''
+    def sample_rho(self):
+        Su_index = 1
+        '''
+        Note: the last sentence is always rho = 0
+        (it cannot be a topic change since there are no more sentences)
+        '''
+        for u in range(self.n_sents-1):
+            self.sample_rho_u(u, Su_index)
+            '''
+            Note: it is crucial to notice that the sampling
+            of rho changes self.rho. Thus, we can only rely
+            on the values after sampling to determine which
+            Su_index we are at.
+            '''
+            if self.rho[u] == 1:
+                Su_index += 1

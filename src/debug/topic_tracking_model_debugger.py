@@ -11,7 +11,7 @@ from model.topic_tracking import TopicTrackingModel
 import numpy as np
 from debug.debug_tools import print_matrix_heat_map
 
-def test_initialization(tt_model, outFile):
+def test_model_state(tt_model, outFile):
     assert np.array_equal(np.sum(tt_model.U_K_counts, axis = 0),\
                       np.sum(tt_model.W_K_counts, axis = 0)),\
                       "Topic Counts in U_K are different from W_K"
@@ -38,6 +38,9 @@ def test_initialization(tt_model, outFile):
     assert np.array_equal(word_counts,\
                           np.array(np.sum(tt_model.W_K_counts, axis = 1))[:, 0]),\
                           "Word Counts in U_I_words are different from W_K"
+                          
+    assert tt_model.n_segs == (len(tt_model.rho_eq_1)),\
+           "Number of segments does not match rho_eq_1 len"
     
     '''
     Note: check the image file to see if the
@@ -69,17 +72,28 @@ def test_z_ui_sampling(tt_model):
     assert str(topic_probs.sum()) == "1.0", "The topic probabilities from which we are going to sample z_ui need to sum to 1"
     
 def test_Z_sampling(tt_model, outFile):
-    try:
-        tt_model.sample_z()
-    except:
-        print("ERROR: sampling all Z variables is broken")
-    test_initialization(tt_model, outFile)
+    '''
+    Just trying to see if the code runs and
+    then check the consistency of the state
+    after sampling Z 
+    '''
+    tt_model.sample_z()
+    test_model_state(tt_model, outFile)
     
 def test_rho_u_sampling(tt_model):
     Su_index = 1
     Su_begin, Su_end = tt_model.get_Su_begin_end(Su_index)
     print(tt_model.rho)
     tt_model.sample_rho_u(Su_end-1, Su_index)
+    
+def test_rho_sampling(tt_model, outFile):
+    '''
+    Just trying to see if the code runs and
+    then check the consistency of the state
+    after sampling rho
+    '''
+    tt_model.sample_rho()
+    test_model_state(tt_model, outFile)
         
 pi = 0.2
 alpha = 15
@@ -95,10 +109,10 @@ doc_synth_tt.generate_doc()
 tt_model = TopicTrackingModel(gamma, alpha, beta, K, doc_synth_tt)
 
 outFile = "debug/topic_tracking_model/topic_tracking_theta_heat_map_initial.png"
-#test_initialization(tt_model, outFile)
+#test_model_state(tt_model, outFile)
 #test_z_ui_sampling(tt_model)
-test_Z_sampling(tt_model, outFile)
+#test_Z_sampling(tt_model, outFile)
 #test_rho_u_sampling(tt_model)
-
+test_rho_sampling(tt_model, outFile)
 
 
