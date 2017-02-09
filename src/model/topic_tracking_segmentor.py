@@ -7,9 +7,7 @@ import numpy as np
 from scipy import sparse
 from scipy.special import digamma, gammaln
 import math
-from tqdm import trange
 import logging
-from debug.debug_tools import print_matrix_heat_map
 
 class TopicTrackingModel(object):
     def __init__(self, gamma, alpha, beta, K, doc, log_flag=False):
@@ -61,10 +59,10 @@ class TopicTrackingModel(object):
         self.theta[0, :] = np.random.dirichlet([self.alpha_array[0]]*self.K)
         #Matrix with the counts of the words in each sentence 
         self.U_W_counts = doc.U_W_counts
-        #Matrix with the topics of the ith word in each u sentence 
-        self.U_I_topics = doc.U_I_topics
         #Matrix with the word index of the ith word in each u sentence 
         self.U_I_words = doc.U_I_words
+        #Matrix with the topics of the ith word in each u sentence 
+        self.U_I_topics = sparse.csr_matrix((doc.n_sents, max(self.sents_len)))
         #Matrix with the counts of the topic assignments in each sentence 
         self.U_K_counts = sparse.csr_matrix((doc.n_sents, self.K))
         #Matrix with the number of times each word in the vocab was assigned with topic k
@@ -82,7 +80,7 @@ class TopicTrackingModel(object):
             Su_begin, Su_end = self.get_Su_begin_end(Su_index)
             theta_t_minus_1 = self.theta[Su_index-1, :]
             alpha = self.alpha_array[Su_index-1]
-            theta_Su = self.draw_theta(Su_index, alpha, theta_t_minus_1)
+            theta_Su = self.draw_theta(alpha, theta_t_minus_1)
             self.theta[Su_index, :] = theta_Su
             self.init_Z_Su(theta_Su, Su_begin, Su_end)
             alpha = self.update_alpha(theta_t_minus_1, alpha, Su_begin, Su_end)
@@ -111,7 +109,7 @@ class TopicTrackingModel(object):
             Su_begin = self.rho_eq_1[Su_index-1] + 1
         return (Su_begin, Su_end)
         
-    def draw_theta(self, Su_index, alpha, theta_t_minus_1):
+    def draw_theta(self, alpha, theta_t_minus_1):
         theta = np.random.dirichlet((([alpha]*self.K)*theta_t_minus_1.toarray())[0])
         return theta
     
@@ -502,32 +500,3 @@ class TopicTrackingModel(object):
         '''
         self.theta = self.theta[0:self.n_segs+1, :]
         self.alpha_array = self.alpha_array[0:self.n_segs+1]
-                
-    def gibbs_sampler(self, n_iter, burn_in, lag):
-        lag_counter = lag
-        iteration = 1.0
-        total_iterations = burn_in + n_iter*lag + n_iter
-        t = trange(total_iterations, desc='', leave=True)
-        estimated_rho = [0]*self.n_sents
-        print_matrix_heat_map(self.theta.toarray(), "Topic Tracking", "debug/gibbs_sampler/theta_init.png")
-        for i in t:
-            self.sample_z()
-            self.sample_rho()
-            print_matrix_heat_map(self.theta.toarray(), "Topic Tracking", "debug/gibbs_sampler/theta" + str(i) + ".png")
-            if burn_in > 0:
-                t.set_description("Burn-in iter %i rho = 1 %d" % (burn_in, self.n_segs))
-                burn_in -= 1
-            else:
-                if lag_counter > 0:
-                    t.set_description("Lag iter %i\trho = 1 %d" % (iteration, self.n_segs))
-                    lag_counter -= 1
-                else:
-                    t.set_description("Estimate iter %i\trho = 1 %d" % (iteration, self.n_segs))
-                    lag_counter = lag
-                    estimated_rho += self.rho
-                        
-                    iteration += 1.0
-                
-        estimated_rho = estimated_rho / iteration
-        estimated_rho = np.rint(estimated_rho)
-        print(estimated_rho)

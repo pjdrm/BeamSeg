@@ -32,6 +32,8 @@ class SyntheticDocument(object):
         self.U_K_counts = sparse.csr_matrix((n_sents, K), dtype=int8)
         self.U_I_topics = sparse.csr_matrix((n_sents, sent_len), dtype=int8)
         self.U_I_words = sparse.csr_matrix((n_sents, sent_len), dtype=int8)
+        #Matrix with the number of times each word in the vocab was assigned with topic k
+        self.W_K_counts = sparse.csr_matrix((self.W, self.K), dtype=int8)
     
     def get_Su_begin_end(self, Su_index):
         Su_end = self.rho_eq_1[Su_index] + 1
@@ -60,6 +62,7 @@ class SyntheticDocument(object):
                 u_word_count[w_u_i] += 1
                 self.U_I_topics[u, word_draw] = z_u_i
                 self.U_I_words[u, word_draw] = w_u_i
+                self.W_K_counts[w_u_i, z_u_i] += 1
             self.U_W_counts[u, :] = u_word_count
             self.U_K_counts[u, :] = u_topic_counts
             
@@ -107,7 +110,7 @@ class SyntheticTopicTrackingDoc(SyntheticDocument, TopicTrackingModel):
         for Su_index in range(1, self.n_segs):
             Su_begin, Su_end = self.get_Su_begin_end(Su_index)
             theta_t_minus_1 = self.theta[Su_index - 1, :]
-            theta_Su = self.draw_theta(Su_index, self.alpha, theta_t_minus_1)
+            theta_Su = self.draw_theta(self.alpha, theta_t_minus_1)
             self.theta[Su_index, :] = theta_Su
             self.generate_Su(Su_index)
             self.alpha = self.update_alpha(theta_t_minus_1, self.alpha, Su_begin, Su_end)
