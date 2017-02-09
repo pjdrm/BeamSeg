@@ -94,25 +94,32 @@ def test_rho_sampling(tt_model, outFile):
     '''
     tt_model.sample_rho()
     test_model_state(tt_model, outFile)
+    
+def run_gibbs_sampler(tt_model, n_iter, burn_in, lag):
+    tt_model.gibbs_sampler(n_iter, burn_in, lag)
         
-pi = 0.2
+pi = 0.4
 alpha = 15
 beta = 0.6
 K = 10
 W = 15
 n_sents = 50
 sentence_l = 50
+log_flag = True
 
-gamma = 0.4
+gamma = 10
 doc_synth_tt = SyntheticTopicTrackingDoc(pi, alpha, beta, K, W, n_sents, sentence_l)
 doc_synth_tt.generate_doc()
-tt_model = TopicTrackingModel(gamma, alpha, beta, K, doc_synth_tt)
+tt_model = TopicTrackingModel(gamma, alpha, beta, K, doc_synth_tt, log_flag)
 
 outFile = "debug/topic_tracking_model/topic_tracking_theta_heat_map_initial.png"
 #test_model_state(tt_model, outFile)
 #test_z_ui_sampling(tt_model)
 #test_Z_sampling(tt_model, outFile)
 #test_rho_u_sampling(tt_model)
-test_rho_sampling(tt_model, outFile)
+#test_rho_sampling(tt_model, outFile)
 
-
+n_iter = 5
+burn_in = 0
+lag = 0
+run_gibbs_sampler(tt_model, n_iter, burn_in, lag)

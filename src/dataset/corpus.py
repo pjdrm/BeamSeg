@@ -107,7 +107,7 @@ class SyntheticTopicTrackingDoc(SyntheticDocument, TopicTrackingModel):
         for Su_index in range(1, self.n_segs):
             Su_begin, Su_end = self.get_Su_begin_end(Su_index)
             theta_t_minus_1 = self.theta[Su_index - 1, :]
-            theta_Su = self.draw_theta(Su_index, self.alpha)
+            theta_Su = self.draw_theta(Su_index, self.alpha, theta_t_minus_1)
             self.theta[Su_index, :] = theta_Su
             self.generate_Su(Su_index)
             self.alpha = self.update_alpha(theta_t_minus_1, self.alpha, Su_begin, Su_end)

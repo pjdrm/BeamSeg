@@ -7,11 +7,22 @@ import numpy as np
 from scipy import sparse
 from scipy.special import digamma, gammaln
 import math
+from tqdm import trange
+import logging
+from debug.debug_tools import print_matrix_heat_map
 
 class TopicTrackingModel(object):
-    def __init__(self, gamma, alpha, beta, K, doc):
+    def __init__(self, gamma, alpha, beta, K, doc, log_flag=False):
+        if log_flag:
+            logging.basicConfig(format='%(levelname)s:%(message)s',\
+                                filename='logging/TopicTrackingModel.log',\
+                                filemode='w',\
+                                level=logging.INFO)
+        else:
+            logger = logging.getLogger()
+            logger.disabled = True
+        
         self.gamma = gamma
-        #self.alpha = alpha
         self.beta = beta
         self.K = K
         self.W = doc.W
@@ -71,12 +82,21 @@ class TopicTrackingModel(object):
             Su_begin, Su_end = self.get_Su_begin_end(Su_index)
             theta_t_minus_1 = self.theta[Su_index-1, :]
             alpha = self.alpha_array[Su_index-1]
-            theta_Su = self.draw_theta(Su_index, alpha)
+            theta_Su = self.draw_theta(Su_index, alpha, theta_t_minus_1)
             self.theta[Su_index, :] = theta_Su
             self.init_Z_Su(theta_Su, Su_begin, Su_end)
             alpha = self.update_alpha(theta_t_minus_1, alpha, Su_begin, Su_end)
             self.alpha_array[Su_index] = alpha
             self.theta[Su_index, :] = self.update_theta(theta_t_minus_1, alpha, Su_begin, Su_end)
+            
+        '''
+        This is just for debug. The idea is to give the true Z
+        and never sample, this should make things easier on the
+        rho sampler.
+        self.theta = doc.theta
+        self.U_K_counts = doc.U_K_counts
+        self.U_I_topics = doc.U_I_topics
+        '''
         
     def get_Su_begin_end(self, Su_index):
         '''
@@ -88,11 +108,10 @@ class TopicTrackingModel(object):
         if Su_index == 0:
             Su_begin = 0
         else:
-            Su_begin = self.rho_eq_1[Su_index - 1] + 1
+            Su_begin = self.rho_eq_1[Su_index-1] + 1
         return (Su_begin, Su_end)
         
-    def draw_theta(self, Su_index, alpha):
-        theta_t_minus_1 = self.theta[Su_index - 1, :]
+    def draw_theta(self, Su_index, alpha, theta_t_minus_1):
         theta = np.random.dirichlet((([alpha]*self.K)*theta_t_minus_1.toarray())[0])
         return theta
     
@@ -169,6 +188,7 @@ class TopicTrackingModel(object):
         for k in range(self.K):
             topic_probs.append(self.prob_z_ui_k(w_ui, k, Su_index))
         topic_probs = topic_probs / np.sum(topic_probs)
+        logging.info('sample_z_ui: topic_probs %s', str(topic_probs))
         z_ui_t_plus_1 = np.nonzero(np.random.multinomial(1, topic_probs))[0][0]
         self.W_K_counts[w_ui, z_ui_t_plus_1] += 1
         self.U_K_counts[u, z_ui_t_plus_1] += 1
@@ -218,6 +238,7 @@ class TopicTrackingModel(object):
         f2_dem = gammaln(n_Su_0+self.K*alpha)
         log_f2 = f2_num - f2_dem
         
+        logging.info('log_prob_rho_u_eq_0: log_f1 %s log_f2 %s', str(log_f1), str(log_f2))
         return log_f1 + log_f2
     
     def log_prob_rho_u_eq_1(self, Su_minus_1_begin, Su_minus_1_end, alpha_t_minus_1, theta_t_minus_2,\
@@ -240,6 +261,7 @@ class TopicTrackingModel(object):
         log_f4_dem = gammaln(n_Su_1+self.K*alpha)
         log_f4 = log_f4_num - log_f4_dem
         
+        logging.info('log_prob_rho_u_eq_1: log_f1 %s log_f2 %s log_f3 %s log_f4 %s', str(log_f1), str(log_f2), str(log_f3), str(log_f4))
         return log_f1 + log_f2 + log_f3 + log_f4
     
     '''
@@ -344,7 +366,6 @@ class TopicTrackingModel(object):
     Thus, the segments after Su_index have alpha and theta equal to 0.
     '''
     def reshape_alpha_theta_update(self, Su_index):
-        print("Reshaping matrix")
         '''
         Note: the + 1 accounts for the alpha_t_minus_1/theta t - 1
         of the first segment.
@@ -384,32 +405,30 @@ class TopicTrackingModel(object):
                
     def sample_rho_u(self, u, Su_index):
         rho_u = self.rho[u]
-        print("rho_u %d" % (rho_u))
         if rho_u == 1:
             self.n_segs -= 1
         self.n_sents -= 1
         
-        theta_t_minus_2 = self.theta[Su_index-1, :]
+        theta_t_minus_1 = self.theta[Su_index-1, :]
+        #TODO: check if I should be using self.alpha_array[Su_index-1] instead
         if rho_u == 0:
-            #Case where we do not need to merge segments
+            #Case where we do NOT need to merge segments
             Su_begin, Su_end = self.get_Su_begin_end(Su_index)
             alpha = self.alpha_array[Su_index]
         else:
             alpha, Su_begin, Su_end = self.merge_segments(Su_index)
-        log_prob_0 = self.log_prob_rho_u_eq_0(alpha, theta_t_minus_2, Su_begin, Su_end)
+        log_prob_0 = self.log_prob_rho_u_eq_0(alpha, theta_t_minus_1, Su_begin, Su_end)
         
         if rho_u == 1:
-            #Case where we do not need to split segments
+            #Case where we do NOT need to split segments
             theta_t_minus_2 = self.theta[Su_index-1, :].toarray()
             
             Su_minus_1_begin, Su_minus_1_end = self.get_Su_begin_end(Su_index)
             alpha_t_minus_1 = self.alpha_array[Su_index]
             theta_t_minus_1 = self.theta[Su_index, :].toarray()
-            theta_t_minus_1_smat = sparse.csr_matrix(theta_t_minus_1)
             
             Su_begin, Su_end = self.get_Su_begin_end(Su_index+1)
-            alpha = self.update_alpha(theta_t_minus_1_smat, alpha_t_minus_1,\
-                                         Su_begin, Su_end)
+            alpha = self.alpha_array[Su_index+1]
         else:
             Su_minus_1_begin, Su_minus_1_end, theta_t_minus_2, alpha_t_minus_1,\
             Su_begin, Su_end, theta_t_minus_1, alpha = self.split_segments(u, Su_index)
@@ -425,18 +444,17 @@ class TopicTrackingModel(object):
         
         prob_1 = np.exp(log_prob_1 - np.logaddexp(log_prob_0, log_prob_1))
         rho_u_new = np.random.binomial(1, prob_1)
+        logging.info('sample_rho_u: log_prob_0 %0.2f log_prob_1 %0.2f prob_1 %s', log_prob_0, log_prob_1, str(prob_1))
         
         #Commit the changes according to rho_u_new
         self.n_sents += 1
         
         if rho_u == rho_u_new:
-            print("Segmentation does not change")
             '''
             Case where we sampled the same segmentation, thus,
             we only need to restore the n_segs variable.
             '''
             if rho_u == 1:
-                print("Updating alpha/theta")
                 self.n_segs += 1
                 '''
                 Note: it is crucial to update alpha/theta_t_minus_1 when we pass
@@ -453,10 +471,8 @@ class TopicTrackingModel(object):
                 self.theta[Su_index, :] = self.update_theta(theta_t_minus_1, alpha, Su_begin, Su_end)
         else:
             if rho_u_new == 0:
-                print("Performing MERGE")
                 self.commit_merge(u, Su_index)
             else:
-                print("Performing SPLIT")
                 self.commit_split(u, Su_index)
                 
     '''
@@ -478,3 +494,40 @@ class TopicTrackingModel(object):
             '''
             if self.rho[u] == 1:
                 Su_index += 1
+        '''
+        Cleaning up the variable after sampling.
+        Note: this is not actually necessary, for now
+        is just to make the print of variable more
+        readable.
+        '''
+        self.theta = self.theta[0:self.n_segs+1, :]
+        self.alpha_array = self.alpha_array[0:self.n_segs+1]
+                
+    def gibbs_sampler(self, n_iter, burn_in, lag):
+        lag_counter = lag
+        iteration = 1.0
+        total_iterations = burn_in + n_iter*lag + n_iter
+        t = trange(total_iterations, desc='', leave=True)
+        estimated_rho = [0]*self.n_sents
+        print_matrix_heat_map(self.theta.toarray(), "Topic Tracking", "debug/gibbs_sampler/theta_init.png")
+        for i in t:
+            self.sample_z()
+            self.sample_rho()
+            print_matrix_heat_map(self.theta.toarray(), "Topic Tracking", "debug/gibbs_sampler/theta" + str(i) + ".png")
+            if burn_in > 0:
+                t.set_description("Burn-in iter %i rho = 1 %d" % (burn_in, self.n_segs))
+                burn_in -= 1
+            else:
+                if lag_counter > 0:
+                    t.set_description("Lag iter %i\trho = 1 %d" % (iteration, self.n_segs))
+                    lag_counter -= 1
+                else:
+                    t.set_description("Estimate iter %i\trho = 1 %d" % (iteration, self.n_segs))
+                    lag_counter = lag
+                    estimated_rho += self.rho
+                        
+                    iteration += 1.0
+                
+        estimated_rho = estimated_rho / iteration
+        estimated_rho = np.rint(estimated_rho)
+        print(estimated_rho)
