@@ -34,7 +34,7 @@ debug_tools.test_rho_sampling(rnd_topics_model, outFile)
 '''
 
 log_file = "logging/Sampler.log"
-n_iter = 20
+n_iter = 8
 burn_in = 0
 lag = 0
 debug_tools.run_gibbs_sampler(rnd_topics_model, n_iter, burn_in, lag, log_file)

@@ -113,7 +113,7 @@ class RndTopicsModel(object):
         
         Su_begin, Su_end = self.get_Su_begin_end(Su_index)
         n_Su_z_ui = self.U_K_counts[Su_begin:Su_end, k].sum()
-        n_Su = self.U_K_counts[Su_begin:Su_end, k].sum()
+        n_Su = np.sum(self.U_K_counts[Su_begin:Su_end, :])
         f2 = (n_Su_z_ui+self.alpha)/(n_Su + self.K*self.alpha)
         
         return f1 / f2

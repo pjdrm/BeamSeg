@@ -6,7 +6,7 @@ Created on Jan 20, 2017
 import numpy as np
 from scipy import sparse
 from scipy import int8
-from model.topic_tracking import TopicTrackingModel
+from model.topic_tracking_segmentor import TopicTrackingModel
 
 class SyntheticDocument(object):
     def __init__(self, pi, alpha, beta, K, W, n_sents, sent_len):
