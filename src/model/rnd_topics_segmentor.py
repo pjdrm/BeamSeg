@@ -1,14 +1,15 @@
 '''
 Created on Jan 27, 2017
 
-@author: root
+Implementation of Mathew Purver's paper
+"Unsupervised Topic Modelling for Multi-Party Spoken Discourse"
+
+@author: pjdrm
 '''
 import numpy as np
 from scipy import sparse
 from scipy.special import gammaln
-from tqdm import trange
 import logging
-from debug.debug_tools import print_matrix_heat_map
 from scipy.misc import logsumexp
 
 class RndTopicsModel(object):
@@ -69,29 +70,6 @@ class RndTopicsModel(object):
             theta_Su = self.draw_theta(self.alpha)
             self.theta[Su_index, :] = theta_Su
             self.init_Z_Su(theta_Su, Su_begin, Su_end)
-        
-        '''
-        #Note: this is just to debug without sampling rho
-        self.rho = doc.rho
-        self.rho_eq_1 = doc.rho_eq_1
-        
-        self.U_I_topics = doc.U_I_topics
-        self.U_K_counts = doc.U_K_counts
-        self.W_K_counts = doc.W_K_counts
-        
-        #Note: Making an experiment where I only sample z_ui from the first segment
-        #rho and the rest of Z have the true value.
-        Su_begin, Su_end = self.get_Su_begin_end(0)
-        self.U_I_topics[Su_end:] = doc.U_I_topics[Su_end:]
-        self.U_K_counts = sparse.csr_matrix((doc.n_sents, self.K))
-        self.W_K_counts = sparse.csr_matrix((self.W, self.K))
-        for u in range(self.n_sents):
-            for i in range(self.sents_len[u]):
-                z_ui = self.U_I_topics[u, i]
-                w_ui = self.U_I_words[u, i]
-                self.U_K_counts[u, z_ui] += 1
-                self.W_K_counts[w_ui, z_ui] += 1
-        '''
                 
     def get_Su_begin_end(self, Su_index):
         Su_end = self.rho_eq_1[Su_index] + 1
@@ -192,8 +170,6 @@ class RndTopicsModel(object):
         u_z_ui_count = self.U_K_counts[u, z_ui]
         if u_z_ui_count > 0:
             self.U_K_counts[u, z_ui] -= 1
-        #self.W_K_counts[w_ui, z_ui] -= 1
-        #self.U_K_counts[u, z_ui] -= 1
         
         topic_log_probs = []
         for k in range(self.K):

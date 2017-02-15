@@ -16,7 +16,7 @@ class SyntheticDocument(object):
         self.n_sents = n_sents
         self.sent_len = sent_len
         self.sents_len = [sent_len]*n_sents
-        self.rho = np.random.binomial(1, pi, size=n_sents)#[0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]
+        self.rho = np.random.binomial(1, pi, size=n_sents)
         #I assume that a sentence u with rho_u = 1 belong to the previous segment.
         #rho_u = 1 means a segment is coming next, this does not make sense for 
         #the last sentence. Thus, we set it to 0.
