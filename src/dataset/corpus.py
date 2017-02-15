@@ -4,9 +4,9 @@ Created on Jan 20, 2017
 @author: root
 '''
 import numpy as np
-from scipy import sparse
-from scipy import int8
+from scipy import sparse, int32
 from model.topic_tracking_segmentor import TopicTrackingModel
+
 
 class SyntheticDocument(object):
     def __init__(self, pi, alpha, beta, K, W, n_sents, sent_len):
@@ -16,7 +16,7 @@ class SyntheticDocument(object):
         self.n_sents = n_sents
         self.sent_len = sent_len
         self.sents_len = [sent_len]*n_sents
-        self.rho = np.random.binomial(1, pi, size=n_sents)
+        self.rho = np.random.binomial(1, pi, size=n_sents)#[0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]
         #I assume that a sentence u with rho_u = 1 belong to the previous segment.
         #rho_u = 1 means a segment is coming next, this does not make sense for 
         #the last sentence. Thus, we set it to 0.
@@ -28,12 +28,12 @@ class SyntheticDocument(object):
         self.theta = sparse.csr_matrix((self.n_segs, K))
         theta_S0 = np.random.dirichlet([self.alpha]*K)
         self.theta[0, :] = theta_S0
-        self.U_W_counts = sparse.csr_matrix((n_sents, W), dtype=int8)
-        self.U_K_counts = sparse.csr_matrix((n_sents, K), dtype=int8)
-        self.U_I_topics = sparse.csr_matrix((n_sents, sent_len), dtype=int8)
-        self.U_I_words = sparse.csr_matrix((n_sents, sent_len), dtype=int8)
+        self.U_W_counts = sparse.csr_matrix((n_sents, W), dtype=int32)
+        self.U_K_counts = sparse.csr_matrix((n_sents, K), dtype=int32)
+        self.U_I_topics = sparse.csr_matrix((n_sents, sent_len), dtype=int32)
+        self.U_I_words = sparse.csr_matrix((n_sents, sent_len), dtype=int32)
         #Matrix with the number of times each word in the vocab was assigned with topic k
-        self.W_K_counts = sparse.csr_matrix((self.W, self.K), dtype=int8)
+        self.W_K_counts = sparse.csr_matrix((self.W, self.K), dtype=int32)
     
     def get_Su_begin_end(self, Su_index):
         Su_end = self.rho_eq_1[Su_index] + 1
@@ -50,13 +50,14 @@ class SyntheticDocument(object):
     z_u_i - topic assignment of the ith word in sentence u
     '''
     def generate_Su(self, Su_index):
+        theta_Su = self.theta[Su_index, :].toarray()[0]
         Su_begin, Su_end = self.get_Su_begin_end(Su_index)
         print("Generating words for %d - %d segment" % (Su_begin, Su_end))
         for u in range(Su_begin, Su_end):
             u_word_count = np.zeros(self.W)
             u_topic_counts = np.zeros(self.K)
             for word_draw in range(self.sent_len):
-                z_u_i = np.nonzero(np.random.multinomial(1, self.theta[Su_index, :].toarray()[0]))[0][0]
+                z_u_i = np.nonzero(np.random.multinomial(1, theta_Su))[0][0]
                 u_topic_counts[z_u_i] += 1
                 w_u_i = np.nonzero(np.random.multinomial(1, self.phi[z_u_i].toarray()[0]))[0][0]
                 u_word_count[w_u_i] += 1

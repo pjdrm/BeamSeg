@@ -7,7 +7,7 @@ of the topic tracking model.
 @author: root
 '''
 from dataset.corpus import SyntheticTopicTrackingDoc
-from model.topic_tracking import TopicTrackingModel
+from model.topic_tracking_segmentor import TopicTrackingModel
 import debug.debug_tools  as debug_tools
 
 pi = 0.4

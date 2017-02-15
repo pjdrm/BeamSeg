@@ -9,6 +9,7 @@ from scipy.special import gammaln
 from tqdm import trange
 import logging
 from debug.debug_tools import print_matrix_heat_map
+from scipy.misc import logsumexp
 
 class RndTopicsModel(object):
     def __init__(self, gamma, alpha, beta, K, doc, log_flag=False):
@@ -68,14 +69,30 @@ class RndTopicsModel(object):
             theta_Su = self.draw_theta(self.alpha)
             self.theta[Su_index, :] = theta_Su
             self.init_Z_Su(theta_Su, Su_begin, Su_end)
-            
+        
         '''
-        #Note: this is just to debug without sampling Z
+        #Note: this is just to debug without sampling rho
+        self.rho = doc.rho
+        self.rho_eq_1 = doc.rho_eq_1
+        
         self.U_I_topics = doc.U_I_topics
         self.U_K_counts = doc.U_K_counts
         self.W_K_counts = doc.W_K_counts
-        '''
         
+        #Note: Making an experiment where I only sample z_ui from the first segment
+        #rho and the rest of Z have the true value.
+        Su_begin, Su_end = self.get_Su_begin_end(0)
+        self.U_I_topics[Su_end:] = doc.U_I_topics[Su_end:]
+        self.U_K_counts = sparse.csr_matrix((doc.n_sents, self.K))
+        self.W_K_counts = sparse.csr_matrix((self.W, self.K))
+        for u in range(self.n_sents):
+            for i in range(self.sents_len[u]):
+                z_ui = self.U_I_topics[u, i]
+                w_ui = self.U_I_words[u, i]
+                self.U_K_counts[u, z_ui] += 1
+                self.W_K_counts[w_ui, z_ui] += 1
+        '''
+                
     def get_Su_begin_end(self, Su_index):
         Su_end = self.rho_eq_1[Su_index] + 1
         if Su_index == 0:
@@ -106,17 +123,29 @@ class RndTopicsModel(object):
     k - topic
     Note: this function does not modify the w_ui counts.
     '''
-    def prob_z_ui_k(self, w_ui, k, Su_index):
+    def prob_z_ui_k(self, w_ui, k, Su_index, n_Su):
         n_k_ui = self.W_K_counts[w_ui, k]
         n_t = self.W_K_counts[:, k].sum()
         f1 = (n_k_ui+self.beta)/(n_t + self.W*self.beta)
         
         Su_begin, Su_end = self.get_Su_begin_end(Su_index)
         n_Su_z_ui = self.U_K_counts[Su_begin:Su_end, k].sum()
-        n_Su = np.sum(self.U_K_counts[Su_begin:Su_end, :])
+        #n_Su = np.sum(self.U_K_counts[Su_begin:Su_end, :])
         f2 = (n_Su_z_ui+self.alpha)/(n_Su + self.K*self.alpha)
         
         return f1 / f2
+    
+    def log_prob_z_ui_k(self, w_ui, k, Su_index, n_Su):
+        n_k_ui = self.W_K_counts[w_ui, k]
+        n_t = self.W_K_counts[:, k].sum()
+        log_f1 = np.log(n_k_ui+self.beta) - np.log(n_t + self.W*self.beta)
+        
+        Su_begin, Su_end = self.get_Su_begin_end(Su_index)
+        n_Su_z_ui = self.U_K_counts[Su_begin:Su_end, k].sum()
+        #n_Su = np.sum(self.U_K_counts[Su_begin:Su_end, :])
+        log_f2 = np.log(n_Su_z_ui+self.alpha) - np.log(n_Su + self.K*self.alpha)
+        
+        return log_f1 + log_f2
     
     '''
     This function samples the topic assignment z of word u,i
@@ -124,21 +153,53 @@ class RndTopicsModel(object):
     u - sentence number
     i - ith word from u to be sampled
     '''
-    def sample_z_ui(self, u, i, Su_index):
+    def sample_z_ui(self, u, i, Su_index, n_Su):
         '''
         Since this is for the Gibbs Sampler, we need to remove
         word w_ui from segment and topic counts
         '''
         w_ui = self.U_I_words[u, i]
         z_ui = self.U_I_topics[u, i]
-        self.W_K_counts[w_ui, z_ui] -= 1
-        self.U_K_counts[u, z_ui] -= 1
+        w_z_ui_count = self.W_K_counts[w_ui, z_ui]
+        if w_z_ui_count > 0:
+            self.W_K_counts[w_ui, z_ui] -= 1
+        u_z_ui_count = self.U_K_counts[u, z_ui]
+        if u_z_ui_count > 0:
+            self.U_K_counts[u, z_ui] -= 1
+        #self.W_K_counts[w_ui, z_ui] -= 1
+        #self.U_K_counts[u, z_ui] -= 1
         
         topic_probs = []
         for k in range(self.K):
-            topic_probs.append(self.prob_z_ui_k(w_ui, k, Su_index))
+            topic_probs.append(self.prob_z_ui_k(w_ui, k, Su_index, n_Su))
         topic_probs = topic_probs / np.sum(topic_probs)
         logging.info('sample_z_ui: topic_probs %s', str(topic_probs))
+        z_ui_t_plus_1 = np.nonzero(np.random.multinomial(1, topic_probs))[0][0]
+        self.W_K_counts[w_ui, z_ui_t_plus_1] += 1
+        self.U_K_counts[u, z_ui_t_plus_1] += 1
+        self.U_I_topics[u, i] = z_ui_t_plus_1
+        
+    def sample_log_z_ui(self, u, i, Su_index, n_Su):
+        '''
+        Since this is for the Gibbs Sampler, we need to remove
+        word w_ui from segment and topic counts
+        '''
+        w_ui = self.U_I_words[u, i]
+        z_ui = self.U_I_topics[u, i]
+        w_z_ui_count = self.W_K_counts[w_ui, z_ui]
+        if w_z_ui_count > 0:
+            self.W_K_counts[w_ui, z_ui] -= 1
+        u_z_ui_count = self.U_K_counts[u, z_ui]
+        if u_z_ui_count > 0:
+            self.U_K_counts[u, z_ui] -= 1
+        #self.W_K_counts[w_ui, z_ui] -= 1
+        #self.U_K_counts[u, z_ui] -= 1
+        
+        topic_log_probs = []
+        for k in range(self.K):
+            topic_log_probs.append(self.log_prob_z_ui_k(w_ui, k, Su_index, n_Su))
+        topic_probs = np.exp(topic_log_probs - np.log(np.sum(np.exp(topic_log_probs))))
+        logging.info('sample_z_ui: topic_log_probs %s', str(topic_probs))
         z_ui_t_plus_1 = np.nonzero(np.random.multinomial(1, topic_probs))[0][0]
         self.W_K_counts[w_ui, z_ui_t_plus_1] += 1
         self.U_K_counts[u, z_ui_t_plus_1] += 1
@@ -149,11 +210,17 @@ class RndTopicsModel(object):
     '''
     def sample_z(self):
         Su_index = 0
+        Su_begin, Su_end = self.get_Su_begin_end(Su_index)
+        n_Su = np.sum(self.U_K_counts[Su_begin:Su_end, :])-1
         for u, rho_u in zip(range(self.n_sents), self.rho):
             for i in range(self.sents_len[u]):
-                self.sample_z_ui(u, i, Su_index)
+                self.sample_log_z_ui(u, i, Su_index, n_Su)
             if rho_u == 1:
+                #break
                 Su_index += 1
+                Su_begin, Su_end = self.get_Su_begin_end(Su_index)
+                n_Su = np.sum(self.U_K_counts[Su_begin:Su_end, :])-1
+        logging.info('sample_z:\n%s', str(self.W_K_counts.toarray()))
             
     '''
     This function assumes the states of the variables is
@@ -307,32 +374,3 @@ class RndTopicsModel(object):
             '''
             if self.rho[u] == 1:
                 Su_index += 1
-                
-    def gibbs_sampler(self, n_iter, burn_in, lag):
-        lag_counter = lag
-        iteration = 1.0
-        total_iterations = burn_in + n_iter*lag + n_iter
-        t = trange(total_iterations, desc='', leave=True)
-        estimated_rho = [0]*self.n_sents
-        print_matrix_heat_map(self.theta.toarray(), "Topic Tracking", "debug/gibbs_sampler/theta_init.png")
-        for i in t:
-            self.sample_z()
-            self.sample_rho()
-            print_matrix_heat_map(self.theta.toarray(), "Topic Tracking", "debug/gibbs_sampler/theta" + str(i) + ".png")
-            if burn_in > 0:
-                t.set_description("Burn-in iter %i rho = 1 %d" % (burn_in, self.n_segs))
-                burn_in -= 1
-            else:
-                if lag_counter > 0:
-                    t.set_description("Lag iter %i\trho = 1 %d" % (iteration, self.n_segs))
-                    lag_counter -= 1
-                else:
-                    t.set_description("Estimate iter %i\trho = 1 %d" % (iteration, self.n_segs))
-                    lag_counter = lag
-                    estimated_rho += self.rho
-                        
-                    iteration += 1.0
-                
-        estimated_rho = estimated_rho / iteration
-        estimated_rho = np.rint(estimated_rho)
-        print(estimated_rho)

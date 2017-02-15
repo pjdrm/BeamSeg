@@ -38,13 +38,21 @@ def print_ref_hyp_plots(logFile, outDir, seg_desc):
         i = 0
         for j, lin in enumerate(lins):
             if lin.startswith("INFO:Ref "):
-                ref_seg = eval((lin.split("INFO:Ref ")[1][:-1] + lins[j+1][:-1]).replace(" ", " ,"))
+                ref_seg = getSeg(lins, j)
             
             if lin.startswith("INFO:Hyp "):
-                hyp_seg = eval((lin.split("INFO:Hyp ")[1][:-1] + lins[j+1][:-1]).replace(" ", " ,"))
+                hyp_seg = getSeg(lins, j)
                 plot_ref_hyp_seg(ref_seg, hyp_seg, outDir + "gs_iter" + str(i) + ".png", seg_desc)
                 i += 1
-    
+                
+def getSeg(lins, j):
+    seg_str = "[" + lins[j].split("[")[1]
+    j += 1
+    while not seg_str.endswith("]\n"):
+        seg_str += lins[j]
+        j += 1
+    return eval(seg_str.strip().replace(" ", ", "))
+
 def test_model_state(segmentation_model, outFile):
     assert np.array_equal(np.sum(segmentation_model.U_K_counts, axis = 0),\
                       np.sum(segmentation_model.W_K_counts, axis = 0)),\
@@ -160,4 +168,4 @@ def print_matrix(matrix):
                 str_final += "\t"
             str_final += "\t"
         str_final += "\n"
-    print(str_final)
+    return str_final
