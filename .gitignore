@@ -1,3 +1,4 @@
 /debug/
 *.pyc
 /logging/
+/rnd_topics_model_debugger.py.lprof

@@ -9,6 +9,7 @@ import numpy as np
 from model.sampler import SegmentationModelSampler
 import matplotlib as mpl
 import pandas as pd
+import operator
 plt.style.use('ggplot')
 mpl.rcParams['axes.facecolor'] = '#FFFFFF'
 plt.rcParams["figure.figsize"] = [16.0, 3.0]
@@ -139,7 +140,8 @@ def test_rho_sampling(rnd_topics_model, outFile):
     
 def run_gibbs_sampler(rnd_topics_model, n_iter, burn_in, lag, log_file="logging/Sampler.log"):
     sampler = SegmentationModelSampler(rnd_topics_model, log_file)
-    sampler.gibbs_sampler(n_iter, burn_in, lag)
+    wd = sampler.gibbs_sampler(n_iter, burn_in, lag)
+    return wd, sampler
 
 def print_matrix_heat_map(matrix, title, outFile):
     ax = plt.axes()
@@ -169,3 +171,28 @@ def print_matrix(matrix):
             str_final += "\t"
         str_final += "\n"
     return str_final
+
+def plot_topic_assign(k_counts, inv_vocab, n, color, out_file):
+    f, axarr = plt.subplots(1, squeeze=False)
+    xAxis = [x/10. for x in range(0, 11)]
+    #for posterior, ax_i, color in zip(posteriors, range(len(posteriors)), colors):
+    labelsVals = {}
+    for i, val in enumerate(k_counts):
+        labelsVals[inv_vocab[i]] = val
+    sorted_dic = sorted(labelsVals.items(), key=operator.itemgetter(1))
+    yLabels = [label for label, val in sorted_dic[:n]]
+    y_pos = np.arange(len(yLabels))/5.
+    ax_i = 0
+    axarr[ax_i, 0].barh(y_pos, [labelsVals[y] for y in yLabels], align='center', color=color, height=0.2)
+    axarr[ax_i, 0].set_yticks(y_pos)
+    axarr[ax_i, 0].set_yticklabels(yLabels)
+
+    plt.xlabel('Counts')
+    plt.savefig(out_file)
+    
+def debug_topic_assign(sampler, outDir):
+    inv_vocab =  {v: k for k, v in sampler.seg_model.doc.vocab.items()}
+    n = len(sampler.seg_model.doc.vocab)
+    for k in range(sampler.seg_model.K):
+        k_counts = sampler.estimated_W_K_counts[:, k]
+        plot_topic_assign(k_counts.toarray().T[0], inv_vocab, n, 'g', outDir + "k_w_counts" + str(k) + ".png")

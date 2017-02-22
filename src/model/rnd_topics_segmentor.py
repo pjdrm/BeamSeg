@@ -37,7 +37,7 @@ class RndTopicsModel(object):
         self.n_sents = doc.n_sents
         
         #Initializing with a random state
-        self.pi = np.random.beta(gamma, gamma)
+        self.pi = 0.07#np.random.beta(gamma, gamma)
         self.rho = np.random.binomial(1, self.pi, size=doc.n_sents)
         self.rho[-1] = 0
         #Need to append last sentence, otherwise last segment wont be taken into account
