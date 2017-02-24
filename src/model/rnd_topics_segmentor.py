@@ -9,19 +9,17 @@ Implementation of Mathew Purver's paper
 import numpy as np
 from scipy import sparse
 from scipy.special import gammaln
-import logging
 from scipy.misc import logsumexp
+from debug import log_tools
 
 class RndTopicsModel(object):
-    def __init__(self, gamma, alpha, beta, K, doc, log_flag=False):
-        if log_flag:
-            logging.basicConfig(format='%(levelname)s:%(message)s',\
-                                filename='logging/RndTopicsModel.log',\
-                                filemode='w',\
-                                level=logging.INFO)
-        else:
-            logger = logging.getLogger()
-            logger.disabled = True
+    def __init__(self, gamma, alpha, beta, K, doc,\
+                 log_flag=False,\
+                 sampler_log_file = "RndTopicsModel.log"):
+        
+        self.rt_seg_log = log_tools.log_init(sampler_log_file)
+        if not log_flag:
+            self.rt_seg_log.disabled = True
         
         self.alpha = alpha
         self.gamma = gamma
@@ -66,17 +64,17 @@ class RndTopicsModel(object):
         ...
         '''
         for Su_index in range(self.n_segs):
-            Su_begin, Su_end = self.get_Su_begin_end(Su_index)
+            Su_begin, Su_end = self.get_Su_begin_end(Su_index, self.rho_eq_1)
             theta_Su = self.draw_theta(self.alpha)
             self.theta[Su_index, :] = theta_Su
             self.init_Z_Su(theta_Su, Su_begin, Su_end)
                 
-    def get_Su_begin_end(self, Su_index):
-        Su_end = self.rho_eq_1[Su_index] + 1
+    def get_Su_begin_end(self, Su_index, rho_eq_1):
+        Su_end = rho_eq_1[Su_index] + 1
         if Su_index == 0:
             Su_begin = 0
         else:
-            Su_begin = self.rho_eq_1[Su_index-1] + 1
+            Su_begin = rho_eq_1[Su_index-1] + 1
         return (Su_begin, Su_end)
         
     def draw_theta(self, alpha):
@@ -106,7 +104,7 @@ class RndTopicsModel(object):
         n_t = self.W_K_counts[:, k].sum()
         f1 = (n_k_ui+self.beta)/(n_t + self.W*self.beta)
         
-        Su_begin, Su_end = self.get_Su_begin_end(Su_index)
+        Su_begin, Su_end = self.get_Su_begin_end(Su_index, self.rho_eq_1)
         n_Su_z_ui = self.U_K_counts[Su_begin:Su_end, k].sum()
         #n_Su = np.sum(self.U_K_counts[Su_begin:Su_end, :])
         f2 = (n_Su_z_ui+self.alpha)/(n_Su + self.K*self.alpha)
@@ -118,7 +116,7 @@ class RndTopicsModel(object):
         n_t = self.W_K_counts[:, k].sum()
         log_f1 = np.log(n_k_ui+self.beta) - np.log(n_t + self.W*self.beta)
         
-        Su_begin, Su_end = self.get_Su_begin_end(Su_index)
+        Su_begin, Su_end = self.get_Su_begin_end(Su_index, self.rho_eq_1)
         n_Su_z_ui = self.U_K_counts[Su_begin:Su_end, k].sum()
         #n_Su = np.sum(self.U_K_counts[Su_begin:Su_end, :])
         log_f2 = np.log(n_Su_z_ui+self.alpha) - np.log(n_Su + self.K*self.alpha)
@@ -151,7 +149,7 @@ class RndTopicsModel(object):
         for k in range(self.K):
             topic_probs.append(self.prob_z_ui_k(w_ui, k, Su_index, n_Su))
         topic_probs = topic_probs / np.sum(topic_probs)
-        logging.info('sample_z_ui: topic_probs %s', str(topic_probs))
+        #self.rt_seg_log.info('sample_z_ui: topic_probs %s', str(topic_probs))
         z_ui_t_plus_1 = np.nonzero(np.random.multinomial(1, topic_probs))[0][0]
         self.W_K_counts[w_ui, z_ui_t_plus_1] += 1
         self.U_K_counts[u, z_ui_t_plus_1] += 1
@@ -175,7 +173,7 @@ class RndTopicsModel(object):
         for k in range(self.K):
             topic_log_probs.append(self.log_prob_z_ui_k(w_ui, k, Su_index, n_Su))
         topic_probs = np.exp(topic_log_probs - np.log(np.sum(np.exp(topic_log_probs))))
-        logging.info('sample_z_ui: topic_log_probs %s', str(topic_probs))
+        #self.rt_seg_log.info('sample_z_ui: topic_log_probs %s', str(topic_probs))
         z_ui_t_plus_1 = np.nonzero(np.random.multinomial(1, topic_probs))[0][0]
         self.W_K_counts[w_ui, z_ui_t_plus_1] += 1
         self.U_K_counts[u, z_ui_t_plus_1] += 1
@@ -186,7 +184,7 @@ class RndTopicsModel(object):
     '''
     def sample_z(self):
         Su_index = 0
-        Su_begin, Su_end = self.get_Su_begin_end(Su_index)
+        Su_begin, Su_end = self.get_Su_begin_end(Su_index, self.rho_eq_1)
         n_Su = np.sum(self.U_K_counts[Su_begin:Su_end, :])-1
         for u, rho_u in zip(range(self.n_sents), self.rho):
             for i in range(self.sents_len[u]):
@@ -194,9 +192,9 @@ class RndTopicsModel(object):
             if rho_u == 1:
                 #break
                 Su_index += 1
-                Su_begin, Su_end = self.get_Su_begin_end(Su_index)
+                Su_begin, Su_end = self.get_Su_begin_end(Su_index, self.rho_eq_1)
                 n_Su = np.sum(self.U_K_counts[Su_begin:Su_end, :])-1
-        logging.info('sample_z:\n%s', str(self.W_K_counts.toarray()))
+        #self.rt_seg_log.info('sample_z:\n%s', str(self.W_K_counts.toarray()))
             
     '''
     This function assumes the states of the variables is
@@ -216,7 +214,7 @@ class RndTopicsModel(object):
         f2_dem = gammaln(n_Su_0+self.K*self.alpha)
         log_f2 = f2_num - f2_dem
         
-        logging.info('log_prob_rho_u_eq_0: log_f1 %s log_f2 %s', str(log_f1), str(log_f2))
+        #self.rt_seg_log.info('log_prob_rho_u_eq_0: log_f1 %s log_f2 %s', str(log_f1), str(log_f2))
         return log_f1 + log_f2
     
     def log_prob_rho_u_eq_1(self, Su_minus_1_begin, Su_minus_1_end,\
@@ -239,7 +237,7 @@ class RndTopicsModel(object):
         log_f4_dem = gammaln(n_Su_1+self.K*self.alpha)
         log_f4 = log_f4_num - log_f4_dem
         
-        logging.info('log_prob_rho_u_eq_1: log_f1 %s log_f2 %s log_f3 %s log_f4 %s', str(log_f1), str(log_f2), str(log_f3), str(log_f4))
+        #self.rt_seg_log.info('log_prob_rho_u_eq_1: log_f1 %s log_f2 %s log_f3 %s log_f4 %s', str(log_f1), str(log_f2), str(log_f3), str(log_f4))
         return log_f1 + log_f2 + log_f3 + log_f4
     
     '''
@@ -255,15 +253,15 @@ class RndTopicsModel(object):
     rho_u = 0. Its not necessary to change theta at all. 
     '''
     def merge_segments(self, Su_index):
-        Su_begin, Su_end = self.get_Su_begin_end(Su_index)
-        Su_plus_1_begin, Su_pus_1_end = self.get_Su_begin_end(Su_index+1)
+        Su_begin, Su_end = self.get_Su_begin_end(Su_index, self.rho_eq_1)
+        Su_plus_1_begin, Su_pus_1_end = self.get_Su_begin_end(Su_index+1, self.rho_eq_1)
         return Su_begin, Su_pus_1_end
     
     '''
     This function splits segment Su_index at sentence u
     '''
     def split_segments(self, u, Su_index):
-        begin, end = self.get_Su_begin_end(Su_index)
+        begin, end = self.get_Su_begin_end(Su_index, self.rho_eq_1)
         Su_minus_1_begin = begin
         '''
         Note: when slicing matrix mat[0:1] give only
@@ -295,15 +293,15 @@ class RndTopicsModel(object):
         
         if rho_u == 0:
             #Case where we do NOT need to merge segments
-            Su_begin, Su_end = self.get_Su_begin_end(Su_index)
+            Su_begin, Su_end = self.get_Su_begin_end(Su_index, self.rho_eq_1)
         else:
             Su_begin, Su_end = self.merge_segments(Su_index)
         log_prob_0 = self.log_prob_rho_u_eq_0(Su_begin, Su_end)
         
         if rho_u == 1:
             #Case where we do NOT need to split segments
-            Su_minus_1_begin, Su_minus_1_end = self.get_Su_begin_end(Su_index)
-            Su_begin, Su_end = self.get_Su_begin_end(Su_index+1)
+            Su_minus_1_begin, Su_minus_1_end = self.get_Su_begin_end(Su_index, self.rho_eq_1)
+            Su_begin, Su_end = self.get_Su_begin_end(Su_index+1, self.rho_eq_1)
         else:
             Su_minus_1_begin, Su_minus_1_end, \
             Su_begin, Su_end = self.split_segments(u, Su_index)
@@ -313,7 +311,7 @@ class RndTopicsModel(object):
         
         prob_1 = np.exp(log_prob_1 - np.logaddexp(log_prob_0, log_prob_1))
         rho_u_new = np.random.binomial(1, prob_1)
-        logging.info('sample_rho_u: log_prob_0 %0.2f log_prob_1 %0.2f prob_1 %s', log_prob_0, log_prob_1, str(prob_1))
+        self.rt_seg_log.info('sample_rho_u: u %d log_prob_0 %0.2f log_prob_1 %0.2f prob_1 %s', u, log_prob_0, log_prob_1, str(prob_1))
         
         #Commit the changes according to rho_u_new
         self.n_sents += 1
@@ -350,3 +348,36 @@ class RndTopicsModel(object):
             '''
             if self.rho[u] == 1:
                 Su_index += 1
+
+    def log_prob_joint_dist(self, gamma, beta, alpha, rho_eq_1, W_K_counts, U_K_counts):
+        n_sents = U_K_counts.shape[0]
+        K = U_K_counts.shape[1]
+        n1 = len(rho_eq_1)
+        n0 = n_sents - n1
+        W = W_K_counts.shape[0]
+        
+        np_W_K_counts = W_K_counts.toarray()
+        
+        log_p_c_f1 = gammaln(2.0*gamma) - (gammaln(gamma)*2)
+        log_p_c_f2 = (gammaln(n1+gamma) + gammaln(n0+gamma)) - gammaln(n_sents+2.0*gamma)
+        log_p_c = log_p_c_f1 + log_p_c_f2
+        
+        log_p_wz_f1 = (gammaln(W*beta) - gammaln(beta)*W)*K
+        log_p_wz_f2 = (np.sum(gammaln(np_W_K_counts + beta), axis = 0) - gammaln(np.sum(np_W_K_counts, axis=0) + W*beta)).sum()
+        log_p_wz = log_p_wz_f1 + log_p_wz_f2
+        
+        log_p_zc_f1 = (gammaln(K*alpha) - gammaln(alpha)*K)*n1
+        log_p_zc_f2 = 0.0
+        for Su_index in range(n1):
+            Su_begin, Su_end = self.get_Su_begin_end(Su_index, rho_eq_1)
+            Su_K_counts = U_K_counts[Su_begin:Su_end, :]
+            n_K_Su = np.sum(Su_K_counts, axis = 0)
+            deno = (gammaln(n_K_Su + alpha)).sum()
+            n_Su = n_K_Su.sum()
+            num = gammaln(n_Su+ K*alpha)
+            log_p_zc_f2 += deno -num
+        log_p_zc = log_p_zc_f1 + log_p_zc_f2
+        
+        return log_p_c + log_p_wz + log_p_zc
+        
+        

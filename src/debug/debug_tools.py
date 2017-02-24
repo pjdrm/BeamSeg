@@ -10,8 +10,8 @@ from model.sampler import SegmentationModelSampler
 import matplotlib as mpl
 import pandas as pd
 import operator
+import os
 plt.style.use('ggplot')
-mpl.rcParams['axes.facecolor'] = '#FFFFFF'
 plt.rcParams["figure.figsize"] = [16.0, 3.0]
 
 def plot_ref_hyp_seg(ref_seg, hyp_seg, outFile, seg_dec):
@@ -138,8 +138,8 @@ def test_rho_sampling(rnd_topics_model, outFile):
     rnd_topics_model.sample_rho()
     test_model_state(rnd_topics_model, outFile)
     
-def run_gibbs_sampler(rnd_topics_model, n_iter, burn_in, lag, log_file="logging/Sampler.log"):
-    sampler = SegmentationModelSampler(rnd_topics_model, log_file)
+def run_gibbs_sampler(rnd_topics_model, n_iter, burn_in, lag, sampler_log_file="logging/Sampler.log"):
+    sampler = SegmentationModelSampler(rnd_topics_model, sampler_log_file)
     wd = sampler.gibbs_sampler(n_iter, burn_in, lag)
     return wd, sampler
 
@@ -173,9 +173,8 @@ def print_matrix(matrix):
     return str_final
 
 def plot_topic_assign(k_counts, inv_vocab, n, color, out_file):
+    plt.clf()
     f, axarr = plt.subplots(1, squeeze=False)
-    xAxis = [x/10. for x in range(0, 11)]
-    #for posterior, ax_i, color in zip(posteriors, range(len(posteriors)), colors):
     labelsVals = {}
     for i, val in enumerate(k_counts):
         labelsVals[inv_vocab[i]] = val
@@ -196,3 +195,63 @@ def debug_topic_assign(sampler, outDir):
     for k in range(sampler.seg_model.K):
         k_counts = sampler.estimated_W_K_counts[:, k]
         plot_topic_assign(k_counts.toarray().T[0], inv_vocab, n, 'g', outDir + "k_w_counts" + str(k) + ".png")
+        
+def plot_log_joint_prob(log_dir, outFile):
+    plt.clf()
+    y_labels = []
+    conv_fig = plt.figure(1)
+    ax_lp = conv_fig.add_subplot(211)
+    ax_lp.set_ylabel('log prob joint')
+    ax_lp.set_xlabel('Iteration')
+
+    ax_wd = conv_fig.add_subplot(212)
+    ax_wd.set_ylabel('WD')
+    ax_wd.set_xlabel('Iteration')
+    
+    for sampler_log_file in os.listdir(log_dir):
+        if not sampler_log_file.startswith("S"):
+            continue
+        with open(log_dir+sampler_log_file) as r_file:
+            y_lp = []
+            y_wd = []
+            lins = r_file.readlines()
+            for lin in lins:
+                if lin.startswith("INFO:log_prob_joint"):
+                    y_lp.append(float(lin.split("INFO:log_prob_joint ")[1]))
+                if lin.startswith("INFO:final_wd"):
+                    final_wd = "%.2f" % float(lin.split("INFO:final_wd: ")[1])
+                    y_labels.append(sampler_log_file[:-4] + " " + final_wd)
+                if lin.startswith("INFO:Rho_Est"):
+                    current_iter_wd = float(lin.split("INFO:Rho_Est ")[1])
+                    y_wd.append(current_iter_wd)
+            
+            x = range(len(y_lp))
+                
+            ax_lp.plot(x, y_lp)
+            ax_wd.plot(x, y_wd)
+    ax_lp.legend(y_labels, loc='lower right')
+    ax_wd.legend(y_labels, loc='upper right')
+    
+    conv_fig.savefig(outFile+".png")
+    
+def plot_rho_u_prob(sampler_log_file, outDir):
+    y_vals_dic = {}
+    with open(sampler_log_file) as r_file:
+        lins = r_file.readlines()
+        for lin in lins:
+            if lin.startswith("INFO:sample_rho_u:"):
+                u = lin.split(" u ")[1].split(" ")[0]
+                if u not in y_vals_dic:
+                    y_vals_dic[u] = []
+                y_vals_dic[u].append(float(lin.split(" prob_1 ")[1]))
+    
+    n_iters = len(y_vals_dic["0"])
+    for u in y_vals_dic:
+        plt.clf()
+        rho_fig = plt.figure(1)
+        ax_rho = rho_fig.add_subplot(211)
+        ax_rho.set_ylabel('Prob rho = 1')
+        ax_rho.set_xlabel('Iteration')
+        x = range(n_iters)
+        ax_rho.plot(x, y_vals_dic[u])
+        rho_fig.savefig(outDir + "rho_u"+u+"_prob.png")

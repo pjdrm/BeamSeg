@@ -16,6 +16,7 @@ class Document(object):
         self.U_I_topics = sparse.csr_matrix((1, 1), dtype=int32)
         self.W_K_counts = sparse.csr_matrix((1, 1), dtype=int32)
         self.load_doc(doc_path, max_features, stem, min_tf)
+        self.check_ghost_lines()
         
     def load_doc(self, doc_path, max_features, stem, min_tf):
         self.rho = []
@@ -62,6 +63,17 @@ class Document(object):
                     if w_ui in self.vocab:
                         self.U_I_words[u_index, i] = self.vocab[w_ui]
                         i += 1
+    
+    '''
+    Boundary ghost lines are lines with all word counts equal to 0.
+    I found these particular lines to badly affect inference, thus,
+    I print a warning if I find them.
+    '''                    
+    def check_ghost_lines(self):
+        ghost_lines = np.where(~self.U_W_counts.toarray().any(axis=1))[0]
+        boundary_ghost_lines = np.intersect1d(self.rho_eq_1+1, ghost_lines)
+        if len(boundary_ghost_lines) > 0:
+            print("WARNING: the following ghost lines exist: %s" % (str(boundary_ghost_lines)))
                         
 class ENStemmedCountVectorizer(CountVectorizer):
     def __init__(self, min_tf, max_features):
