@@ -3,13 +3,26 @@ Created on Feb 9, 2017
 
 @author: root
 '''
-from functools import lru_cache
 from scipy.special import gammaln
 import time
 
-@lru_cache(maxsize=None)
+gammaln_cache_dic = {}
 def gammaln_cache(x):
-    return gammaln(x)
+    if x not in gammaln_cache_dic:
+        val = gammaln(x)
+        gammaln_cache_dic[x] = val
+    else:
+        val = gammaln_cache_dic[x]
+    return val
+
+def cache_gammaln_mat_sum(M):
+    row = M.shape[0]
+    col = M.shape[1]
+    res_sum = 0.0
+    for i,j in zip(range(row), range(col)):
+        x = M[i,j]
+        res_sum += gammaln_cache(x)
+    return res_sum
 
 class Timer(object):
     def __init__(self, verbose=False):

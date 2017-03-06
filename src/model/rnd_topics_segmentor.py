@@ -11,6 +11,7 @@ from scipy import sparse
 from scipy.special import gammaln
 from scipy.misc import logsumexp
 from debug import log_tools
+from model.model_tools import cache_gammaln_mat_sum, gammaln_cache
 
 class RndTopicsModel(object):
     def __init__(self, gamma, alpha, beta, K, doc,\
@@ -35,7 +36,7 @@ class RndTopicsModel(object):
         self.n_sents = doc.n_sents
         
         #Initializing with a random state
-        self.pi = 0.07#np.random.beta(gamma, gamma)
+        self.pi = np.random.beta(gamma, gamma)
         self.rho = np.random.binomial(1, self.pi, size=doc.n_sents)
         self.rho[-1] = 0
         #Need to append last sentence, otherwise last segment wont be taken into account
@@ -43,18 +44,18 @@ class RndTopicsModel(object):
         self.n_segs = len(self.rho_eq_1)
 
         #Note: just to debug the initial state
-        self.theta = sparse.csr_matrix((self.n_segs, K))
-        self.phi = sparse.csr_matrix([np.random.dirichlet([self.beta]*self.W) for k in range(self.K)])
+        self.theta = np.zeros((self.n_segs, K))
+        self.phi = np.array([np.random.dirichlet([self.beta]*self.W) for k in range(self.K)])
         #Matrix with the counts of the words in each sentence 
         self.U_W_counts = doc.U_W_counts
         #Matrix with the topics of the ith word in each u sentence 
-        self.U_I_topics = sparse.csr_matrix((doc.n_sents, max(self.sents_len)))
+        self.U_I_topics = np.zeros((doc.n_sents, max(self.sents_len)))#self.doc.U_I_topics
         #Matrix with the word index of the ith word in each u sentence 
         self.U_I_words = doc.U_I_words
         #Matrix with the counts of the topic assignments in each sentence 
-        self.U_K_counts = sparse.csr_matrix((doc.n_sents, self.K))
+        self.U_K_counts = np.zeros((doc.n_sents, self.K))#self.doc.U_K_counts
         #Matrix with the number of times each word in the vocab was assigned with topic k
-        self.W_K_counts = sparse.csr_matrix((self.W, self.K))
+        self.W_K_counts = np.zeros((self.W, self.K)) #self.doc.W_K_counts
                 
         '''
         Generating all segments
@@ -91,7 +92,7 @@ class RndTopicsModel(object):
                 w_u_i = self.U_I_words[u, i]
                 self.W_K_counts[w_u_i, z_u_i] += 1.0
             self.U_K_counts[u, :] = u_topic_counts
-    
+
     '''
     This function gives the topic assignment z of word u,i probability
     given topic k.
@@ -99,18 +100,6 @@ class RndTopicsModel(object):
     k - topic
     Note: this function does not modify the w_ui counts.
     '''
-    def prob_z_ui_k(self, w_ui, k, Su_index, n_Su):
-        n_k_ui = self.W_K_counts[w_ui, k]
-        n_t = self.W_K_counts[:, k].sum()
-        f1 = (n_k_ui+self.beta)/(n_t + self.W*self.beta)
-        
-        Su_begin, Su_end = self.get_Su_begin_end(Su_index, self.rho_eq_1)
-        n_Su_z_ui = self.U_K_counts[Su_begin:Su_end, k].sum()
-        #n_Su = np.sum(self.U_K_counts[Su_begin:Su_end, :])
-        f2 = (n_Su_z_ui+self.alpha)/(n_Su + self.K*self.alpha)
-        
-        return f1 / f2
-    
     def log_prob_z_ui_k(self, w_ui, k, Su_index, n_Su):
         n_k_ui = self.W_K_counts[w_ui, k]
         n_t = self.W_K_counts[:, k].sum()
@@ -128,40 +117,22 @@ class RndTopicsModel(object):
     according to the probability of the possible topics in K.
     u - sentence number
     i - ith word from u to be sampled
-    '''
-    def sample_z_ui(self, u, i, Su_index, n_Su):
-        '''
-        Since this is for the Gibbs Sampler, we need to remove
-        word w_ui from segment and topic counts
-        '''
-        w_ui = self.U_I_words[u, i]
-        z_ui = self.U_I_topics[u, i]
-        w_z_ui_count = self.W_K_counts[w_ui, z_ui]
-        if w_z_ui_count > 0:
-            self.W_K_counts[w_ui, z_ui] -= 1
-        u_z_ui_count = self.U_K_counts[u, z_ui]
-        if u_z_ui_count > 0:
-            self.U_K_counts[u, z_ui] -= 1
-        #self.W_K_counts[w_ui, z_ui] -= 1
-        #self.U_K_counts[u, z_ui] -= 1
-        
-        topic_probs = []
-        for k in range(self.K):
-            topic_probs.append(self.prob_z_ui_k(w_ui, k, Su_index, n_Su))
-        topic_probs = topic_probs / np.sum(topic_probs)
-        #self.rt_seg_log.info('sample_z_ui: topic_probs %s', str(topic_probs))
-        z_ui_t_plus_1 = np.nonzero(np.random.multinomial(1, topic_probs))[0][0]
+    '''    
+    def sample_log_z_ui(self, u, i, w_ui, Su_index, topic_log_probs):
+        z_ui_t_plus_1 = np.nonzero(np.random.multinomial(1, topic_log_probs))[0][0]
         self.W_K_counts[w_ui, z_ui_t_plus_1] += 1
         self.U_K_counts[u, z_ui_t_plus_1] += 1
         self.U_I_topics[u, i] = z_ui_t_plus_1
-        
-    def sample_log_z_ui(self, u, i, Su_index, n_Su):
+        return z_ui_t_plus_1
+    
+    '''
+    Calculates the topic proportions for word w_ui
+    '''
+    def log_prob_Z(self, u, i, w_ui, z_ui, Su_index, n_Su):
         '''
         Since this is for the Gibbs Sampler, we need to remove
         word w_ui from segment and topic counts
         '''
-        w_ui = self.U_I_words[u, i]
-        z_ui = self.U_I_topics[u, i]
         w_z_ui_count = self.W_K_counts[w_ui, z_ui]
         if w_z_ui_count > 0:
             self.W_K_counts[w_ui, z_ui] -= 1
@@ -172,12 +143,9 @@ class RndTopicsModel(object):
         topic_log_probs = []
         for k in range(self.K):
             topic_log_probs.append(self.log_prob_z_ui_k(w_ui, k, Su_index, n_Su))
-        topic_probs = np.exp(topic_log_probs - np.log(np.sum(np.exp(topic_log_probs))))
-        #self.rt_seg_log.info('sample_z_ui: topic_log_probs %s', str(topic_probs))
-        z_ui_t_plus_1 = np.nonzero(np.random.multinomial(1, topic_probs))[0][0]
-        self.W_K_counts[w_ui, z_ui_t_plus_1] += 1
-        self.U_K_counts[u, z_ui_t_plus_1] += 1
-        self.U_I_topics[u, i] = z_ui_t_plus_1
+        topic_log_probs = np.exp(topic_log_probs - np.log(np.sum(np.exp(topic_log_probs))))
+        #self.rt_seg_log.info('sample_z_ui: topic_log_probs %s', str(topic_log_probs))
+        return topic_log_probs
         
     '''
     Samples all Z variables.
@@ -188,9 +156,11 @@ class RndTopicsModel(object):
         n_Su = np.sum(self.U_K_counts[Su_begin:Su_end, :])-1
         for u, rho_u in zip(range(self.n_sents), self.rho):
             for i in range(self.sents_len[u]):
-                self.sample_log_z_ui(u, i, Su_index, n_Su)
+                w_ui = self.U_I_words[u, i]
+                z_ui = int(self.U_I_topics[u, i])
+                topic_log_probs = self.log_prob_Z(u, i, w_ui, z_ui, Su_index, n_Su)
+                self.sample_log_z_ui(u, i, w_ui, Su_index, topic_log_probs)
             if rho_u == 1:
-                #break
                 Su_index += 1
                 Su_begin, Su_end = self.get_Su_begin_end(Su_index, self.rho_eq_1)
                 n_Su = np.sum(self.U_K_counts[Su_begin:Su_end, :])-1
@@ -276,28 +246,16 @@ class RndTopicsModel(object):
         return Su_minus_1_begin, Su_minus_1_end,\
                Su_begin, Su_end
                
-    def commit_merge(self, u, Su_index):
-        self.rho[u] = 0
-        self.rho_eq_1 = np.append(np.nonzero(self.rho)[0], [self.n_sents-1])
-        
-    def commit_split(self, u, Su_index):
-        self.n_segs += 1
-        self.rho[u] = 1
-        self.rho_eq_1 = np.append(np.nonzero(self.rho)[0], [self.n_sents-1])
-               
-    def sample_rho_u(self, u, Su_index):
-        rho_u = self.rho[u]
-        if rho_u == 1:
-            self.n_segs -= 1
-        self.n_sents -= 1
-        
+    def merge_log_prob(self, rho_u, Su_index):
         if rho_u == 0:
             #Case where we do NOT need to merge segments
             Su_begin, Su_end = self.get_Su_begin_end(Su_index, self.rho_eq_1)
         else:
             Su_begin, Su_end = self.merge_segments(Su_index)
         log_prob_0 = self.log_prob_rho_u_eq_0(Su_begin, Su_end)
-        
+        return log_prob_0
+    
+    def split_log_prob(self, u, rho_u, Su_index):
         if rho_u == 1:
             #Case where we do NOT need to split segments
             Su_minus_1_begin, Su_minus_1_end = self.get_Su_begin_end(Su_index, self.rho_eq_1)
@@ -308,14 +266,23 @@ class RndTopicsModel(object):
             
         log_prob_1 = self.log_prob_rho_u_eq_1(Su_minus_1_begin, Su_minus_1_end,\
                                               Su_begin, Su_end)
+        return log_prob_1
+    
+    def commit_merge(self, u, Su_index):
+        self.rho[u] = 0
+        self.rho_eq_1 = np.append(np.nonzero(self.rho)[0], [self.n_sents-1])
         
+    def commit_split(self, u, Su_index):
+        self.n_segs += 1
+        self.rho[u] = 1
+        self.rho_eq_1 = np.append(np.nonzero(self.rho)[0], [self.n_sents-1])
+                   
+    def sample_rho_u(self, u, Su_index, rho_u, log_prob_0, log_prob_1):
         prob_1 = np.exp(log_prob_1 - np.logaddexp(log_prob_0, log_prob_1))
-        rho_u_new = np.random.binomial(1, prob_1)
         self.rt_seg_log.info('sample_rho_u: u %d log_prob_0 %0.2f log_prob_1 %0.2f prob_1 %s', u, log_prob_0, log_prob_1, str(prob_1))
-        
+        rho_u_new = np.random.binomial(1, prob_1)
         #Commit the changes according to rho_u_new
-        self.n_sents += 1
-        
+        self.n_sents += 1        
         if rho_u == rho_u_new:
             '''
             Case where we sampled the same segmentation, thus,
@@ -328,6 +295,7 @@ class RndTopicsModel(object):
                 self.commit_merge(u, Su_index)
             else:
                 self.commit_split(u, Su_index)
+        return rho_u_new
                 
     '''
     Samples all rho variables.
@@ -339,7 +307,14 @@ class RndTopicsModel(object):
         (it cannot be a topic change since there are no more sentences)
         '''
         for u in range(self.n_sents-1):
-            self.sample_rho_u(u, Su_index)
+            rho_u = self.rho[u]
+            if rho_u == 1:
+                self.n_segs -= 1
+            self.n_sents -= 1
+            
+            log_prob_0 = self.merge_log_prob(rho_u, Su_index)
+            log_prob_1 = self.split_log_prob(u, rho_u, Su_index)
+            self.sample_rho_u(u, Su_index, rho_u, log_prob_0, log_prob_1)
             '''
             Note: it is crucial to notice that the sampling
             of rho changes self.rho. Thus, we can only rely
@@ -356,7 +331,7 @@ class RndTopicsModel(object):
         n0 = n_sents - n1
         W = W_K_counts.shape[0]
         
-        np_W_K_counts = W_K_counts.toarray()
+        np_W_K_counts = W_K_counts
         
         log_p_c_f1 = gammaln(2.0*gamma) - (gammaln(gamma)*2)
         log_p_c_f2 = (gammaln(n1+gamma) + gammaln(n0+gamma)) - gammaln(n_sents+2.0*gamma)
@@ -379,5 +354,119 @@ class RndTopicsModel(object):
         log_p_zc = log_p_zc_f1 + log_p_zc_f2
         
         return log_p_c + log_p_wz + log_p_zc
+'''
+Efficient version, based on a chaching scheme, of the
+RndTopicsModel class.
+'''    
+class RndTopicsCacheModel(RndTopicsModel):
+    def __init__(self, gamma, alpha, beta, K, doc,\
+                 log_flag=False,\
+                 sampler_log_file = "RndTopicsModel.log"):
+        RndTopicsModel.__init__(self, gamma, alpha, beta, K, doc,\
+                                log_flag,\
+                                sampler_log_file)
+        '''
+        This is the main trick to sample Z efficiently.
+        The idea is to sample by word type (by the order
+        they occur in the document). A cache hit will occur
+        when 2 words of the same type, in the same segment,
+        have the same topic. In these conditions, I just need
+        to cache the topic probabilities of the previous order.
+        '''
+        self.sample_order = self.calc_sample_order()
         
-        
+    def calc_sample_order(self):
+        sample_order_dic = {}
+        for u in range(self.n_sents):
+            for i in range(self.sents_len[u]):
+                w_ui = self.U_I_words[u,i]
+                if w_ui not in sample_order_dic:
+                    sample_order_dic[w_ui] = []
+                sample_order_dic[w_ui].append((u,i, w_ui))
+        res = []
+        for w_ui in sample_order_dic:
+            res += sample_order_dic[w_ui]
+        return res           
+                
+    def sample_z(self):
+        z_ui_prev = -1
+        w_ui_prev = -1
+        Su_index_prev = -1
+        cache_topic_log_probs = -1
+        n_Su_array = self.calc_n_Su_array()
+        for u, i, w_ui in self.sample_order:
+            Su_index = self.get_Su_index(u)
+            n_Su = n_Su_array[Su_index]
+            w_ui = self.U_I_words[u, i]
+            z_ui = int(self.U_I_topics[u,i])
+            
+            if  z_ui == z_ui_prev and\
+                w_ui == w_ui_prev and\
+                Su_index_prev == Su_index:
+                self.W_K_counts[w_ui, z_ui] -= 1
+                self.U_K_counts[u, z_ui] -= 1
+                z_ui_new = self.sample_log_z_ui(u, i, w_ui, Su_index, cache_topic_log_probs)
+            else:
+                topic_log_probs = self.log_prob_Z(u, i, w_ui, z_ui, Su_index, n_Su)
+                cache_topic_log_probs = topic_log_probs
+                z_ui_new = self.sample_log_z_ui(u, i, w_ui, Su_index, topic_log_probs)
+            z_ui_prev = z_ui_new
+            w_ui_prev = w_ui
+            Su_index_prev = Su_index
+    '''
+    The caching scheme for sampling rho consist of
+    taking advantage of the fact that sentences in the same
+    segment have merge probability.
+    '''        
+    def sample_rho(self):
+        Su_index = 0
+        cacheFlag = False
+        cache_log_prob_0 = -1
+        '''
+        Note: the last sentence is always rho = 0
+        (it cannot be a topic change since there are no more sentences)
+        '''
+        for u in range(self.n_sents-1):
+            rho_u = self.rho[u]
+            if rho_u == 1:
+                self.n_segs -= 1
+            self.n_sents -= 1
+            
+            '''
+            Note: we cannot use the cache value if rho == 1,
+            because the probability of a merge is different from what 
+            we have in cache.
+            '''
+            if rho_u == 0 and cacheFlag:
+                log_prob_0 = cache_log_prob_0
+            else:
+                log_prob_0 = self.merge_log_prob(rho_u, Su_index)
+                cache_log_prob_0 = log_prob_0
+            log_prob_1 = self.split_log_prob(u, rho_u, Su_index)
+            rho_u_new = self.sample_rho_u(u, Su_index, rho_u, log_prob_0, log_prob_1)
+            '''
+            Note: it is crucial to notice that the sampling
+            of rho changes self.rho. Thus, we can only rely
+            on the values after sampling to determine which
+            Su_index we are at.
+            '''
+            if rho_u_new == 1:
+                Su_index += 1
+                cacheFlag = False
+            else:
+                cacheFlag = True
+    
+    def calc_n_Su_array(self):
+        n_Su_array = np.zeros(self.n_segs)
+        for Su_index in range(self.n_segs):
+            Su_begin, Su_end = self.get_Su_begin_end(Su_index, self.rho_eq_1)
+            n_Su = np.sum(self.U_K_counts[Su_begin:Su_end, :])-1
+            if n_Su == -1.0:
+                n_Su = 0.0
+            n_Su_array[Su_index] = n_Su
+        return n_Su_array
+    
+    def get_Su_index(self, u):
+        for Su_index, rho1 in enumerate(self.rho_eq_1):
+            if u <= rho1:
+                return Su_index

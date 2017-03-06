@@ -12,7 +12,7 @@ import pandas as pd
 import operator
 import os
 plt.style.use('ggplot')
-plt.rcParams["figure.figsize"] = [16.0, 3.0]
+plt.rcParams["figure.figsize"] = [16.0, 10.0]
 
 def plot_ref_hyp_seg(ref_seg, hyp_seg, outFile, seg_dec):
     df2 = pd.DataFrame(np.array([ref_seg, hyp_seg]).T, columns=["Reference", seg_dec])
@@ -174,27 +174,25 @@ def print_matrix(matrix):
 
 def plot_topic_assign(k_counts, inv_vocab, n, color, out_file):
     plt.clf()
-    f, axarr = plt.subplots(1, squeeze=False)
     labelsVals = {}
     for i, val in enumerate(k_counts):
         labelsVals[inv_vocab[i]] = val
     sorted_dic = sorted(labelsVals.items(), key=operator.itemgetter(1))
     yLabels = [label for label, val in sorted_dic[:n]]
-    y_pos = np.arange(len(yLabels))/5.
-    ax_i = 0
-    axarr[ax_i, 0].barh(y_pos, [labelsVals[y] for y in yLabels], align='center', color=color, height=0.2)
-    axarr[ax_i, 0].set_yticks(y_pos)
-    axarr[ax_i, 0].set_yticklabels(yLabels)
-
+    y_pos = np.arange(len(yLabels))
+    x_vals = [labelsVals[y] for y in yLabels]
+    plt.barh(y_pos, x_vals, align='center')
+    plt.yticks(y_pos, yLabels)
     plt.xlabel('Counts')
-    plt.savefig(out_file)
+    plt.ylim([-0.6, y_pos[-1]+0.6])
+    plt.savefig(out_file, bbox_inches='tight')
     
 def debug_topic_assign(sampler, outDir):
     inv_vocab =  {v: k for k, v in sampler.seg_model.doc.vocab.items()}
     n = len(sampler.seg_model.doc.vocab)
     for k in range(sampler.seg_model.K):
         k_counts = sampler.estimated_W_K_counts[:, k]
-        plot_topic_assign(k_counts.toarray().T[0], inv_vocab, n, 'g', outDir + "k_w_counts" + str(k) + ".png")
+        plot_topic_assign(k_counts.T.A1, inv_vocab, n, 'g', outDir + "k_w_counts" + str(k) + ".png")
         
 def plot_log_joint_prob(log_dir, outFile):
     plt.clf()

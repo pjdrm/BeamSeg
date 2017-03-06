@@ -8,7 +8,7 @@ of the topic tracking model.
 '''
 from dataset.corpus import SyntheticTopicTrackingDoc
 from model.topic_tracking_segmentor import TopicTrackingModel
-import debug.debug_tools  as debug_tools
+import debug.debug_tools as debug_tools
 
 pi = 0.4
 alpha = 15
