@@ -194,7 +194,7 @@ def debug_topic_assign(sampler, outDir):
         k_counts = sampler.estimated_W_K_counts[:, k]
         plot_topic_assign(k_counts.T.A1, inv_vocab, n, 'g', outDir + "k_w_counts" + str(k) + ".png")
         
-def plot_log_joint_prob(log_dir, outFile):
+def plot_log_joint_prob(sampler_log_file_list, outFile):
     plt.clf()
     y_labels = []
     conv_fig = plt.figure(1)
@@ -206,10 +206,58 @@ def plot_log_joint_prob(log_dir, outFile):
     ax_wd.set_ylabel('WD')
     ax_wd.set_xlabel('Iteration')
     
-    for sampler_log_file in os.listdir(log_dir):
-        if not sampler_log_file.startswith("S"):
-            continue
-        with open(log_dir+sampler_log_file) as r_file:
+    for sampler_log_file in sampler_log_file_list:
+        y_lp, y_wd, y_label, final_wd = process_log_joint_prob(sampler_log_file)
+        x = range(len(y_lp))
+        ax_lp.plot(x, y_lp)
+        ax_wd.plot(x, y_wd)
+        y_labels.append(y_label)
+        
+    ax_lp.legend(y_labels, loc='lower right')
+    ax_wd.legend(y_labels, loc='upper right')
+    
+    conv_fig.savefig(outFile+".png")
+    
+def plot_log_joint_prob_md(md_log_file, ind_log_file_list, outFile):
+    plt.clf()
+    conv_fig = plt.figure(1)
+    ax_lp = conv_fig.add_subplot(211)
+    ax_lp.set_ylabel('log prob joint')
+    ax_lp.set_xlabel('Iteration')
+
+    ax_wd = conv_fig.add_subplot(212)
+    ax_wd.set_ylabel('WD')
+    ax_wd.set_xlabel('Iteration')
+    
+    y_labels_lp = []
+    y_labels_wd = []
+    
+    y_lp, y_wd, y_label, wd_final = process_log_joint_prob(md_log_file)
+    y_labels_lp.append(y_label)
+    y_labels_wd.append(y_label)
+    x = range(len(y_lp))
+    ax_lp.plot(x, y_lp)
+    ax_wd.plot(x, y_wd)
+    
+    y_lp_total = np.zeros(len(y_lp))
+    wd_total = []
+    for sampler_log_file in ind_log_file_list:
+        y_lp, y_wd, y_label, final_wd = process_log_joint_prob(sampler_log_file)
+        y_lp_total += y_lp
+        ax_wd.plot(x, y_wd)
+        y_labels_wd.append(y_label)
+        wd_total.append(final_wd)
+            
+    ax_lp.plot(x, y_lp_total)
+    y_labels_lp.append("Sampler_ind " + str(np.average(wd_total)))
+    
+    ax_lp.legend(y_labels_lp, loc='lower right')
+    ax_wd.legend(y_labels_wd, loc='upper right')
+    
+    conv_fig.savefig(outFile+".png")
+
+def process_log_joint_prob(log_file):
+    with open(log_file) as r_file:
             y_lp = []
             y_wd = []
             lins = r_file.readlines()
@@ -218,19 +266,11 @@ def plot_log_joint_prob(log_dir, outFile):
                     y_lp.append(float(lin.split("INFO:log_prob_joint ")[1]))
                 if lin.startswith("INFO:final_wd"):
                     final_wd = "%.2f" % float(lin.split("INFO:final_wd: ")[1])
-                    y_labels.append(sampler_log_file[:-4] + " " + final_wd)
+                    y_label = log_file.split("/")[-1][:-4] + " " + final_wd
                 if lin.startswith("INFO:Rho_Est"):
                     current_iter_wd = float(lin.split("INFO:Rho_Est ")[1])
                     y_wd.append(current_iter_wd)
-            
-            x = range(len(y_lp))
-                
-            ax_lp.plot(x, y_lp)
-            ax_wd.plot(x, y_wd)
-    ax_lp.legend(y_labels, loc='lower right')
-    ax_wd.legend(y_labels, loc='upper right')
-    
-    conv_fig.savefig(outFile+".png")
+            return y_lp, y_wd, y_label, float(final_wd)
     
 def plot_rho_u_prob(sampler_log_file, outDir):
     y_vals_dic = {}
@@ -253,3 +293,24 @@ def plot_rho_u_prob(sampler_log_file, outDir):
         x = range(n_iters)
         ax_rho.plot(x, y_vals_dic[u])
         rho_fig.savefig(outDir + "rho_u"+u+"_prob.png")
+        
+def plot_iter_time(log_files, outFile):
+    plt.clf()
+    time_iter_fig = plt.figure(1)
+    ax_fig = time_iter_fig.add_subplot(111)
+    ax_fig.set_ylabel('Time (secs)')
+    ax_fig.set_xlabel('Iteration')
+    y_labels = []
+    for log_file in log_files:
+        y_vals = []
+        with open(log_file) as r_file:
+            lins = r_file.readlines()
+            for lin in lins:
+                if lin.startswith("INFO:Iteration time"):
+                    iter_time = float(lin.split("INFO:Iteration time ")[1])
+                    y_vals.append(iter_time)
+            x = range(len(y_vals))
+            ax_fig.plot(x, y_vals)
+            y_labels.append(log_file.split("/")[-1][:-4] + " Total time: " + str(sum(y_vals))[:4]+"s")
+    ax_fig.legend(y_labels, loc='upper right')
+    time_iter_fig.savefig(outFile)

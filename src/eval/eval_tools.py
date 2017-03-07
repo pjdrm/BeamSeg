@@ -21,4 +21,18 @@ def wd(hyp_seg, ref_seg):
     hyp_seg = segeval_converter(hyp_seg)
     ref_seg = segeval_converter(ref_seg)
     wd = window_diff(hyp_seg, ref_seg)
-    return wd
+    return float(wd)
+
+def wd_evaluator(estimated_rho, doc):
+    if doc.__class__.__name__ == "SyntheticRndTopicMultiDoc":
+        doc_begin = 0
+        wd_results = []
+        for doc_end in doc.docs_index:
+            doc_rho = doc.rho[doc_begin:doc_end]
+            doc_estimated_rho = estimated_rho[doc_begin:doc_end]
+            doc_estimated_rho[-1] = 0
+            wd_results.append(wd(doc_estimated_rho, doc_rho))
+        return wd_results
+    else:
+        return [wd(estimated_rho, doc.rho)]
+            

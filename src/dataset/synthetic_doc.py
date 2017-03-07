@@ -6,6 +6,7 @@ Created on Jan 20, 2017
 import numpy as np
 from scipy import sparse, int32
 from model.topic_tracking_segmentor import TopicTrackingModel
+import copy
 
 
 class SyntheticDocument(object):
@@ -136,37 +137,22 @@ class SyntheticRndTopicPropsDoc(SyntheticDocument):
         theta = np.random.dirichlet([alpha]*self.K)
         return theta
     
-class SyntheticRndTopicDocCollection(SyntheticDocument):
+class SyntheticRndTopicMultiDoc(SyntheticDocument):
     def __init__(self, pi, alpha, beta, K, W, doc_len, sent_len, n_docs):
-        self.alpha = alpha
-        self.K = K
-        self.W = W
-        self.vocab = {}
-        for w in range(self.W):
-            self.vocab[str(w)] = w
-        self.inv_vocab =  {v: k for k, v in self.vocab.items()}
+        self.doc_len = doc_len 
         self.n_docs = n_docs
         self.n_sents = doc_len*n_docs
-        self.sent_len = sent_len
-        self.sents_len = np.array([sent_len]*self.n_sents)
+        SyntheticDocument.__init__(self, pi, alpha, beta, K, W, self.n_sents, sent_len)
         
-        self.rho = np.random.binomial(1, pi, size=(self.n_sents))
         #The last sentence of each document must be 1
         for u in range(doc_len-1, self.n_sents, doc_len):
             self.rho[u] = 1
         #... except last sentence.
         self.rho[-1] = 0
         self.rho_eq_1 = np.append(np.nonzero(self.rho)[0], [self.n_sents-1])
-        self.phi = np.array([np.random.dirichlet([beta]*W) for k in range(K)])
         self.docs_n_segs = self.get_docs_n_segs(n_docs, doc_len)
         self.theta = self.generate_theta(max(self.docs_n_segs), K, alpha)
-        
-        self.U_W_counts = np.zeros((self.n_sents, self.W), dtype=int32)
-        self.U_K_counts = np.zeros((self.n_sents, self.K), dtype=int32)
-        self.U_I_topics = np.zeros((self.n_sents, self.sent_len), dtype=int32)
-        self.U_I_words = np.zeros((self.n_sents, self.sent_len), dtype=int32)
-        #Matrix with the number of times each word in the vocab was assigned with topic k
-        self.W_K_counts = np.zeros((self.W, self.K), dtype=int32)
+        self.docs_index = range(self.doc_len, self.n_sents+1, self.doc_len)
         
     def get_docs_n_segs(self, n_docs, doc_len):
         docs_n_segs = []
@@ -196,3 +182,29 @@ class SyntheticRndTopicDocCollection(SyntheticDocument):
                 self.generate_Su(Su_index, theta_Su)
                 theta_i += 1
                 Su_index += 1
+                
+def multi_doc_slicer(multi_doc):
+    doc_l = []
+    doc_begin = 0
+    for doc_end in multi_doc.docs_index:
+        doc = copy.deepcopy(multi_doc)
+        doc.n_sents = multi_doc.doc_len
+        doc.n_docs = 1
+        doc.sents_len = np.array([multi_doc.sent_len]*doc.n_sents)
+        doc.docs_index = [multi_doc.doc_len]
+        doc.rho = multi_doc.rho[doc_begin:doc_end]
+        doc.rho[-1] = 0
+        doc.rho_eq_1 = np.append(np.nonzero(doc.rho)[0], [doc.n_sents-1])
+        doc.U_W_counts = multi_doc.U_W_counts[doc_begin:doc_end, :]
+        doc.U_K_counts = multi_doc.U_K_counts[doc_begin:doc_end, :]
+        doc.U_I_topics = multi_doc.U_I_topics[doc_begin:doc_end, :]
+        doc.U_I_words = multi_doc.U_I_words[doc_begin:doc_end, :]
+        doc.W_K_counts = np.zeros((multi_doc.W, multi_doc.K), dtype=int32)
+        for u in range(doc.n_sents):
+            for i in range(doc.sents_len[u]):
+                z_ui = doc.U_I_topics[u,i]
+                w_ui = doc.U_I_words[u,i]
+                doc.W_K_counts[w_ui, z_ui] += 1
+        doc_begin = doc_end
+        doc_l.append(doc)
+    return doc_l

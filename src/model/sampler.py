@@ -6,8 +6,9 @@ Created on Feb 9, 2017
 from tqdm import trange
 import numpy as np
 from debug import log_tools
-from eval.eval_tools import wd
+from eval.eval_tools import wd_evaluator, wd
 from scipy import sparse
+import time
 
 class SegmentationModelSampler():
     def __init__(self, segmentation_model, sampler_log_file="logging/Sampler.log"):
@@ -31,17 +32,20 @@ class SegmentationModelSampler():
         self.sampler_log.info('Ref %s', str(self.seg_model.doc.rho))
         self.sampler_log.info('Hyp %s', str(self.seg_model.rho))
         for i in t:
+            t_init = time.time()
             self.seg_model.sample_z()
             self.seg_model.sample_rho()
+            t_end = time.time()
             if burn_in > 0:
-                t.set_description("Burn-in iter %i n_segs %d" % (burn_in, self.seg_model.n_segs))
+                t.set_description("Burn-in iter %i" % (burn_in))
                 burn_in -= 1
             else:
                 if lag_counter > 0:
-                    t.set_description("Lag iter %i\tn_segs %d" % (iteration, self.seg_model.n_segs))
+                    t.set_description("Lag iter %i" % (iteration))
                     lag_counter -= 1
                 else:
-                    t.set_description("Estimate iter %i\tn_segs %d" % (iteration, self.seg_model.n_segs))
+                    self.sampler_log.info('Iteration time %s', str(t_end - t_init))
+                    t.set_description("Estimate iter %i" % (iteration))
                     lag_counter = lag
                     estimated_rho += self.seg_model.rho
                     self.estimated_W_K_counts += self.seg_model.W_K_counts
@@ -82,8 +86,8 @@ class SegmentationModelSampler():
         estimated_rho = estimated_rho.astype(int)
         self.sampler_log.info('\nMH %s', str(estimated_rho).replace("\n", ""))
         self.sampler_log.info('\nGS %s', str(self.seg_model.doc.rho).replace(",", ""))
-        wd_val = wd(estimated_rho, self.seg_model.doc.rho)
-        self.sampler_log.info('final_wd: %f', wd_val)
+        wd_val = wd_evaluator(estimated_rho, self.seg_model.doc)
+        self.sampler_log.info('final_wd: %f', wd(estimated_rho, self.seg_model.doc.rho))
         print("\nWD %s" % (str(wd_val)))
         return wd_val
     
