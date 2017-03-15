@@ -136,7 +136,14 @@ class SyntheticRndTopicPropsDoc(SyntheticDocument):
     def draw_theta(self, alpha):
         theta = np.random.dirichlet([alpha]*self.K)
         return theta
-    
+'''
+This class represents a synthetic collection of
+related documents. The theta parameters for each segment
+are the same for all documents.
+
+In practice the multiple documents are just stored in a 
+single giant matrix.
+'''   
 class SyntheticRndTopicMultiDoc(SyntheticDocument):
     def __init__(self, pi, alpha, beta, K, W, doc_len, sent_len, n_docs):
         self.doc_len = doc_len 
@@ -182,6 +189,32 @@ class SyntheticRndTopicMultiDoc(SyntheticDocument):
                 self.generate_Su(Su_index, theta_Su)
                 theta_i += 1
                 Su_index += 1
+                
+class SyntheticDittoDocs(SyntheticDocument):
+    def __init__(self, doc, n_copies):
+        self.alpha = doc.alpha
+        self.K = doc.K
+        self.W = doc.W
+        #Just for code compatibility
+        self.vocab = doc.vocab
+        self.inv_vocab =  doc.inv_vocab
+        self.n_sents = doc.n_sents*n_copies
+        self.sent_len = doc.sent_len
+        self.sents_len = np.tile(doc.sents_len, n_copies)
+        
+        self.rho = np.tile(doc.rho, n_copies)
+        #The last sentence of each document must be 1
+        for u in range(doc.n_sents-1, doc.n_sents*n_copies, doc.n_sents):
+            self.rho[u] = 1
+        #... except last sentence.
+        self.rho[-1] = 0
+        self.rho_eq_1 = np.append(np.nonzero(self.rho)[0], [self.n_sents-1])
+        self.U_W_counts = np.tile(doc.U_W_counts, (n_copies, 1))
+        self.U_K_counts = np.tile(doc.U_K_counts, (n_copies, 1))
+        self.U_I_topics = np.tile(doc.U_I_topics, (n_copies, 1))
+        self.U_I_words = np.tile(doc.U_I_words, (n_copies, 1))
+        self.W_K_counts = np.tile(doc.W_K_counts, (n_copies, 1))
+        self.docs_index = range(doc.n_sents, self.n_sents+1, doc.n_sents)
                 
 def multi_doc_slicer(multi_doc):
     doc_l = []

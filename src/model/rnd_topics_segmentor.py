@@ -11,7 +11,7 @@ from scipy import sparse
 from scipy.special import gammaln
 from scipy.misc import logsumexp
 from debug import log_tools
-from model.model_tools import cache_gammaln_mat_sum, gammaln_cache
+import pathos.multiprocessing as mp
 
 class RndTopicsModel(object):
     def __init__(self, gamma, alpha, beta, K, doc,\
@@ -36,7 +36,7 @@ class RndTopicsModel(object):
         self.n_sents = doc.n_sents
         
         #Initializing with a random state
-        self.pi = np.random.beta(gamma, gamma)
+        self.pi = 0.07#np.random.beta(gamma, gamma)
         self.rho = np.random.binomial(1, self.pi, size=doc.n_sents)
         self.rho[-1] = 0
         #Need to append last sentence, otherwise last segment wont be taken into account
@@ -354,8 +354,9 @@ class RndTopicsModel(object):
         log_p_zc = log_p_zc_f1 + log_p_zc_f2
         
         return log_p_c + log_p_wz + log_p_zc
+
 '''
-Efficient version, based on a chaching scheme, of the
+Efficient version, based on a caching scheme, of the
 RndTopicsModel class.
 '''    
 class RndTopicsCacheModel(RndTopicsModel):
@@ -413,20 +414,27 @@ class RndTopicsCacheModel(RndTopicsModel):
             z_ui_prev = z_ui_new
             w_ui_prev = w_ui
             Su_index_prev = Su_index
+            
     '''
     The caching scheme for sampling rho consist of
     taking advantage of the fact that sentences in the same
-    segment have merge probability.
+    segment have the same merge probability.
     '''        
-    def sample_rho(self):
-        Su_index = 0
+    def sample_rho(self, doc_index = None):
         cacheFlag = False
         cache_log_prob_0 = -1
+        if doc_index is not None:
+            sents = range(doc_index[0], doc_index[1])
+            Su_index = self.get_Su_index(doc_index[0])
+        else:
+            sents = range(self.n_sents-1)
+            Su_index = 0
+            
         '''
         Note: the last sentence is always rho = 0
         (it cannot be a topic change since there are no more sentences)
         '''
-        for u in range(self.n_sents-1):
+        for u in sents:
             rho_u = self.rho[u]
             if rho_u == 1:
                 self.n_segs -= 1
@@ -455,7 +463,8 @@ class RndTopicsCacheModel(RndTopicsModel):
                 cacheFlag = False
             else:
                 cacheFlag = True
-    
+        return self.rho
+        
     def calc_n_Su_array(self):
         n_Su_array = np.zeros(self.n_segs)
         for Su_index in range(self.n_segs):
@@ -470,3 +479,81 @@ class RndTopicsCacheModel(RndTopicsModel):
         for Su_index, rho1 in enumerate(self.rho_eq_1):
             if u <= rho1:
                 return Su_index
+        print()
+
+U_K_counts_g = None
+U_I_topics_g = None
+W_K_counts_g = None
+
+class RndTopicsParallelModel(RndTopicsModel):
+    def __init__(self, gamma, alpha, beta, K, doc,\
+                 log_flag=False,\
+                 sampler_log_file = "RndTopicsModel.log"):
+        RndTopicsModel.__init__(self, gamma, alpha, beta, K, doc,\
+                                    log_flag,\
+                                    sampler_log_file)
+        self.log_flag = log_flag
+        self.segmentors = self.get_segmentors()
+        self.sample_rho_args = []
+        for doc_i in range(self.doc.n_docs):
+            self.sample_rho_args.append((self.segmentors[doc_i],))
+        
+        self.U_K_counts = self.base_seg.U_K_counts
+        self.U_I_topics = self.base_seg.U_I_topics
+        self.W_K_counts = self.base_seg.W_K_counts
+        
+    def get_segmentors(self):
+        self.base_seg = RndTopicsCacheModel(self.gamma, self.alpha,\
+                                       self.beta, self.K,\
+                                       self.doc, self.log_flag)
+        segmentors = []
+        doc_begin = 0
+        for doc_end in self.doc.docs_index:
+            seg = RndTopicsCacheModel(self.gamma, self.alpha,\
+                                      self.beta, self.K,\
+                                      self.doc, self.log_flag)
+            
+            #Note: it's crucial that each seg as its own rho, n_segs and n_sents
+            seg.n_sents = doc_end - doc_begin
+            seg.rho = np.array(self.base_seg.rho[doc_begin:doc_end])
+            seg.rho_eq_1 = np.append(np.nonzero(seg.rho)[0], [seg.n_sents-1])
+            seg.n_segs = len(seg.rho_eq_1)
+        
+            '''
+            The idea to share the matrix so that by sampling Z 
+            in on seg all the other get updated too.
+            '''
+            seg.U_K_counts = self.base_seg.U_K_counts[doc_begin:doc_end, :]
+            seg.U_I_topics = self.base_seg.U_I_topics[doc_begin:doc_end, :]
+            seg.W_K_counts = self.base_seg.W_K_counts[doc_begin:doc_end, :]
+            segmentors.append(seg)
+            doc_begin = doc_end
+        return segmentors
+    
+    def sample_z(self):
+        self.base_seg.sample_z()
+        
+    '''
+    Note: implementation of parallelization is harder than I thought.
+    This is due to shared variables like rho_eq1.
+    '''
+    def sample_rho(self):
+        thread_pool = mp.ProcessingPool(3)
+        results = thread_pool.map(self.sample_rho_parallel, range(self.doc.n_docs))
+        #Base seg needs to have rho variables correct to sample Z
+        self.base_seg.rho = []
+        self.base_seg.rho_eq_1 = []
+        for doc_i, rho in enumerate(results):
+            seg_i = self.segmentors[doc_i]
+            seg_i.rho = rho
+            seg_i.rho_eq_1 = np.append(np.nonzero(seg_i.rho)[0], [self.base_seg.n_sents-1])
+            seg_i.n_segs = len(seg_i.rho_eq_1)
+            self.base_seg.rho = np.concatenate([self.base_seg.rho, rho])
+        self.base_seg.rho_eq_1 = np.append(np.nonzero(self.base_seg.rho)[0], [self.base_seg.n_sents-1])
+        self.base_seg.n_segs = len(self.base_seg.rho_eq_1)
+        self.rho = self.base_seg.rho
+        self.rho_eq_1 = self.base_seg.rho_eq_1
+        self.n_segs = self.base_seg.n_segs
+        
+    def sample_rho_parallel(self, doc_i):
+        return self.segmentors[doc_i].sample_rho()

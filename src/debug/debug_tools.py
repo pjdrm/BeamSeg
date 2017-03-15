@@ -11,6 +11,7 @@ import matplotlib as mpl
 import pandas as pd
 import operator
 import os
+import shutil
 plt.style.use('ggplot')
 plt.rcParams["figure.figsize"] = [16.0, 10.0]
 
@@ -218,7 +219,7 @@ def plot_log_joint_prob(sampler_log_file_list, outFile):
     
     conv_fig.savefig(outFile+".png")
     
-def plot_log_joint_prob_md(md_log_file, ind_log_file_list, outFile):
+def plot_log_joint_prob_md(md_log_file_list, ind_log_file_list, outFile):
     plt.clf()
     conv_fig = plt.figure(1)
     ax_lp = conv_fig.add_subplot(211)
@@ -232,12 +233,13 @@ def plot_log_joint_prob_md(md_log_file, ind_log_file_list, outFile):
     y_labels_lp = []
     y_labels_wd = []
     
-    y_lp, y_wd, y_label, wd_final = process_log_joint_prob(md_log_file)
-    y_labels_lp.append(y_label)
-    y_labels_wd.append(y_label)
-    x = range(len(y_lp))
-    ax_lp.plot(x, y_lp)
-    ax_wd.plot(x, y_wd)
+    for md_log_file in md_log_file_list:
+        y_lp, y_wd, y_label, wd_final = process_log_joint_prob(md_log_file)
+        y_labels_lp.append(y_label)
+        y_labels_wd.append(y_label)
+        x = range(len(y_lp))
+        ax_lp.plot(x, y_lp)
+        ax_wd.plot(x, y_wd)
     
     y_lp_total = np.zeros(len(y_lp))
     wd_total = []
@@ -314,3 +316,16 @@ def plot_iter_time(log_files, outFile):
             y_labels.append(log_file.split("/")[-1][:-4] + " Total time: " + str(sum(y_vals))[:4]+"s")
     ax_fig.legend(y_labels, loc='upper right')
     time_iter_fig.savefig(outFile)
+    
+def clean_debug():
+    k_W_counts_outDir = "./debug/rnd_topics_model/k_word_counts/"
+    rho1_prob_dir = "./debug/rnd_topics_model/rho_prob/"
+    shutil.rmtree(k_W_counts_outDir)
+    shutil.rmtree(rho1_prob_dir)
+    os.makedirs(k_W_counts_outDir)
+    os.makedirs(rho1_prob_dir)
+    
+def clean_log():
+    log_dir = "./logging/"
+    shutil.rmtree(log_dir)
+    os.makedirs(log_dir)
