@@ -10,7 +10,7 @@ from dataset.synthetic_doc import SyntheticRndTopicPropsDoc, SyntheticRndTopicMu
 from model.rnd_topics_segmentor import RndTopicsModel, RndTopicsCacheModel, RndTopicsParallelModel
 import debug.debug_tools as debug_tools
 from debug.debug_tools import print_ref_hyp_plots, debug_topic_assign, plot_log_joint_prob, plot_log_joint_prob_md, plot_rho_u_prob, plot_iter_time, clean_debug, clean_log
-from dataset.real_doc import Document
+from dataset.real_doc import Document, MultiDocument
 from multiprocessing.dummy import Pool as ThreadPool
 import time
 import shutil
@@ -115,6 +115,47 @@ def syn_multi_doc_test():
     #print("Multi-Doc-Para seg results: %s" % (str(wd_md_doc_results_parallel)))
     plot_log_joint_prob_md([md_log_file_cache], ind_log_file_list, "./debug/rnd_topics_model/samplers_convergence")
     plot_iter_time([md_log_file, md_log_file_cache] + ind_log_file_list, "./debug/rnd_topics_model/time_iter.png")
+    
+def real_multi_doc_test():
+    clean_log()
+    dc_dir = "data/avl"
+    max_features = 200
+    doc_col = MultiDocument(dc_dir, max_features, lemmatize=False)
+    indv_docs = multi_doc_slicer(doc_col)
+    
+    alpha = 0.07
+    beta = 0.07
+    K = 3
+    log_flag = False
+    gamma = 10
+    
+    n_iter = 10
+    burn_in = 0
+    lag = 0
+    
+    '''
+    rnd_topics_model = RndTopicsModel(gamma, alpha, beta, K, doc_col, log_flag)
+    md_log_file = "logging/Sampler_MD.log"
+    wd_md_doc_results, sampler = debug_tools.run_gibbs_sampler(rnd_topics_model, n_iter, burn_in, lag, md_log_file)
+    '''
+    
+    rnd_topics_model = RndTopicsCacheModel(gamma, alpha, beta, K, doc_col, log_flag)
+    md_log_file_cache = "logging/Sampler_MD_real_cache.log"
+    wd_md_doc_results, sampler = debug_tools.run_gibbs_sampler(rnd_topics_model, n_iter, burn_in, lag, md_log_file_cache)
+    
+    wd_indv_doc_results = []
+    ind_log_file_list = []
+    for i, doc in enumerate(indv_docs):
+        sampler_log_file = "logging/Sampler" + str(i) + "_indv.log"
+        ind_log_file_list.append(sampler_log_file)
+        rnd_topics_model = RndTopicsCacheModel(gamma, alpha, beta, K, doc, log_flag)
+        wd, sampler = debug_tools.run_gibbs_sampler(rnd_topics_model, n_iter, burn_in, lag, sampler_log_file)
+        wd_indv_doc_results += wd
+        
+    print("INDV doc seg results: %s" % (str(wd_indv_doc_results)))
+    print("Multi-Doc seg results: %s" % (str(wd_md_doc_results)))
+    plot_log_joint_prob_md([md_log_file_cache], ind_log_file_list, "./debug/rnd_topics_model/samplers_convergence")
+    #plot_iter_time([md_log_file, md_log_file_cache] + ind_log_file_list, "./debug/rnd_topics_model/time_iter.png")
     
 def syn_ditto_doc_test():
     clean_log()
@@ -230,5 +271,6 @@ def run_real_doc_test():
 
 #run_real_doc_test()
 #syn_doc_test()
-syn_multi_doc_test()
+#syn_multi_doc_test()
 #syn_ditto_doc_test()
+real_multi_doc_test()

@@ -24,8 +24,7 @@ def wd(hyp_seg, ref_seg):
     return float(wd)
 
 def wd_evaluator(estimated_rho, doc):
-    class_name = doc.__class__.__name__
-    if class_name  == "SyntheticRndTopicMultiDoc" or class_name == "SyntheticDittoDocs" or class_name == "RndTopicsParallelModel":
+    if doc.isMD:
         doc_begin = 0
         wd_results = []
         for doc_end in doc.docs_index:

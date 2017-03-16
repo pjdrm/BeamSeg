@@ -8,6 +8,7 @@ from scipy import sparse, int32
 from sklearn.feature_extraction.text import CountVectorizer
 from nltk.corpus import stopwords
 import nltk.stem
+import os
 
 remove_from_stop_words = ["up", "instantaneous"]
 add_to_stop_words = ["object", "time", "zero"]
@@ -26,6 +27,7 @@ class Document(object):
                  filter_words_flag=False,\
                  gs_Z_file_path=None,\
                  K = 2):
+        self.isMD = False
         self.K = K
         #These matrixes are here for debug compatibility
         self.my_stopwords = self.load_sw(doc_path, lemmatize, min_tf)
@@ -198,6 +200,47 @@ class Document(object):
         boundary_ghost_lines = np.intersect1d(self.rho_eq_1+1, ghost_lines)
         if len(boundary_ghost_lines) > 0:
             print("WARNING: the following ghost lines exist: %s" % (str(boundary_ghost_lines)))
+            
+class MultiDocument(Document):
+    def __init__(self,\
+                 doc_dir,\
+                 max_features,\
+                 lemmatize=False,\
+                 min_tf=6,\
+                 max_w_percent=0.12,\
+                 max_dispersion=12.0,\
+                 filter_words_flag=False,\
+                 gs_Z_file_path=None,\
+                 K = 2):
+        doc_path = "tmp_docs.txt"
+        self.prepare_multi_doc(doc_dir, doc_path)
+        Document.__init__(self, doc_path,\
+                 max_features,\
+                 lemmatize,\
+                 min_tf,\
+                 max_w_percent,\
+                 max_dispersion,\
+                 filter_words_flag,\
+                 gs_Z_file_path,\
+                 K)
+        os.remove(doc_path)
+        self.isMD = True
+        
+    def prepare_multi_doc(self, doc_dir, doc_tmp_path):
+        str_cat_files = ""
+        self.docs_index =[]
+        doc_offset = 0
+        for doc in os.listdir(doc_dir):
+            with open(os.path.join(doc_dir, doc)) as f:
+                str_doc = f.read()
+                str_cat_files += str_doc[:-10]
+                doc_len = str_doc.count("\n") - str_doc.count("==========")
+                doc_offset += doc_len
+                self.docs_index.append(doc_offset+1)
+        self.n_docs = len(self.docs_index)
+        str_cat_files += "=========="
+        with open(doc_tmp_path, "w+") as f_out:
+            f_out.write(str_cat_files)
                         
 class ENLemmatizerCountVectorizer(CountVectorizer):
     def __init__(self, stopwords_list=None, max_features=None):

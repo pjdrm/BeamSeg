@@ -11,6 +11,7 @@ import copy
 
 class SyntheticDocument(object):
     def __init__(self, pi, alpha, beta, K, W, n_sents, sent_len):
+        self.isMD = False
         self.alpha = alpha
         self.K = K
         self.W = W
@@ -160,6 +161,7 @@ class SyntheticRndTopicMultiDoc(SyntheticDocument):
         self.docs_n_segs = self.get_docs_n_segs(n_docs, doc_len)
         self.theta = self.generate_theta(max(self.docs_n_segs), K, alpha)
         self.docs_index = range(self.doc_len, self.n_sents+1, self.doc_len)
+        self.isMD = True
         
     def get_docs_n_segs(self, n_docs, doc_len):
         docs_n_segs = []
@@ -215,29 +217,23 @@ class SyntheticDittoDocs(SyntheticDocument):
         self.U_I_words = np.tile(doc.U_I_words, (n_copies, 1))
         self.W_K_counts = np.tile(doc.W_K_counts, (n_copies, 1))
         self.docs_index = range(doc.n_sents, self.n_sents+1, doc.n_sents)
+        self.isMD = True
                 
 def multi_doc_slicer(multi_doc):
     doc_l = []
     doc_begin = 0
     for doc_end in multi_doc.docs_index:
+        print(doc_end)
         doc = copy.deepcopy(multi_doc)
-        doc.n_sents = multi_doc.doc_len
+        doc.n_sents = doc_end - doc_begin
         doc.n_docs = 1
-        doc.sents_len = np.array([multi_doc.sent_len]*doc.n_sents)
-        doc.docs_index = [multi_doc.doc_len]
+        doc.sents_len = multi_doc.sents_len[doc_begin:doc_end]
+        doc.docs_index = [doc.n_sents]
         doc.rho = multi_doc.rho[doc_begin:doc_end]
         doc.rho[-1] = 0
         doc.rho_eq_1 = np.append(np.nonzero(doc.rho)[0], [doc.n_sents-1])
         doc.U_W_counts = multi_doc.U_W_counts[doc_begin:doc_end, :]
-        doc.U_K_counts = multi_doc.U_K_counts[doc_begin:doc_end, :]
-        doc.U_I_topics = multi_doc.U_I_topics[doc_begin:doc_end, :]
         doc.U_I_words = multi_doc.U_I_words[doc_begin:doc_end, :]
-        doc.W_K_counts = np.zeros((multi_doc.W, multi_doc.K), dtype=int32)
-        for u in range(doc.n_sents):
-            for i in range(doc.sents_len[u]):
-                z_ui = doc.U_I_topics[u,i]
-                w_ui = doc.U_I_words[u,i]
-                doc.W_K_counts[w_ui, z_ui] += 1
         doc_begin = doc_end
         doc_l.append(doc)
     return doc_l
