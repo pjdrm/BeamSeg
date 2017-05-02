@@ -7,14 +7,14 @@ Implementation of Mathew Purver's paper
 @author: pjdrm
 '''
 import numpy as np
-from scipy import sparse
 from scipy.special import gammaln
 from scipy.misc import logsumexp
 from debug import log_tools
-import pathos.multiprocessing as mp
+from random import shuffle
+import copy
 
 class RndTopicsModel(object):
-    def __init__(self, gamma, alpha, beta, K, doc,\
+    def __init__(self, configs, doc,\
                  log_flag=False,\
                  sampler_log_file = "RndTopicsModel.log"):
         
@@ -22,10 +22,10 @@ class RndTopicsModel(object):
         if not log_flag:
             self.rt_seg_log.disabled = True
         
-        self.alpha = alpha
-        self.gamma = gamma
-        self.beta = beta
-        self.K = K
+        self.alpha = configs["model"]["alpha"]
+        self.beta = configs["model"]["beta"]
+        self.gamma = configs["model"]["gamma"]
+        self.K = configs["model"]["K"]
         self.W = doc.W
         self.doc = doc
         '''
@@ -36,7 +36,10 @@ class RndTopicsModel(object):
         self.n_sents = doc.n_sents
         
         #Initializing with a random state
-        self.pi = 0.07#np.random.beta(gamma, gamma)
+        if configs["model"]["pi"] == "None":
+            self.pi = np.random.beta(self.gamma, self.gamma)
+        else:
+            self.pi = configs["model"]["pi"]
         self.rho = np.random.binomial(1, self.pi, size=doc.n_sents)
         self.rho[-1] = 0
         #Need to append last sentence, otherwise last segment wont be taken into account
@@ -44,7 +47,7 @@ class RndTopicsModel(object):
         self.n_segs = len(self.rho_eq_1)
 
         #Note: just to debug the initial state
-        self.theta = np.zeros((self.n_segs, K))
+        self.theta = np.zeros((self.n_segs, self.K))
         self.phi = np.array([np.random.dirichlet([self.beta]*self.W) for k in range(self.K)])
         #Matrix with the counts of the words in each sentence 
         self.U_W_counts = doc.U_W_counts
@@ -360,10 +363,10 @@ Efficient version, based on a caching scheme, of the
 RndTopicsModel class.
 '''    
 class RndTopicsCacheModel(RndTopicsModel):
-    def __init__(self, gamma, alpha, beta, K, doc,\
+    def __init__(self, configs, doc,\
                  log_flag=False,\
                  sampler_log_file = "RndTopicsModel.log"):
-        RndTopicsModel.__init__(self, gamma, alpha, beta, K, doc,\
+        RndTopicsModel.__init__(self, configs, doc,\
                                 log_flag,\
                                 sampler_log_file)
         '''
@@ -479,8 +482,92 @@ class RndTopicsCacheModel(RndTopicsModel):
         for Su_index, rho1 in enumerate(self.rho_eq_1):
             if u <= rho1:
                 return Su_index
-        print()
 
+class RndScanOrderModel(RndTopicsModel):
+    def __init__(self, configs, doc,\
+                 log_flag=False,\
+                 sampler_log_file = "RndTopicsModel.log"):
+        RndTopicsModel.__init__(self, configs, doc,\
+                                log_flag,\
+                                sampler_log_file)
+        
+        self.z_sample_order = self.calc_sample_order()
+        self.rho_sample_order = list(range(0, self.n_sents))
+        shuffle(self.rho_sample_order)
+    
+    '''
+    Returns a z sample order by word type
+    and order of occurrence.
+    '''    
+    def calc_sample_order(self):
+        sample_order_dic = {}
+        for u in range(self.n_sents):
+            for i in range(self.sents_len[u]):
+                w_ui = self.U_I_words[u,i]
+                if w_ui not in sample_order_dic:
+                    sample_order_dic[w_ui] = []
+                sample_order_dic[w_ui].append((u,i, w_ui))
+        res = []
+        for w_ui in sample_order_dic:
+            res += sample_order_dic[w_ui]
+        shuffle(res)
+        return res
+    
+    def sample_z(self):
+        z_order = copy.deepcopy(self.z_sample_order)
+        c_order = copy.deepcopy(self.rho_sample_order)
+        while len(z_order) > 0 and len(c_order) > 0:
+            var_typ = np.random.binomial(1, 0.5)
+            if var_typ == 1:
+                u, i, w_ui = z_order.pop(0)
+                self.sample_z_new(u, i, w_ui)
+            else:
+                self.sample_rho_new(c_order.pop(0))
+        
+        while len(z_order) > 0:
+            u, i, w_ui = z_order.pop(0)
+            self.sample_z_new(u, i, w_ui)
+            
+        while len(c_order) > 0: 
+            self.sample_rho_new(c_order.pop(0))
+        shuffle(self.z_sample_order)
+        shuffle(self.rho_sample_order)
+        
+    def sample_rho(self, doc_index = None):
+            return self.rho
+                
+    def sample_z_new(self, u, i, w_ui):
+        Su_index = self.get_Su_index(u)
+        Su_begin, Su_end = self.get_Su_begin_end(Su_index, self.rho_eq_1)
+        n_Su = np.sum(self.U_K_counts[Su_begin:Su_end, :])-1
+        if n_Su == -1.0:
+            n_Su = 0.0
+        w_ui = self.U_I_words[u, i]
+        z_ui = int(self.U_I_topics[u,i])
+        topic_log_probs = self.log_prob_Z(u, i, w_ui, z_ui, Su_index, n_Su)
+        self.sample_log_z_ui(u, i, w_ui, Su_index, topic_log_probs)
+            
+    '''
+    The caching scheme for sampling rho consist of
+    taking advantage of the fact that sentences in the same
+    segment have the same merge probability.
+    '''        
+    def sample_rho_new(self, u):
+        Su_index = self.get_Su_index(u)
+        rho_u = self.rho[u]
+        if rho_u == 1:
+            self.n_segs -= 1
+        self.n_sents -= 1
+        
+        log_prob_0 = self.merge_log_prob(rho_u, Su_index)
+        log_prob_1 = self.split_log_prob(u, rho_u, Su_index)
+        self.sample_rho_u(u, Su_index, rho_u, log_prob_0, log_prob_1)
+    
+    def get_Su_index(self, u):
+        for Su_index, rho1 in enumerate(self.rho_eq_1):
+            if u <= rho1:
+                return Su_index
+        
 U_K_counts_g = None
 U_I_topics_g = None
 W_K_counts_g = None
@@ -538,8 +625,10 @@ class RndTopicsParallelModel(RndTopicsModel):
     This is due to shared variables like rho_eq1.
     '''
     def sample_rho(self):
-        thread_pool = mp.ProcessingPool(3)
-        results = thread_pool.map(self.sample_rho_parallel, range(self.doc.n_docs))
+        #thread_pool = mp.ProcessingPool(3)
+        results = []#thread_pool.map(self.sample_rho_parallel, range(self.doc.n_docs))
+        for doc_i in range(self.doc.n_docs):
+            results.append(self.segmentors[doc_i].sample_rho())
         #Base seg needs to have rho variables correct to sample Z
         self.base_seg.rho = []
         self.base_seg.rho_eq_1 = []

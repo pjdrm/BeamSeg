@@ -9,6 +9,7 @@ from debug import log_tools
 from eval.eval_tools import wd_evaluator, wd
 from scipy import sparse
 import time
+np.set_printoptions(threshold=np.inf)
 
 class SegmentationModelSampler():
     def __init__(self, segmentation_model, sampler_log_file="logging/Sampler.log"):
@@ -29,8 +30,6 @@ class SegmentationModelSampler():
         t = trange(total_iterations, desc='', leave=True)
         estimated_rho = [0]*self.seg_model.n_sents
         self.estimated_W_K_counts += self.seg_model.W_K_counts
-        self.sampler_log.info('Ref %s', str(self.seg_model.doc.rho))
-        self.sampler_log.info('Hyp %s', str(self.seg_model.rho))
         for i in t:
             t_init = time.time()
             self.seg_model.sample_z()
@@ -54,8 +53,8 @@ class SegmentationModelSampler():
                     #self.I_K_counts += self.get_I_K_counts(self.seg_model.U_I_topics)
                     iteration += 1.0
                     
-                    self.sampler_log.info('Hyp %s', str(self.seg_model.rho))
-                    current_rho = np.rint(estimated_rho / iteration)
+                    #self.sampler_log.info('Hyp %s', str(self.seg_model.rho))
+                    current_rho = self.estimate_rho(estimated_rho, iteration)
                     current_wd_val = wd(current_rho, self.seg_model.doc.rho)
                     self.sampler_log.info('Rho_Est %s', str(current_wd_val))
                     
@@ -69,9 +68,6 @@ class SegmentationModelSampler():
                                                                         self.estimated_U_K_counts / iteration)
                     self.sampler_log.info('log_prob_joint %s', str(log_prob_joint))
                 
-        estimated_rho = estimated_rho / iteration
-        #estimated_rho = np.rint(estimated_rho)
-        #estimated_rho = estimated_rho.astype(int)
         self.estimated_W_K_counts = self.estimated_W_K_counts / iteration
         self.estimated_U_K_counts = self.estimated_U_K_counts / iteration
         self.estimated_U_I_topics = self.estimated_U_I_topics / iteration
@@ -81,15 +77,20 @@ class SegmentationModelSampler():
                                                         self.seg_model.sents_len))
         #self.sampler_log.info('\nI_K_counts:\n%s', self.I_K_counts_to_string(self.I_K_counts, self.seg_model.U_I_words, self.seg_model.doc.inv_vocab))
                               
-        self.sampler_log.info('\nRho Prob %s', str(estimated_rho).replace("\n", ""))
-        estimated_rho = np.rint(estimated_rho)
-        estimated_rho = estimated_rho.astype(int)
-        self.sampler_log.info('\nMH %s', str(estimated_rho).replace("\n", ""))
-        self.sampler_log.info('\nGS %s', str(self.seg_model.doc.rho).replace(",", ""))
+        self.sampler_log.info('\nRho Prob %s', str(estimated_rho/iteration).replace("\n", ""))
+        #self.sampler_log.info('Doc:\n%s', self.seg_model.doc.getText())
+        self.sampler_log.info('Doc indexes: %s', str(self.seg_model.doc.docs_index))
+        self.sampler_log.info('Doc names: %s', str(self.seg_model.doc.doc_names))
+        estimated_rho = self.estimate_rho(estimated_rho, iteration) #np.rint(estimated_rho)
+        self.sampler_log.info('\nMH %s', str(estimated_rho).replace("\n", "").replace(",", ""))
+        self.sampler_log.info('\nGS %s', str(self.seg_model.doc.rho).replace("\n", ""))
         wd_val = wd_evaluator(estimated_rho, self.seg_model.doc)
         self.sampler_log.info('final_wd: %f', wd(estimated_rho, self.seg_model.doc.rho))
         print("\nWD %s" % (str(wd_val)))
         return wd_val
+    
+    def estimate_rho(self, estimated_rho, n_iters, thr = 0.8):
+        return [1 if rho >= thr else 0 for rho in estimated_rho / n_iters]
     
     def U_I_topics_to_string(self, estimated_U_I_topics, sents_len):
         estimated_U_I_topics = np.rint(estimated_U_I_topics)

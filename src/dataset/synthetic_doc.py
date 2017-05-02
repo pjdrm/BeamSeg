@@ -10,35 +10,42 @@ import copy
 
 
 class SyntheticDocument(object):
-    def __init__(self, pi, alpha, beta, K, W, n_sents, sent_len):
+    def __init__(self, configs):
+        self.pi = configs["model"]["pi"]
+        self.alpha = configs["model"]["alpha"]
+        self.beta = configs["model"]["beta"]
+        self.gamma = configs["model"]["gamma"]
+        
+        self.K = configs["synthetic_data"]["K"]
+        self.W = configs["synthetic_data"]["W"]
+        self.n_sents = configs["synthetic_data"]["n_sents"]
+        self.sentence_l = configs["synthetic_data"]["sentence_l"]
+        
         self.isMD = False
-        self.alpha = alpha
-        self.K = K
-        self.W = W
         #Just for code compatibility
         self.vocab = {}
+        self.docs_index = [self.n_sents]
+        self.doc_names = ["syn_doc.txt"]
         for w in range(self.W):
-            self.vocab[str(w)] = w
+            self.vocab["w" + str(w)] = w
         self.inv_vocab =  {v: k for k, v in self.vocab.items()}
-        self.n_sents = n_sents
-        self.sent_len = sent_len
-        self.sents_len = np.array([sent_len]*n_sents)
-        self.rho = np.random.binomial(1, pi, size=n_sents)
+        self.sents_len = np.array([self.sentence_l]*self.n_sents)
+        self.rho = np.random.binomial(self.sentence_l, self.pi, size=self.n_sents)
         #I assume that a sentence u with rho_u = 1 belong to the previous segment.
         #rho_u = 1 means a segment is coming next, this does not make sense for 
         #the last sentence. Thus, we set it to 0.
         self.rho[-1] = 0
         #need to append last sentence, otherwise last segment wont be taken into account
-        self.rho_eq_1 = np.append(np.nonzero(self.rho)[0], [n_sents-1])
-        self.phi = np.array([np.random.dirichlet([beta]*W) for k in range(K)])
+        self.rho_eq_1 = np.append(np.nonzero(self.rho)[0], [self.n_sents-1])
+        self.phi = np.array([np.random.dirichlet([self.beta]*self.W) for k in range(self.K)])
         self.n_segs = len(self.rho_eq_1)
         self.theta = np.zeros((self.n_segs, self.K))
         theta_S0 = np.random.dirichlet([self.alpha]*self.K)
         self.theta[0, :] = theta_S0
         self.U_W_counts = np.zeros((self.n_sents, self.W), dtype=int32)
         self.U_K_counts = np.zeros((self.n_sents, self.K), dtype=int32)
-        self.U_I_topics = np.zeros((self.n_sents, self.sent_len), dtype=int32)
-        self.U_I_words = np.zeros((self.n_sents, self.sent_len), dtype=int32)
+        self.U_I_topics = np.zeros((self.n_sents, self.sentence_l), dtype=int32)
+        self.U_I_words = np.zeros((self.n_sents, self.sentence_l), dtype=int32)
         #Matrix with the number of times each word in the vocab was assigned with topic k
         self.W_K_counts = np.zeros((self.W, self.K), dtype=int32)
     
@@ -62,7 +69,7 @@ class SyntheticDocument(object):
         for u in range(Su_begin, Su_end):
             u_word_count = np.zeros(self.W)
             u_topic_counts = np.zeros(self.K)
-            for word_draw in range(self.sent_len):
+            for word_draw in range(self.sentence_l):
                 z_u_i = np.nonzero(np.random.multinomial(1, theta_Su))[0][0]
                 u_topic_counts[z_u_i] += 1
                 w_u_i = np.nonzero(np.random.multinomial(1, self.phi[z_u_i]))[0][0]
@@ -73,12 +80,12 @@ class SyntheticDocument(object):
             self.U_W_counts[u, :] = u_word_count
             self.U_K_counts[u, :] = u_topic_counts
             
-    def getText(self, vocab_dic):
+    def getText(self):
         str_text = "==========\n"
         for i, rho in enumerate(self.rho):
             for j in range(self.sents_len[i]):
                 w_ij = self.U_I_words[i, j]
-                str_text += vocab_dic[w_ij] + " "
+                str_text += self.inv_vocab[w_ij] + " "
             str_text += "\n"
             if rho == 1:
                 str_text += "==========\n"
@@ -124,8 +131,8 @@ class SyntheticTopicTrackingDoc(SyntheticDocument, TopicTrackingModel):
             self.theta[Su_index, :] = self.update_theta(theta_t_minus_1, self.alpha, Su_begin, Su_end)
             
 class SyntheticRndTopicPropsDoc(SyntheticDocument):
-    def __init__(self, pi, alpha, beta, K, W, n_sents, sentence_l):
-        SyntheticDocument.__init__(self, pi, alpha, beta, K, W, n_sents, sentence_l)
+    def __init__(self, configs):
+        SyntheticDocument.__init__(self, configs)
 
     def generate_doc(self):
         for Su_index in range(self.n_segs):
@@ -146,20 +153,24 @@ In practice the multiple documents are just stored in a
 single giant matrix.
 '''   
 class SyntheticRndTopicMultiDoc(SyntheticDocument):
-    def __init__(self, pi, alpha, beta, K, W, doc_len, sent_len, n_docs):
-        self.doc_len = doc_len 
-        self.n_docs = n_docs
-        self.n_sents = doc_len*n_docs
-        SyntheticDocument.__init__(self, pi, alpha, beta, K, W, self.n_sents, sent_len)
+    def __init__(self, configs):
+        self.doc_len = configs["synthetic_data"]["n_sents"] 
+        self.n_docs = configs["synthetic_data"]["n_docs"]
+        self.n_sents = self.doc_len*self.n_docs
+        configs["synthetic_data"]["n_sents"] = self.n_sents
+        SyntheticDocument.__init__(self, configs)
+        self.doc_names = []
+        for i in range(self.n_docs):
+            self.doc_names.append("d" + str(i) + ".txt")
         
         #The last sentence of each document must be 1
-        for u in range(doc_len-1, self.n_sents, doc_len):
+        for u in range(self.doc_len-1, self.n_sents, self.doc_len):
             self.rho[u] = 1
         #... except last sentence.
         self.rho[-1] = 0
         self.rho_eq_1 = np.append(np.nonzero(self.rho)[0], [self.n_sents-1])
-        self.docs_n_segs = self.get_docs_n_segs(n_docs, doc_len)
-        self.theta = self.generate_theta(max(self.docs_n_segs), K, alpha)
+        self.docs_n_segs = self.get_docs_n_segs(self.n_docs, self.doc_len)
+        self.theta = self.generate_theta(max(self.docs_n_segs), self.K, self.alpha)
         self.docs_index = range(self.doc_len, self.n_sents+1, self.doc_len)
         self.isMD = True
         
@@ -222,18 +233,19 @@ class SyntheticDittoDocs(SyntheticDocument):
 def multi_doc_slicer(multi_doc):
     doc_l = []
     doc_begin = 0
-    for doc_end in multi_doc.docs_index:
-        print(doc_end)
+    for doc_end, doc_name in zip(multi_doc.docs_index, multi_doc.doc_names):
         doc = copy.deepcopy(multi_doc)
         doc.n_sents = doc_end - doc_begin
         doc.n_docs = 1
-        doc.sents_len = multi_doc.sents_len[doc_begin:doc_end]
+        doc.sents_len = doc.sents_len[doc_begin:doc_end]
         doc.docs_index = [doc.n_sents]
-        doc.rho = multi_doc.rho[doc_begin:doc_end]
+        doc.doc_names = [doc_name]
+        doc.rho = doc.rho[doc_begin:doc_end]
         doc.rho[-1] = 0
         doc.rho_eq_1 = np.append(np.nonzero(doc.rho)[0], [doc.n_sents-1])
-        doc.U_W_counts = multi_doc.U_W_counts[doc_begin:doc_end, :]
-        doc.U_I_words = multi_doc.U_I_words[doc_begin:doc_end, :]
+        doc.U_W_counts = doc.U_W_counts[doc_begin:doc_end, :]
+        doc.U_I_words = doc.U_I_words[doc_begin:doc_end, :]
+        doc.isMD = False
         doc_begin = doc_end
         doc_l.append(doc)
     return doc_l

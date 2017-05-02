@@ -32,6 +32,7 @@ def wd_evaluator(estimated_rho, doc):
             doc_estimated_rho = estimated_rho[doc_begin:doc_end]
             doc_estimated_rho[-1] = 0
             wd_results.append(wd(doc_estimated_rho, doc_rho))
+            doc_begin = doc_end
         return wd_results
     else:
         return [wd(estimated_rho, doc.rho)]

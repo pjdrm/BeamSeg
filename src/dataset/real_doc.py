@@ -10,36 +10,30 @@ from nltk.corpus import stopwords
 import nltk.stem
 import os
 
-remove_from_stop_words = ["up", "instantaneous"]
-add_to_stop_words = ["object", "time", "zero"]
-
 #add_to_stop_words = ["object", "time", "zero"]
 #add_to_stop_words = ["object", "time", "want", "one", "velocity", "would"]
 #add_to_stop_words = ["object", "time", "want", "one", "velocity", "would", "positive", "negative"] -config for 3 seg experiment k = 2
 class Document(object):
-    def __init__(self,\
-                 doc_path,\
-                 max_features,\
-                 lemmatize=False,\
-                 min_tf=6,\
-                 max_w_percent=0.12,\
-                 max_dispersion=12.0,\
-                 filter_words_flag=False,\
-                 gs_Z_file_path=None,\
-                 K = 2):
+    def __init__(self, doc_path, configs):
+        max_features = configs["real_data"]["max_features"]
+        lemmatize = eval(configs["real_data"]["lemmatize"])
+        min_tf = configs["real_data"]["min_tf"]
+        max_w_percent = configs["real_data"]["max_w_percent"]
+        max_dispersion = configs["real_data"]["max_dispersion"]
+        filter_words_flag = eval(configs["real_data"]["filter_words_flag"])
+        self.remove_from_stop_words = configs["real_data"]["remove_from_stop_words"]
+        self.add_to_stop_words = configs["real_data"]["add_to_stop_words"]
+        
         self.isMD = False
-        self.K = K
+        self.K = 2
+        
         #These matrixes are here for debug compatibility
+        self.U_K_counts = sparse.csr_matrix((1, 1), dtype=int32)
+        self.U_I_topics = sparse.csr_matrix((1, 1), dtype=int32)
+        self.W_K_counts = sparse.csr_matrix((1, 1), dtype=int32)
+        
         self.my_stopwords = self.load_sw(doc_path, lemmatize, min_tf)
         self.load_doc(doc_path, max_features, lemmatize)
-        self.check_ghost_lines()        
-        
-        if gs_Z_file_path is None:
-            self.U_K_counts = sparse.csr_matrix((1, 1), dtype=int32)
-            self.U_I_topics = sparse.csr_matrix((1, 1), dtype=int32)
-            self.W_K_counts = sparse.csr_matrix((1, 1), dtype=int32)
-        else:
-            self.load_gs_Z(gs_Z_file_path)
         
         if filter_words_flag:    
             self.filter_words(max_w_percent, max_dispersion)
@@ -53,6 +47,7 @@ class Document(object):
             the matrixes obtained by loading the corpus.
             '''
             self.load_doc(doc_path, max_features, lemmatize, min_tf)
+        self.del_ghost_lines() 
     
     def process_doc(self, doc_path):
         rho = []
@@ -106,13 +101,12 @@ class Document(object):
                         
     def load_sw(self, doc_path, lemmatize, min_tf):
         sw_list = stopwords.words("english")
-        sw_list += add_to_stop_words
+        sw_list += self.add_to_stop_words
         
         rho, sents = self.process_doc(doc_path)
-        if lemmatize:
-            vectorizer = ENLemmatizerCountVectorizer()
-        else:
-            vectorizer = CountVectorizer(analyzer = "word",\
+        #It seems that lemmatization takes place after sw removal
+        #we need to specify sw in the unlematized form
+        vectorizer = CountVectorizer(analyzer = "word",\
                                          strip_accents = "unicode")
         U_W_counts = vectorizer.fit_transform(sents)
         vocab = vectorizer.vocabulary_
@@ -121,37 +115,13 @@ class Document(object):
         filter_words = []
         
         for w in range(U_W_counts.shape[1]):
+            if inv_vocab[w] == "le":
+                print()
             if w_total_counts[w] < min_tf:
                 filter_words.append(inv_vocab[w])
         sw_list += filter_words
-        sw_list = [sw for sw in sw_list if sw not in remove_from_stop_words]
+        sw_list = [sw for sw in sw_list if sw not in self.remove_from_stop_words]
         return sw_list
-        
-    def load_gs_Z(self, file_path):
-        '''
-        with open(file_path)  as f:
-            w_z_dic = eval(f.read())
-            self.U_I_topics = sparse.csr_matrix((self.n_sents, max(self.sents_len)))
-            self.U_K_counts = sparse.csr_matrix((self.n_sents, self.K))
-            self.W_K_counts = sparse.csr_matrix((self.W, self.K))
-            for u in range(self.n_sents):
-                for i in range(self.sents_len[u]):
-                    w_ui = self.U_I_words[u,i]
-                    z_ui = w_z_dic[self.inv_vocab[w_ui]]
-                    self.U_I_topics[u,i] = z_ui
-                    self.U_K_counts[u, z_ui] += 1
-                    self.W_K_counts[w_ui, z_ui] += 1
-        '''
-        with open(file_path)  as f:
-            self.U_I_topics = sparse.csr_matrix(eval(f.read()))
-            self.U_K_counts = sparse.csr_matrix((self.n_sents, self.K))
-            self.W_K_counts = sparse.csr_matrix((self.W, self.K))
-            for u in range(self.n_sents):
-                for i in range(self.sents_len[u]):
-                    w_ui = self.U_I_words[u,i]
-                    z_ui = self.U_I_topics[u,i]
-                    self.U_K_counts[u, z_ui] += 1
-                    self.W_K_counts[w_ui, z_ui] += 1
         
     def filter_words(self, max_w_percent, max_dispersion):
         word_chains_dic = {}
@@ -187,60 +157,76 @@ class Document(object):
             self.n_w_percent_dic2[w_str] = n_w_percent
             if n_w_percent > max_w_percent:
                 w_to_filter.append(w_str)
-        global add_to_stop_words
-        add_to_stop_words += w_to_filter
+        self.add_to_stop_words += w_to_filter
             
     '''
     Boundary ghost lines are lines with all word counts equal to 0.
     I found these particular lines to badly affect inference, thus,
     I print a warning if I find them.
     '''                    
-    def check_ghost_lines(self):
-        ghost_lines = np.where(~self.U_W_counts.any(axis=1))[0]
-        boundary_ghost_lines = np.intersect1d(self.rho_eq_1+1, ghost_lines)
+    def del_ghost_lines(self):
+        self.ghost_lines = np.where(~self.U_W_counts.any(axis=1))[0]
+        boundary_ghost_lines = np.intersect1d(self.rho_eq_1, self.ghost_lines)
         if len(boundary_ghost_lines) > 0:
-            print("WARNING: the following ghost lines exist: %s" % (str(boundary_ghost_lines)))
-            
+            print("WARNING: the following ghost lines match a boundary: %s" % (str(boundary_ghost_lines)))
+            '''
+            The current fix to ghost lines is to consider
+            the previous line as boundary instead.
+            '''
+            for b_gl in boundary_ghost_lines:
+                if b_gl-1 in boundary_ghost_lines:
+                    print("WARNING: Oh no another boundary ghost line...")
+                self.rho[b_gl-1] = 1
+        
+        self.n_sents -= len(self.ghost_lines)
+        self.U_W_counts = np.delete(self.U_W_counts, self.ghost_lines, axis=0)
+        self.U_I_words = np.delete(self.U_I_words, self.ghost_lines, axis=0)
+        self.rho = np.delete(self.rho, self.ghost_lines, axis=0)
+        self.rho_eq_1 = np.append(np.nonzero(self.rho)[0], [self.n_sents-1])
+        self.n_segs = len(self.rho_eq_1)
+        self.sents_len = np.sum(self.U_W_counts, axis = 1)
+                
 class MultiDocument(Document):
-    def __init__(self,\
-                 doc_dir,\
-                 max_features,\
-                 lemmatize=False,\
-                 min_tf=6,\
-                 max_w_percent=0.12,\
-                 max_dispersion=12.0,\
-                 filter_words_flag=False,\
-                 gs_Z_file_path=None,\
-                 K = 2):
+    def __init__(self, configs):
+        self.doc_names = []
+        self.docs_index =[]
         doc_path = "tmp_docs.txt"
-        self.prepare_multi_doc(doc_dir, doc_path)
-        Document.__init__(self, doc_path,\
-                 max_features,\
-                 lemmatize,\
-                 min_tf,\
-                 max_w_percent,\
-                 max_dispersion,\
-                 filter_words_flag,\
-                 gs_Z_file_path,\
-                 K)
+        self.prepare_multi_doc(configs["real_data"]["docs_dir"], doc_path)
+        Document.__init__(self, doc_path, configs)
+        self.update_doc_index()
         os.remove(doc_path)
         self.isMD = True
         
     def prepare_multi_doc(self, doc_dir, doc_tmp_path):
+        
         str_cat_files = ""
-        self.docs_index =[]
         doc_offset = 0
         for doc in os.listdir(doc_dir):
-            with open(os.path.join(doc_dir, doc)) as f:
+            self.doc_names.append(doc)
+            with open(os.path.join(doc_dir, doc), encoding="utf-8", errors='ignore') as f:
                 str_doc = f.read()
                 str_cat_files += str_doc[:-10]
-                doc_len = str_doc.count("\n") - str_doc.count("==========")
+                doc_len = (str_doc.count("\n")+1) - str_doc.count("==========")
                 doc_offset += doc_len
-                self.docs_index.append(doc_offset+1)
+                self.docs_index.append(doc_offset)
         self.n_docs = len(self.docs_index)
         str_cat_files += "=========="
         with open(doc_tmp_path, "w+") as f_out:
             f_out.write(str_cat_files)
+    
+    def update_doc_index(self):
+        updated_doc_index = []
+        c = 0
+        i = 0
+        doc_index = self.docs_index[i]
+        for gl in self.ghost_lines:
+            if gl > doc_index - 1:
+                updated_doc_index.append(doc_index-c)
+                i += 1
+                doc_index = self.docs_index[i]
+            c += 1
+        updated_doc_index.append(doc_index-c)
+        self.docs_index = updated_doc_index
                         
 class ENLemmatizerCountVectorizer(CountVectorizer):
     def __init__(self, stopwords_list=None, max_features=None):
