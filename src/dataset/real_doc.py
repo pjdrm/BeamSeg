@@ -198,7 +198,6 @@ class MultiDocument(Document):
         self.isMD = True
         
     def prepare_multi_doc(self, doc_dir, doc_tmp_path):
-        
         str_cat_files = ""
         doc_offset = 0
         for doc in os.listdir(doc_dir):
@@ -214,18 +213,22 @@ class MultiDocument(Document):
         with open(doc_tmp_path, "w+") as f_out:
             f_out.write(str_cat_files)
     
+    #TODO: REALLY CHECK THIS IS CORRECT
     def update_doc_index(self):
         updated_doc_index = []
         c = 0
-        i = 0
-        doc_index = self.docs_index[i]
+        doc_index = self.docs_index.pop(0)
+        checked_indexes = []
         for gl in self.ghost_lines:
             if gl > doc_index - 1:
+                checked_indexes.append(doc_index)
                 updated_doc_index.append(doc_index-c)
-                i += 1
-                doc_index = self.docs_index[i]
+                doc_index = self.docs_index.pop(0)
             c += 1
-        updated_doc_index.append(doc_index-c)
+        if not doc_index in checked_indexes:
+            updated_doc_index.append(doc_index-c)
+        for doc_index in self.docs_index:
+            updated_doc_index.append(doc_index-c)
         self.docs_index = updated_doc_index
                         
 class ENLemmatizerCountVectorizer(CountVectorizer):
