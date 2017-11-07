@@ -118,14 +118,9 @@ print_text_flag = False
 flags = [print_theta_flag, print_heat_map_flag, print_text_flag]
 
 doc_synth_tt = SyntheticTopicTrackingDoc(pi, alpha, beta, K, W, n_sents, sentence_l)
-doc_synth_tt.generate_doc()
+doc_synth_tt.generate_docs(10)
 print_corpus(vocab_dic, doc_synth_tt, "Topic Tracking", outDir, flags)
 
 gamma = 10
-vi_tt_model = TopicTrackingVIModel(gamma, alpha, beta, K, doc_synth_tt)
-
-
-
-
-        
+vi_tt_model = TopicTrackingVIModel(gamma, alpha, beta, K, doc_synth_tt)      
         

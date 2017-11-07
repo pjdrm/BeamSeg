@@ -140,6 +140,53 @@ class SyntheticTopicTrackingDoc(SyntheticDocument, TopicTrackingModel):
             self.alpha = self.update_alpha(theta_t_minus_1, self.alpha, Su_begin, Su_end)
             self.theta[Su_index, :] = self.update_theta(theta_t_minus_1, self.alpha, Su_begin, Su_end)
             
+    def generate_docs(self, n_docs):
+        self.doc_len = self.n_sents
+        self.n_docs = n_docs
+        self.n_sents = self.doc_len*self.n_docs
+        self.doc_names = []
+        for i in range(self.n_docs):
+            self.doc_names.append("d" + str(i) + ".txt")
+            
+        if n_docs > 1:
+            self.isMD = True
+        else:
+            self.isMD = False
+            
+        self.pi = np.random.beta(self.gamma, self.gamma, (n_docs,1))
+        self.rho = []
+        self.rho_eq_1 = []
+        self.docs_index = range(self.doc_len, self.n_sents+1, self.doc_len)
+        for doc, doc_index, doc_pi in zip(range(n_docs), self.docs_index, self.pi):
+            doc_rho = np.random.binomial(1, doc_pi, size=self.doc_len).tolist()
+            doc_rho[-1] = 0
+            self.rho += doc_rho
+            self.rho_eq_1 =+ np.append(np.nonzero(self.rho)[0], [doc_index])
+            
+            
+        self.n_segs = len(self.rho_eq_1)
+        self.theta = np.zeros((self.n_segs, self.K))
+        theta_S0 = np.random.dirichlet([self.alpha]*self.K)
+        self.theta[0, :] = theta_S0
+        self.U_W_counts = np.zeros((self.n_sents, self.W), dtype=int32)
+        self.U_K_counts = np.zeros((self.n_sents, self.K), dtype=int32)
+        self.U_I_topics = np.zeros((self.n_sents, self.sentence_l), dtype=int32)
+        self.U_I_words = np.zeros((self.n_sents, self.sentence_l), dtype=int32)
+        
+        initial_alpha = self.alpha
+        for Su_index in range(1, self.n_segs):
+            if self.rho_eq_1[Su_index] in self.docs_index:
+                self.alpha = initial_alpha
+                self.theta[Su_index, :] = np.random.dirichlet([self.alpha]*self.K)
+            else:
+                Su_begin, Su_end = self.get_Su_begin_end(Su_index)
+                theta_t_minus_1 = self.theta[Su_index - 1, :]
+                theta_Su = self.draw_theta(self.alpha, theta_t_minus_1)
+                self.theta[Su_index, :] = theta_Su
+                self.generate_Su(Su_index, theta_Su)
+                self.alpha = self.update_alpha(theta_t_minus_1, self.alpha, Su_begin, Su_end)
+                self.theta[Su_index, :] = self.update_theta(theta_t_minus_1, self.alpha, Su_begin, Su_end)
+            
 class SyntheticRndTopicPropsDoc(SyntheticDocument):
     def __init__(self, configs):
         SyntheticDocument.__init__(self, configs)
