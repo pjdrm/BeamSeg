@@ -4,7 +4,8 @@ Created on Nov 1, 2017
 @author: pjdrm
 '''
 import numpy as np
-from audioop import mul
+from dataset.synthetic_doc import SyntheticTopicTrackingDoc
+from debug.synthetic_corpus_debugger import print_corpus
 
 class TopicTrackingVIModel(object):
 
@@ -27,10 +28,10 @@ class TopicTrackingVIModel(object):
         '''
         Local variational parameters
         '''
-        self.rho_q, self.rho_eq_1 = self.init_rho_q([1,5])
-        self.theta_q = self.init_theta(0.07*self.K)
+        self.rho_q, self.rho_eq_1 = self.init_rho_q([7,5])
+        self.theta_q = self.init_theta_q([0.07]*self.K)
         self.z_q = self.init_z_q()
-        self.pi_q = self.init_pi_q([1,5])
+        self.pi_q = self.init_pi_q([1,5]) 
         
         '''
         Global parameters
@@ -69,6 +70,7 @@ class TopicTrackingVIModel(object):
         for i in range(self.n_sents):
             if rho_q[i] >= self.bound_thresh:
                 rho_eq_1.append(i)
+        rho_eq_1.append(self.n_sents-1)
         return rho_q, rho_eq_1
     
     def init_theta_q(self, dir_prior):
@@ -78,7 +80,7 @@ class TopicTrackingVIModel(object):
         that it the prior for a Dirichlet prior itself.
         '''
         theta_q = np.zeros((self.n_sents, self.K))
-        shape, scale = 2., 2.
+        shape, scale = 2.0, 2.0
         '''
         Just looping through boundaries because all sentences
         from the same segment share the same theta_q parameters.
@@ -93,9 +95,37 @@ class TopicTrackingVIModel(object):
         n_docs = len(self.doc.docs_index)
         pi_q = np.zeros((n_docs, 2))
         for i in range(n_docs):
-            pi_q_i = np.random.beta(beta_prior)
-            multiplier = np.random.gamma(.2, .2)
+            pi_q_i = np.random.beta(beta_prior[0], beta_prior[1])
+            multiplier = np.random.gamma(2.0, 2.0)
             pi_q[i,:] = np.array([(1.0-pi_q_i)*multiplier, pi_q_i*multiplier])
-        return pi_q       
+        return pi_q
+    
+pi = 0.2
+alpha = 15
+beta = 0.6
+K = 10
+W = 15
+n_sents = 50
+sentence_l = 50
+vocab_dic = {}
+for w in range(W):
+    vocab_dic[w] = "w" + str(w)
+outDir = "debug/synthetic_dataset/"
+
+print_theta_flag = False
+print_heat_map_flag = True
+print_text_flag = False
+flags = [print_theta_flag, print_heat_map_flag, print_text_flag]
+
+doc_synth_tt = SyntheticTopicTrackingDoc(pi, alpha, beta, K, W, n_sents, sentence_l)
+doc_synth_tt.generate_doc()
+print_corpus(vocab_dic, doc_synth_tt, "Topic Tracking", outDir, flags)
+
+gamma = 10
+vi_tt_model = TopicTrackingVIModel(gamma, alpha, beta, K, doc_synth_tt)
+
+
+
+
         
         

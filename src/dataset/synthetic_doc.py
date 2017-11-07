@@ -30,7 +30,7 @@ class SyntheticDocument(object):
             self.vocab["w" + str(w)] = w
         self.inv_vocab =  {v: k for k, v in self.vocab.items()}
         self.sents_len = np.array([self.sentence_l]*self.n_sents)
-        self.rho = np.random.binomial(self.sentence_l, self.pi, size=self.n_sents)
+        self.rho = np.random.binomial(1, self.pi, size=self.n_sents)
         #I assume that a sentence u with rho_u = 1 belong to the previous segment.
         #rho_u = 1 means a segment is coming next, this does not make sense for 
         #the last sentence. Thus, we set it to 0.
@@ -99,7 +99,17 @@ Otherwise I would have to repeat the code.
 '''
 class SyntheticTopicTrackingDoc(SyntheticDocument, TopicTrackingModel):
     def __init__(self, pi, alpha, beta, K, W, n_sents, sentence_l):
-        SyntheticDocument.__init__(self, pi, alpha, beta, K, W, n_sents, sentence_l)
+        configs = {"model": {}, "synthetic_data": {}}
+        configs["model"]["pi"] = pi
+        configs["model"]["alpha"] = alpha
+        configs["model"]["beta"] = beta
+        configs["model"]["gamma"] = 10
+        
+        configs["synthetic_data"]["K"] = 10
+        configs["synthetic_data"]["W"] = 200
+        configs["synthetic_data"]["n_sents"] = 200
+        configs["synthetic_data"]["sentence_l"] = 15
+        SyntheticDocument.__init__(self, configs)
         
     def generate_doc(self):
         '''

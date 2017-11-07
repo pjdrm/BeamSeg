@@ -110,7 +110,7 @@ class TopicTrackingModel(object):
         return (Su_begin, Su_end)
         
     def draw_theta(self, alpha, theta_t_minus_1):
-        theta = np.random.dirichlet((([alpha]*self.K)*theta_t_minus_1.toarray())[0])
+        theta = np.random.dirichlet((([alpha]*self.K)*theta_t_minus_1))
         return theta
     
     def update_theta(self, theta_t_minus_1, alpha, Su_begin, Su_end):
@@ -118,15 +118,15 @@ class TopicTrackingModel(object):
         n_t = np.sum(n_tk_vec)
         f1 = n_tk_vec + alpha*theta_t_minus_1
         f2 = n_t + alpha
-        return f1[0] / f2
+        return f1 / f2
     
     def update_alpha(self, theta_t_minus_1, alpha, Su_begin, Su_end):
         n_tk_vec = np.sum(self.U_K_counts[Su_begin:Su_end, :], axis=0)
         n_t = np.sum(n_tk_vec)
         alpha_times_theta_t_minus_1 = alpha*theta_t_minus_1
         #I have no idea why I need .toarray() ...
-        f1 = np.sum(theta_t_minus_1.multiply(digamma(n_tk_vec + alpha_times_theta_t_minus_1)\
-                                              - digamma(alpha_times_theta_t_minus_1.toarray())))
+        f1 = np.sum(theta_t_minus_1*(digamma(n_tk_vec + alpha_times_theta_t_minus_1)\
+                                              - digamma(alpha_times_theta_t_minus_1)))
         f2 = digamma(n_t + alpha) - digamma(alpha)
         return alpha * (f1 / f2)
     

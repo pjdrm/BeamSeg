@@ -8,6 +8,7 @@ import numpy as np
 from model.sampler import SegmentationModelSampler
 import matplotlib as mpl
 import pandas as pd
+import seaborn as sns
 import operator
 import os
 import shutil
@@ -15,6 +16,7 @@ plt.style.use('ggplot')
 plt.rcParams['axes.linewidth'] = 0.5
 plt.rcParams["figure.figsize"] = [20, 3.0]
 mpl.rcParams['axes.facecolor'] = '#FFFFFF'
+
 def plot_ref_hyp_seg(ref_seg, hyp_segs, outFile, seg_dec):
     df2 = pd.DataFrame(np.array([ref_seg] + hyp_segs).T, columns=["Reference"] + seg_dec)
     ax = df2.plot.bar(stacked=True, width=.8)
@@ -176,7 +178,7 @@ def run_gibbs_sampler(rnd_topics_model, configs, sampler_log_file="logging/Sampl
 
 def print_matrix_heat_map(matrix, title, outFile):
     ax = plt.axes()
-    #sns.heatmap(matrix, ax = ax, cmap='RdYlGn_r')
+    sns.heatmap(matrix, ax = ax, cmap='RdYlGn_r')
     ax.set_title(title)
     plt.xlabel('Topics', fontsize=14)
     plt.ylabel('Segments', fontsize=14)
