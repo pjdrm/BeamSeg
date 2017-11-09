@@ -6,6 +6,7 @@ Created on Nov 1, 2017
 import numpy as np
 from dataset.synthetic_doc import SyntheticTopicTrackingDoc
 from debug.synthetic_corpus_debugger import print_corpus
+from scipy.special import gamma, digamma
 
 class TopicTrackingVIModel(object):
 
@@ -37,6 +38,14 @@ class TopicTrackingVIModel(object):
         Global parameters
         '''
         self.phi = np.array([np.random.dirichlet([self.beta]*self.W) for k in range(self.K)])
+        
+        self.w_vocab_array = np.asarray(self.doc.U_I_words).reshape(-1)
+        
+        '''
+        Constant values used by the VI algorithm
+        '''
+        self.C1 = self.doc.n_docs*(np.log(gamma(np.sum(self.gamma)))-\
+                              np.log(gamma(self.gamma[0])*gamma(self.gamma[1]))) #f1 from e_q_log_pi_gamma
 
     def init_z_q(self):
         '''
@@ -44,7 +53,6 @@ class TopicTrackingVIModel(object):
         has a z_q vector with dimension of K topics. Uses
         as Dir parameters the values in theta_q of the
         corresponding segment.
-        :param dir_prior:
         '''
         n_words = np.sum(self.sents_len)
         z_q = np.zeros((n_words, self.K))
@@ -87,7 +95,7 @@ class TopicTrackingVIModel(object):
         '''
         for Su_index in self.rho_eq_1:
             theta_Su_q = np.random.dirichlet(dir_prior)*np.random.gamma(shape, scale) #Dir draws give multinomial distributions, thus the random multiplier
-            theta_q[Su_index, :] = theta_Su_q
+            theta_q[Su_index, :] = theta_Su_q #TODO: repeat the values for all sentences!!!
             
         return theta_q
     
@@ -99,6 +107,50 @@ class TopicTrackingVIModel(object):
             multiplier = np.random.gamma(2.0, 2.0)
             pi_q[i,:] = np.array([(1.0-pi_q_i)*multiplier, pi_q_i*multiplier])
         return pi_q
+    
+    def theta_q_other_estimate(self):
+        '''
+        Computes an estimate of theta_q assuming the least
+        likely value to provide the segmentation.
+        
+        Note: compute changes in segmentation one rho_u at a time.
+        '''
+        return None
+    
+    def update_elbo_const(self):
+        self.C_pi_q = digamma(self.pi_q)-digamma(np.sum(self.pi_q))
+        self.C_theta_q = digamma(np.sum(self.theta_q, axis=1))
+        
+    def e_q_log_prob_pi_gamma(self):
+        f1 = self.C1
+        f2 = np.sum((self.gamma-1.0)*self.C_pi_q)
+        return f1 - f2
+    
+    def e_q_log_prob_rho_pi(self):
+        doc_index_prev = 0
+        e_q_val = 0.0
+        #TODO: figure a way to not use the for loop
+        for doc_i, doc_index in enumerate(self.doc.docs_index):
+            e_q_val += np.sum(self.rho_q[doc_index_prev:doc_index]*self.C_pi_q[doc_i, :])
+            doc_index_prev = doc_index
+        return e_q_val
+    
+    def e_q_log_prob_w_z_phi(self):
+        w_phi_aux = self.phi[self.w_vocab_array] #TODO: probably could use pointers instead of always slicing
+        return np.sum(np.log(self.phi)*w_phi_aux)
+    
+    def e_q_log_prob_z_theta(self):
+        w_i_prev = 0
+        dg_theta_q = digamma(self.theta_q)-self.C_theta_q
+        dg_theta_q2 = self.theta_q_other_estimate()
+        e_q_val = 0.0
+        for u, u_len in enumerate(self.doc.sents_len):
+            w_i = w_i_prev + u_len
+            e_q_val += np.sum(self.z_q[w_i_prev:w_i]*self.rho_q[u]*dg_theta_q[u])
+            e_q_val += np.sum(self.z_q[w_i_prev:w_i]*(1.0-self.rho_q[u])*dg_theta_q2[u])
+            w_i_prev += u_len
+        return e_q_val
+            
     
 pi = 0.2
 alpha = 15
