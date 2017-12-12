@@ -10,11 +10,9 @@ from scipy.special import gamma, digamma
 
 class TopicTrackingVIModel(object):
 
-    def __init__(self, gamma, alpha, beta, K, doc):
+    def __init__(self, alpha, beta, K, doc):
         self.beta = beta
         self.alpha = alpha
-        self.bound_thresh = 0.8
-        self.gamma = gamma
         self.K = K
         self.W = doc.W
         self.doc = doc
@@ -23,135 +21,29 @@ class TopicTrackingVIModel(object):
         Array with the length of each sentence.
         Note that the length of the sentences is variable
         '''
-        self.sents_len = doc.sents_len
-        self.n_sents = doc.n_sents
+        self.sents_len = self.doc.sents_len
+        self.n_sents = self.doc.n_sents
         
         '''
-        Local variational parameters
+        Variational Parameters
+        Each word i has a topic assignment z_i variational
+        parameters gamma_i. Each gamma_i is K-dim vector (each
+        index is a topic).         
         '''
-        self.rho_q, self.rho_eq_1 = self.init_rho_q([7,5])
-        self.theta_q = self.init_theta_q([0.07]*self.K)
-        self.z_q = self.init_z_q()
-        self.pi_q = self.init_pi_q([1,5]) 
-        
-        '''
-        Global parameters
-        '''
-        self.phi = np.array([np.random.dirichlet([self.beta]*self.W) for k in range(self.K)])
-        
-        self.w_vocab_array = np.asarray(self.doc.U_I_words).reshape(-1)
-        
-        '''
-        Constant values used by the VI algorithm
-        '''
-        self.C1 = self.doc.n_docs*(np.log(gamma(np.sum(self.gamma)))-\
-                              np.log(gamma(self.gamma[0])*gamma(self.gamma[1]))) #f1 from e_q_log_pi_gamma
+        self.gamma_q = self.init_gamma_q()
 
-    def init_z_q(self):
+    def init_gamma_q(self):
         '''
-        Initializes z variational parameters. Each word
-        has a z_q vector with dimension of K topics. Uses
-        as Dir parameters the values in theta_q of the
-        corresponding segment.
+        Initializes the gamma variational parameters of z.
+        Initialization cannot be uniform, we draw multinomials
+        from a Dirichlet to initialize each gamma_i.
         '''
         n_words = np.sum(self.sents_len)
-        z_q = np.zeros((n_words, self.K))
-        word_index = 0
-        Su_index_prev = 0
-        for Su_index in self.rho_eq_1:
-            for word in range(np.sum(self.sents_len[Su_index_prev:Su_index])):
-                z_q[word_index] = np.random.dirichlet(self.theta_q[Su_index])
-                word_index += 1
-            Su_index_prev = Su_index
+        gamma_q = np.zeros((n_words, self.K))
+        for i in range(n_words):
+            gamma_q[i] = np.random.dirichlet(self.alpha)
+        return gamma_q
         
-        return z_q
-    
-    def init_rho_q(self, beta_prior):
-        '''
-        Initializes rho variational parameters. Its one column
-        because we assume it needs to sum to 1. The value is the probability
-        of rho_u being a boundary under the varaitional dist rho_q
-        :param beta_prior: prior values to generate rho_q.
-        '''
-        rho_q = np.random.beta(beta_prior[0], beta_prior[1], (self.n_sents,1))
-        rho_eq_1 = []
-        for i in range(self.n_sents):
-            if rho_q[i] >= self.bound_thresh:
-                rho_eq_1.append(i)
-        rho_eq_1.append(self.n_sents-1)
-        return rho_q, rho_eq_1
-    
-    def init_theta_q(self, dir_prior):
-        '''
-        Initializes theta variational parameters
-        :param dir_prior: a prior to generate Dirichlet distributions. Note
-        that it the prior for a Dirichlet prior itself.
-        '''
-        theta_q = np.zeros((self.n_sents, self.K))
-        shape, scale = 2.0, 2.0
-        '''
-        Just looping through boundaries because all sentences
-        from the same segment share the same theta_q parameters.
-        '''
-        for Su_index in self.rho_eq_1:
-            theta_Su_q = np.random.dirichlet(dir_prior)*np.random.gamma(shape, scale) #Dir draws give multinomial distributions, thus the random multiplier
-            theta_q[Su_index, :] = theta_Su_q #TODO: repeat the values for all sentences!!!
-            
-        return theta_q
-    
-    def init_pi_q(self, beta_prior):
-        n_docs = len(self.doc.docs_index)
-        pi_q = np.zeros((n_docs, 2))
-        for i in range(n_docs):
-            pi_q_i = np.random.beta(beta_prior[0], beta_prior[1])
-            multiplier = np.random.gamma(2.0, 2.0)
-            pi_q[i,:] = np.array([(1.0-pi_q_i)*multiplier, pi_q_i*multiplier])
-        return pi_q
-    
-    def theta_q_other_estimate(self):
-        '''
-        Computes an estimate of theta_q assuming the least
-        likely value to provide the segmentation.
-        
-        Note: compute changes in segmentation one rho_u at a time.
-        '''
-        return None
-    
-    def update_elbo_const(self):
-        self.C_pi_q = digamma(self.pi_q)-digamma(np.sum(self.pi_q))
-        self.C_theta_q = digamma(np.sum(self.theta_q, axis=1))
-        
-    def e_q_log_prob_pi_gamma(self):
-        f1 = self.C1
-        f2 = np.sum((self.gamma-1.0)*self.C_pi_q)
-        return f1 - f2
-    
-    def e_q_log_prob_rho_pi(self):
-        doc_index_prev = 0
-        e_q_val = 0.0
-        #TODO: figure a way to not use the for loop
-        for doc_i, doc_index in enumerate(self.doc.docs_index):
-            e_q_val += np.sum(self.rho_q[doc_index_prev:doc_index]*self.C_pi_q[doc_i, :])
-            doc_index_prev = doc_index
-        return e_q_val
-    
-    def e_q_log_prob_w_z_phi(self):
-        w_phi_aux = self.phi[self.w_vocab_array] #TODO: probably could use pointers instead of always slicing
-        return np.sum(np.log(self.phi)*w_phi_aux)
-    
-    def e_q_log_prob_z_theta(self):
-        w_i_prev = 0
-        dg_theta_q = digamma(self.theta_q)-self.C_theta_q
-        dg_theta_q2 = self.theta_q_other_estimate()
-        e_q_val = 0.0
-        for u, u_len in enumerate(self.doc.sents_len):
-            w_i = w_i_prev + u_len
-            e_q_val += np.sum(self.z_q[w_i_prev:w_i]*self.rho_q[u]*dg_theta_q[u])
-            e_q_val += np.sum(self.z_q[w_i_prev:w_i]*(1.0-self.rho_q[u])*dg_theta_q2[u])
-            w_i_prev += u_len
-        return e_q_val
-            
-    
 pi = 0.2
 alpha = 15
 beta = 0.6
@@ -173,6 +65,5 @@ doc_synth_tt = SyntheticTopicTrackingDoc(pi, alpha, beta, K, W, n_sents, sentenc
 doc_synth_tt.generate_docs(10)
 print_corpus(vocab_dic, doc_synth_tt, "Topic Tracking", outDir, flags)
 
-gamma = 10
-vi_tt_model = TopicTrackingVIModel(gamma, alpha, beta, K, doc_synth_tt)      
+vi_tt_model = TopicTrackingVIModel([alpha]*K, [beta]*K, K, doc_synth_tt)      
         
