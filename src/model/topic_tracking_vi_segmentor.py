@@ -18,14 +18,15 @@ class TopicTrackingVIModel(object):
         self.K = K
         self.W = doc.W
         self.doc = doc
-
-        '''
-        Array with the length of each sentence.
-        Note that the length of the sentences is variable
-        '''
-        self.sents_len = self.doc.sents_len
-        self.n_sents = self.doc.n_sents
         self.n_words = np.sum(self.sents_len)
+        #TODO: this probably does not work real docs because sentence length varies
+        self.I_words = self.doc.U_I_words.flatten()
+        self.all_wi_dic = {} #keys are vocab indexes and value is the list of words of that type
+        for i, word in enumerate(self.I_words):
+            if word not in self.all_wi_dic:
+                self.all_wi_dic[word] = []
+            self.all_wi_dic.append(i)
+        
         
         '''
         Variational Parameters
@@ -59,15 +60,13 @@ class TopicTrackingVIModel(object):
             Var_q_zi_k = E_q_zi_k*(1.0-E_q_zi_k)
             
             
-            gamma_q_all_wi = self.gamma_q[self.all_wi_dic[self.wi_vocab_index[i]]]
-            #TODO: self.all_wi_dic has keys vocab indexes and values the set of word indexes of that type
-            #TODO: self.wi_vocab_index has keys word indexes and returns the corresponding vocab index
+            gamma_q_all_wi = self.gamma_q[self.all_wi_dic[self.I_words[i]]]
             q_wi_k = np.sum(gamma_q_all_wi, axis=0)
             E_q_wi_k = (q_wi_k-self.gamma_q)*self.W_I_counts_minus1
             Var_q_wi_k = E_q_wi_k*(1.0-E_q_wi_k)
             
             q_wi_k_plus_beta = q_wi_k + self.beta
-            E_q_wi_k_plus_beta = (q_wi_k_plus_beta[self.wi_vocab_index]-self.gamma_q)*self.W_I_counts_minus1
+            E_q_wi_k_plus_beta = (q_wi_k_plus_beta[self.I_words]-self.gamma_q)*self.W_I_counts_minus1
             
             f1 = E_q_zi_k + self.alpha
             f2 = E_q_wi_k_plus_beta
