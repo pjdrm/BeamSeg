@@ -19,7 +19,9 @@ class CVBSynDoc(object):
             self.phi.append(np.random.dirichlet(beta))
             
         self.I_words = []
+        self.Z = []
         for wi in range(n_words):
             k = np.nonzero(np.random.multinomial(1, self.theta, size=1))[1][0]
+            self.Z.append(k)
             word = np.nonzero(np.random.multinomial(1, self.phi[k], size=1))[1][0]
             self.I_words.append(word)
