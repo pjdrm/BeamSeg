@@ -78,8 +78,9 @@ class TopicTrackingVIModel(object):
             f5 = Var_q_wi_k/(2.0*(f2**2))
             f6 = f1/(2.0*((E_q_zi_k+self.beta_sum)**2))
             
-            self.gamma_q[i] = f1*f2*f3*np.exp(-f4-f5+f6)
-            print(self.gamma_q[i])
+            gamma_qi = f1*f2*f3*np.exp(-f4-f5+f6)
+            self.gamma_q[i] = gamma_qi/np.sum(gamma_qi)
+            #print(self.gamma_q[i])
             
     def cvb_algorithm(self):
         t = trange(self.n_cvb_iters, desc='', leave=True)
@@ -98,17 +99,18 @@ class TopicTrackingVIModel(object):
             word_topics.append(np.argmax(self.gamma_q[i]))
         return word_topics
         
-K = 10
-W = 30
+K = 3
+W = 5
 alpha = [15]*K
 beta = [0.6]*W
 n_words = 1000
-n_iters = 50
+n_iters = 1000
 
 doc_synth = CVBSynDoc(alpha, beta, n_words)
 vi_tt_model = TopicTrackingVIModel(alpha, beta, doc_synth, n_cvb_iters=n_iters)
 vi_tt_model.cvb_algorithm()
 hyp_word_topics = vi_tt_model.get_word_topics()
 ref_word_topics = doc_synth.Z
+print(hyp_word_topics)
 print("ARI %f", adjusted_rand_score(ref_word_topics, hyp_word_topics))
         
