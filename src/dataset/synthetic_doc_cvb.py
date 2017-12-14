@@ -12,6 +12,7 @@ class CVBSynDoc(object):
     def __init__(self, alpha, beta, n_words):
         self.W = len(beta)
         self.K = len(alpha)
+        self.n_words = n_words
         self.theta = np.random.dirichlet(alpha)
         self.phi = []
         for k in range(self.K):
