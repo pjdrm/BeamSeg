@@ -4,23 +4,20 @@ Created on Nov 1, 2017
 @author: pjdrm
 '''
 import numpy as np
-from dataset.synthetic_doc import SyntheticTopicTrackingDoc
-from debug.synthetic_corpus_debugger import print_corpus
-from scipy.special import gamma, digamma
-import numpy_groupies as npg
+from dataset.synthetic_doc_cvb import CVBSynDoc
 
 class TopicTrackingVIModel(object):
 
-    def __init__(self, alpha, beta, K, doc):
+    def __init__(self, alpha, beta, doc):
         self.beta = beta
         self.beta_sum = np.sum(self.beta)
         self.alpha = alpha
-        self.K = K
+        self.K = len(self.alpha)
         self.W = doc.W
         self.doc = doc
         self.n_words = np.sum(self.sents_len)
-        #TODO: this probably does not work real docs because sentence length varies
-        self.I_words = self.doc.U_I_words.flatten()
+        #TODO: this probably does not work real docs because they are sentence based
+        self.I_words = self.doc.I_words
         self.all_wi_dic = {} #keys are vocab indexes and value is the list of words of that type
         for i, word in enumerate(self.I_words):
             if word not in self.all_wi_dic:
@@ -76,28 +73,24 @@ class TopicTrackingVIModel(object):
             f6 = f1/(2.0*(E_q_zi_k+self.beta_sum))**2
             
             self.gamma_q[i] = f1*f2*f3*np.e(-f4-f5+f6)
+            
+    def get_word_topics(self):
+        '''
+        Returns the word topic assignments. The final topic
+        for a given word is the variational parameter with the 
+        highest value.
+        '''
+        word_topics = []
+        for i in range(self.n_words):
+            word_topics.append(np.argmax(self.gamma_q[i]))
+        return word_topics
         
-        
-pi = 0.2
-alpha = 15
-beta = 0.6
 K = 10
-W = 15
-n_sents = 50
-sentence_l = 50
-vocab_dic = {}
-for w in range(W):
-    vocab_dic[w] = "w" + str(w)
-outDir = "debug/synthetic_dataset/"
+W = 30
+alpha = [15]*K
+beta = [0.6]*W
+n_words = 1000
 
-print_theta_flag = False
-print_heat_map_flag = True
-print_text_flag = False
-flags = [print_theta_flag, print_heat_map_flag, print_text_flag]
-
-doc_synth_tt = SyntheticTopicTrackingDoc(pi, alpha, beta, K, W, n_sents, sentence_l)
-doc_synth_tt.generate_docs(10)
-print_corpus(vocab_dic, doc_synth_tt, "Topic Tracking", outDir, flags)
-
-vi_tt_model = TopicTrackingVIModel([alpha]*K, [beta]*K, K, doc_synth_tt)      
+doc_synth = CVBSynDoc(alpha, beta, n_words)
+vi_tt_model = TopicTrackingVIModel(alpha, beta, doc_synth)   
         
