@@ -261,30 +261,30 @@ class SyntheticRndTopicMultiDoc(SyntheticDocument):
                 Su_index += 1
                 
 class SyntheticDittoDocs(SyntheticDocument):
-    def __init__(self, doc, n_copies):
-        self.alpha = doc.alpha
-        self.K = doc.K
-        self.W = doc.W
+    def __init__(self, data, n_copies):
+        self.alpha = data.alpha
+        self.K = data.K
+        self.W = data.W
         #Just for code compatibility
-        self.vocab = doc.vocab
-        self.inv_vocab =  doc.inv_vocab
-        self.n_sents = doc.n_sents*n_copies
-        self.sent_len = doc.sent_len
-        self.sents_len = np.tile(doc.sents_len, n_copies)
+        self.vocab = data.vocab
+        self.inv_vocab =  data.inv_vocab
+        self.n_sents = data.n_sents*n_copies
+        self.sent_len = data.sent_len
+        self.sents_len = np.tile(data.sents_len, n_copies)
         
-        self.rho = np.tile(doc.rho, n_copies)
+        self.rho = np.tile(data.rho, n_copies)
         #The last sentence of each document must be 1
-        for u in range(doc.n_sents-1, doc.n_sents*n_copies, doc.n_sents):
+        for u in range(data.n_sents-1, data.n_sents*n_copies, data.n_sents):
             self.rho[u] = 1
         #... except last sentence.
         self.rho[-1] = 0
         self.rho_eq_1 = np.append(np.nonzero(self.rho)[0], [self.n_sents-1])
-        self.U_W_counts = np.tile(doc.U_W_counts, (n_copies, 1))
-        self.U_K_counts = np.tile(doc.U_K_counts, (n_copies, 1))
-        self.U_I_topics = np.tile(doc.U_I_topics, (n_copies, 1))
-        self.U_I_words = np.tile(doc.U_I_words, (n_copies, 1))
-        self.W_K_counts = np.tile(doc.W_K_counts, (n_copies, 1))
-        self.docs_index = range(doc.n_sents, self.n_sents+1, doc.n_sents)
+        self.U_W_counts = np.tile(data.U_W_counts, (n_copies, 1))
+        self.U_K_counts = np.tile(data.U_K_counts, (n_copies, 1))
+        self.U_I_topics = np.tile(data.U_I_topics, (n_copies, 1))
+        self.U_I_words = np.tile(data.U_I_words, (n_copies, 1))
+        self.W_K_counts = np.tile(data.W_K_counts, (n_copies, 1))
+        self.docs_index = range(data.n_sents, self.n_sents+1, data.n_sents)
         self.isMD = True
                 
 def multi_doc_slicer(multi_doc):

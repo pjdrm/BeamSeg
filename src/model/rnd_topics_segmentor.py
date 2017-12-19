@@ -14,7 +14,7 @@ from random import shuffle
 import copy
 
 class RndTopicsModel(object):
-    def __init__(self, configs, doc,\
+    def __init__(self, configs, data,\
                  log_flag=False,\
                  sampler_log_file = "RndTopicsModel.log"):
         
@@ -26,39 +26,39 @@ class RndTopicsModel(object):
         self.beta = configs["model"]["beta"]
         self.gamma = configs["model"]["gamma"]
         self.K = configs["model"]["K"]
-        self.W = doc.W
-        self.doc = doc
+        self.W = data.W
+        self.doc = data
         '''
         Array with the length of each sentence.
         Note that the length of the sentences is variable
         '''
-        self.sents_len = doc.sents_len
-        self.n_sents = doc.n_sents
+        self.sents_len = data.sents_len
+        self.n_sents = data.n_sents
         
         #Initializing with a random state
         if configs["model"]["pi"] == "None":
             self.pi = np.random.beta(self.gamma, self.gamma)
         else:
             self.pi = configs["model"]["pi"]
-        self.rho = np.random.binomial(1, self.pi, size=doc.n_sents)
+        self.rho = np.random.binomial(1, self.pi, size=data.n_sents)
         self.rho[-1] = 0
         #Need to append last sentence, otherwise last segment wont be taken into account
-        self.rho_eq_1 = np.append(np.nonzero(self.rho)[0], [doc.n_sents-1])
+        self.rho_eq_1 = np.append(np.nonzero(self.rho)[0], [data.n_sents-1])
         self.n_segs = len(self.rho_eq_1)
 
         #Note: just to debug the initial state
         self.theta = np.zeros((self.n_segs, self.K))
         self.phi = np.array([np.random.dirichlet([self.beta]*self.W) for k in range(self.K)])
         #Matrix with the counts of the words in each sentence 
-        self.U_W_counts = doc.U_W_counts
+        self.U_W_counts = data.U_W_counts
         #Matrix with the topics of the ith word in each u sentence 
-        self.U_I_topics = np.zeros((doc.n_sents, max(self.sents_len)))#self.doc.U_I_topics
+        self.U_I_topics = np.zeros((data.n_sents, max(self.sents_len)))#self.data.U_I_topics
         #Matrix with the word index of the ith word in each u sentence 
-        self.U_I_words = doc.U_I_words
+        self.U_I_words = data.U_I_words
         #Matrix with the counts of the topic assignments in each sentence 
-        self.U_K_counts = np.zeros((doc.n_sents, self.K))#self.doc.U_K_counts
+        self.U_K_counts = np.zeros((data.n_sents, self.K))#self.data.U_K_counts
         #Matrix with the number of times each word in the vocab was assigned with topic k
-        self.W_K_counts = np.zeros((self.W, self.K)) #self.doc.W_K_counts
+        self.W_K_counts = np.zeros((self.W, self.K)) #self.data.W_K_counts
                 
         '''
         Generating all segments
@@ -363,10 +363,10 @@ Efficient version, based on a caching scheme, of the
 RndTopicsModel class.
 '''    
 class RndTopicsCacheModel(RndTopicsModel):
-    def __init__(self, configs, doc,\
+    def __init__(self, configs, data,\
                  log_flag=False,\
                  sampler_log_file = "RndTopicsModel.log"):
-        RndTopicsModel.__init__(self, configs, doc,\
+        RndTopicsModel.__init__(self, configs, data,\
                                 log_flag,\
                                 sampler_log_file)
         '''
@@ -484,10 +484,10 @@ class RndTopicsCacheModel(RndTopicsModel):
                 return Su_index
 
 class RndScanOrderModel(RndTopicsModel):
-    def __init__(self, configs, doc,\
+    def __init__(self, configs, data,\
                  log_flag=False,\
                  sampler_log_file = "RndTopicsModel.log"):
-        RndTopicsModel.__init__(self, configs, doc,\
+        RndTopicsModel.__init__(self, configs, data,\
                                 log_flag,\
                                 sampler_log_file)
         
@@ -573,10 +573,10 @@ U_I_topics_g = None
 W_K_counts_g = None
 
 class RndTopicsParallelModel(RndTopicsModel):
-    def __init__(self, gamma, alpha, beta, K, doc,\
+    def __init__(self, gamma, alpha, beta, K, data,\
                  log_flag=False,\
                  sampler_log_file = "RndTopicsModel.log"):
-        RndTopicsModel.__init__(self, gamma, alpha, beta, K, doc,\
+        RndTopicsModel.__init__(self, gamma, alpha, beta, K, data,\
                                     log_flag,\
                                     sampler_log_file)
         self.log_flag = log_flag

@@ -10,7 +10,7 @@ import math
 import logging
 
 class TopicTrackingModel(object):
-    def __init__(self, gamma, alpha, beta, K, doc, log_flag=False):
+    def __init__(self, gamma, alpha, beta, K, data, log_flag=False):
         if log_flag:
             logging.basicConfig(format='%(levelname)s:%(message)s',\
                                 filename='logging/TopicTrackingModel.log',\
@@ -23,20 +23,20 @@ class TopicTrackingModel(object):
         self.gamma = gamma
         self.beta = beta
         self.K = K
-        self.W = doc.W
+        self.W = data.W
         '''
         Array with the length of each sentence.
         Note that the length of the sentences is variable
         '''
-        self.sents_len = doc.sents_len
-        self.n_sents = doc.n_sents
+        self.sents_len = data.sents_len
+        self.n_sents = data.n_sents
         
         #Initializing with a random state
         self.pi = np.random.beta(gamma, gamma)
-        self.rho = np.random.binomial(1, self.pi, size=doc.n_sents)
+        self.rho = np.random.binomial(1, self.pi, size=data.n_sents)
         self.rho[-1] = 0
         #Need to append last sentence, otherwise last segment wont be taken into account
-        self.rho_eq_1 = np.append(np.nonzero(self.rho)[0], [doc.n_sents-1])
+        self.rho_eq_1 = np.append(np.nonzero(self.rho)[0], [data.n_sents-1])
         self.n_segs = len(self.rho_eq_1)
         '''
         This array has the alpha_t at the current state.
@@ -58,13 +58,13 @@ class TopicTrackingModel(object):
         self.theta = sparse.csr_matrix((self.n_segs+1, self.K))
         self.theta[0, :] = np.random.dirichlet([self.alpha_array[0]]*self.K)
         #Matrix with the counts of the words in each sentence 
-        self.U_W_counts = doc.U_W_counts
+        self.U_W_counts = data.U_W_counts
         #Matrix with the word index of the ith word in each u sentence 
-        self.U_I_words = doc.U_I_words
+        self.U_I_words = data.U_I_words
         #Matrix with the topics of the ith word in each u sentence 
-        self.U_I_topics = sparse.csr_matrix((doc.n_sents, max(self.sents_len)))
+        self.U_I_topics = sparse.csr_matrix((data.n_sents, max(self.sents_len)))
         #Matrix with the counts of the topic assignments in each sentence 
-        self.U_K_counts = sparse.csr_matrix((doc.n_sents, self.K))
+        self.U_K_counts = sparse.csr_matrix((data.n_sents, self.K))
         #Matrix with the number of times each word in the vocab was assigned with topic k
         self.W_K_counts = sparse.csr_matrix((self.W, self.K))
                 
@@ -91,9 +91,9 @@ class TopicTrackingModel(object):
         This is just for debug. The idea is to give the true Z
         and never sample, this should make things easier on the
         rho sampler.
-        self.theta = doc.theta
-        self.U_K_counts = doc.U_K_counts
-        self.U_I_topics = doc.U_I_topics
+        self.theta = data.theta
+        self.U_K_counts = data.U_K_counts
+        self.U_I_topics = data.U_I_topics
         '''
         
     def get_Su_begin_end(self, Su_index):
