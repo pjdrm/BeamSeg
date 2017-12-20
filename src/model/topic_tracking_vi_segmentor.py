@@ -18,7 +18,6 @@ class TopicTrackingVIModel(object):
         self.data = Data(docs)
         
         self.dp_matrices = self.init_dp_matrices()
-        self.cum_sums = self.init_cum_sums() #Each line of the matrix has the commulative sum of word counts up to that line (sentence)
         self.best_lm_word_counts = self.init_best_lm_word_counts() #best_lm_word_counts are the word count from OTHER documents that allowed the highest likelihood of a language model
         self.best_seg_tracker = self.init_seg_tracker()
         
@@ -84,11 +83,12 @@ class TopicTrackingVIModel(object):
         '''
         if seg_ll > self.best_lm_word_counts[doc_i][lm]["ll"]:
             self.best_lm_word_counts[doc_i][lm]["wc"] = word_counts
+            self.best_lm_word_counts[doc_i][lm]["ll"] = seg_ll
     
     def get_prev_seg_ll(self, u, lm, doc):
         '''
         Returns the log likelihood of the best segmentation
-        of a document without sentence u.
+        of a document without sentence u.  #TODO: rebuild this behavior!!!!
         :param u: sentence
         :param lm: language model (column in the DP matrix)
         :param doc: document
@@ -96,10 +96,15 @@ class TopicTrackingVIModel(object):
         if u == 0 or lm == 0:
             #We are just in the first sentence or language model, no previous seg exists
             return 0.0
+        
+        best_seg_point = self.best_seg_tracker[doc][lm-1]
+        prev_seg_ll = self.dp_matrices[doc][lm-1][best_seg_point]
+        '''
         prev_seg_ll = 0.0
         for sent in range(u-1,-1,-1):
             best_seg_point = self.best_seg_tracker[doc][sent]
             prev_seg_ll += self.dp_matrices[doc][sent][best_seg_point]
+        '''
         return prev_seg_ll
     
     def segment_ll(self, word_counts):
@@ -124,14 +129,15 @@ class TopicTrackingVIModel(object):
         for doc_i in range(self.data.n_docs):
             word_counts = self.best_lm_word_counts[doc_i][lm]["wc"]
             word_counts_h1 = word_counts+self.slice_docs(u, doc_i) #Note that these are only counts from other documents
+            cum_sum = np.sum(self.data.doc_word_counts(doc_i)[lm:u+1,:], axis=0)
             #This assumes a segment u to lm with all documents
-            all_docs_u_lm_seg_ll = self.segment_ll(word_counts_h1+self.cum_sums[doc_i][u])
+            all_docs_u_lm_seg_ll = self.segment_ll(word_counts_h1+cum_sum)
             
             if u > 0 and u != lm:
                 #u == lm is the diagonal, for which only one case exists
                 word_counts_h2 = word_counts
                 #This is the case where I had to the language model on u from doc_i
-                u_lm_seg_ll = self.segment_ll(word_counts_h2+self.cum_sums[doc_i][u])#By adding cum_sums[doc_i][u] counts I am just considering the sentence from this doc_i to the LM
+                u_lm_seg_ll = self.segment_ll(word_counts_h2+cum_sum)#By adding cum_sums[doc_i][u] counts I am just considering the sentence from this doc_i to the LM
             else:
                 u_lm_seg_ll = -np.inf
                 
@@ -154,6 +160,34 @@ class TopicTrackingVIModel(object):
             for doc_i in range(self.data.n_docs):
                 self.best_seg_tracker[doc_i][u] = np.argmax(self.dp_matrices[doc_i][u,0:u+1])
                 
+    def get_segmentation(self, doc_i):
+        '''
+        Returns the final segmentation for a document.
+        This is done by backtracking the best segmentations
+        in a bottom-up fashion.
+        :param doc_i: document index
+        '''
+        u = len(self.best_seg_tracker[doc_i])-1
+        seg_points = []
+        while 1:
+            seg_point = self.best_seg_tracker[doc_i][u]-1
+            if seg_point == -1:
+                break
+            seg_points.append(seg_point)
+            u = seg_point-1
+        seg_points.reverse()
+        hyp_seg = []
+        seg_begin = 0
+        for seg_point in seg_points:
+            seg_len = seg_point-seg_begin
+            hyp_seg += [0]*(seg_len)+[1]
+            seg_begin = seg_point+1
+            
+        seg_len = self.data.doc_len(doc_i)-seg_begin
+        hyp_seg += [0]*seg_len
+        hyp_seg[-1] = 0
+        return hyp_seg
+            
 class Data(object):
     '''
     Wrapper class for MultiDocument object. Represent the full collection of documents.
@@ -200,7 +234,8 @@ doc_synth = CVBSynDoc(beta, pi, sent_len, doc_len, n_docs)
 
 vi_tt_model = TopicTrackingVIModel(beta, doc_synth)
 vi_tt_model.dp_segmentation()
-print(vi_tt_model.dp_matrices[0])
+print(vi_tt_model.get_segmentation(0))
+print(doc_synth.rho.tolist())
 
 '''
 K = 3
