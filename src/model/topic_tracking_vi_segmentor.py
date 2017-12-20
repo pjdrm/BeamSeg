@@ -42,14 +42,14 @@ class TopicTrackingVIModel(object):
         best_lm_word_counts = [[] for i in range(self.data.n_docs)]
         for doc_lm_word_counts in best_lm_word_counts:
             for lm in range(self.data.max_doc_len):
-                word_counts_dict = {"ll": 0.0, "wc": np.zeros(self.W)}
+                word_counts_dict = {"ll": -np.inf, "wc": np.zeros(self.W)}
                 doc_lm_word_counts.append(word_counts_dict)
         return best_lm_word_counts
     
     def init_seg_tracker(self):
         best_seg_tracker = []
         for doc_i in range(self.data.n_docs):
-            best_seg_tracker.append(np.zeros(self.data.doc_len(doc_i)))
+            best_seg_tracker.append(np.zeros(self.data.doc_len(doc_i), dtype=np.int32))
         
         return best_seg_tracker
         
@@ -123,7 +123,7 @@ class TopicTrackingVIModel(object):
         '''
         for doc_i in range(self.data.n_docs):
             word_counts = self.best_lm_word_counts[doc_i][lm]["wc"]
-            word_counts_h1 = word_counts+self.slice_docs(u, lm) #Note that these are only counts from other documents
+            word_counts_h1 = word_counts+self.slice_docs(u, doc_i) #Note that these are only counts from other documents
             #This assumes a segment u to lm with all documents
             all_docs_u_lm_seg_ll = self.segment_ll(word_counts_h1+self.cum_sums[doc_i][u])
             
@@ -133,7 +133,7 @@ class TopicTrackingVIModel(object):
                 #This is the case where I had to the language model on u from doc_i
                 u_lm_seg_ll = self.segment_ll(word_counts_h2+self.cum_sums[doc_i][u])#By adding cum_sums[doc_i][u] counts I am just considering the sentence from this doc_i to the LM
             else:
-                u_lm_seg_ll = 0.0
+                u_lm_seg_ll = -np.inf
                 
             if all_docs_u_lm_seg_ll > u_lm_seg_ll:
                 best_word_counts = word_counts_h1
@@ -149,10 +149,10 @@ class TopicTrackingVIModel(object):
     
     def dp_segmentation(self):
         for u in range(self.data.max_doc_len):
-            for lm in range(u):
+            for lm in range(u+1):
                 self.segment_u(u, lm)
             for doc_i in range(self.data.n_docs):
-                self.best_seg_tracker[doc_i][u] = np.argmax(self.dp_matrices[doc_i][u])
+                self.best_seg_tracker[doc_i][u] = np.argmax(self.dp_matrices[doc_i][u,0:u+1])
                 
 class Data(object):
     '''
@@ -165,7 +165,7 @@ class Data(object):
         self.doc_lens = []
         self.docs_word_counts = []
         self.multi_doc_slicer(docs)
-        self.max_doc_len = np.max(docs.docs_index)
+        self.max_doc_len = np.max(self.doc_lens)
         
     def multi_doc_slicer(self, docs):
         doc_begin = 0
@@ -200,6 +200,7 @@ doc_synth = CVBSynDoc(beta, pi, sent_len, doc_len, n_docs)
 
 vi_tt_model = TopicTrackingVIModel(beta, doc_synth)
 vi_tt_model.dp_segmentation()
+print(vi_tt_model.dp_matrices[0])
 
 '''
 K = 3
