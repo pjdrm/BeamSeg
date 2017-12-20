@@ -12,10 +12,8 @@ from scipy.special import gammaln
 
 class TopicTrackingVIModel(object):
 
-    def __init__(self, alpha, beta, docs):
+    def __init__(self, beta, docs):
         self.beta = beta
-        self.alpha = alpha
-        self.K = len(self.alpha)
         self.W = docs.W
         self.data = Data(docs)
         
@@ -164,19 +162,18 @@ class Data(object):
     '''
     def __init__(self, docs):
         self.n_docs = docs.n_docs
-        self.max_doc_len = np.max(docs.docs_index)
         self.doc_lens = []
         self.docs_word_counts = []
         self.multi_doc_slicer(docs)
+        self.max_doc_len = np.max(docs.docs_index)
         
     def multi_doc_slicer(self, docs):
         doc_begin = 0
         for doc_end in docs.docs_index:
             doc = copy.deepcopy(docs)
             self.doc_lens.append(doc_end - doc_begin)
-            doc.U_W_counts = doc.U_W_counts[doc_begin:doc_end, :]
-            U_I_words = doc.U_I_words[doc_begin:doc_end, :]
-            self.docs_word_counts.append(U_I_words)
+            U_W_counts = doc.U_W_counts[doc_begin:doc_end, :]
+            self.docs_word_counts.append(U_W_counts)
             doc_begin = doc_end
         
     def doc_len(self, doc_i):
@@ -192,7 +189,18 @@ class Data(object):
         :param doc_i: document index
         '''
         return self.docs_word_counts[doc_i]
-        
+    
+W = 5
+beta = np.array([0.6]*W)
+n_docs = 2
+doc_len = 40
+pi = .08
+sent_len = 15
+doc_synth = CVBSynDoc(beta, pi, sent_len, doc_len, n_docs)
+
+vi_tt_model = TopicTrackingVIModel(beta, doc_synth)
+vi_tt_model.dp_segmentation()
+
 '''
 K = 3
 W = 5
