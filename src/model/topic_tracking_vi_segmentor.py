@@ -10,6 +10,8 @@ from dataset.synthetic_doc_cvb import CVBSynDoc
 from sklearn.metrics.cluster import adjusted_rand_score
 from scipy.special import gammaln
 import eval.eval_tools as eval_tools
+from itertools import chain, combinations
+import time
 
 class TopicTrackingVIModel(object):
 
@@ -73,6 +75,18 @@ class TopicTrackingVIModel(object):
                 word_counts += self.data.doc_word_counts(d)[u]
         return word_counts
     
+    def aggregate_u_counts(self, u, docs):
+        '''
+        Computes the commulative counts of u sentence from all documents.
+        :param u: sentence index
+        :param doc_i: list of documents
+        '''
+        word_counts = np.zeros(self.W)
+        for doc_i in docs:
+            if self.data.doc_len(doc_i) >= u:
+                word_counts += self.data.doc_word_counts(doc_i)[u]
+        return word_counts
+    
     def update_best_lm_word_counts(self, doc_i, lm, word_counts, seg_ll):
         '''
         Checks if the current lm estimate was higher than before (when using one
@@ -128,6 +142,25 @@ class TopicTrackingVIModel(object):
         :param lm: language model index
         '''
         for doc_i in range(self.data.n_docs):
+            best_seg_ll = -np.inf
+            word_counts = self.best_lm_word_counts[doc_i][lm]["wc"]
+            cum_sum = np.sum(self.data.doc_word_counts(doc_i)[lm:u+1,:], axis=0)
+            other_docs = list(range(self.data.n_docs))
+            other_docs.pop(doc_i)
+            doc_combs = list(chain.from_iterable(combinations(other_docs, r) for r in range(1,len(other_docs)+1))) #all n combinations of docs
+            for doc_comb in doc_combs+[[doc_i]]:#[[doc_i]] is the hypothesis of only adding the u sentence from doc_i
+                other_doc_word_counts = word_counts+self.aggregate_u_counts(u, doc_comb)
+                seg_ll = self.segment_ll(other_doc_word_counts+cum_sum)
+                if seg_ll > best_seg_ll:
+                    best_word_counts = other_doc_word_counts
+                    best_seg_ll = seg_ll
+                    
+            best_word_counts -= self.data.doc_word_counts(doc_i)[u]
+            prev_seg_ll = self.get_prev_seg_ll(u, lm, doc_i)#TODO: figure out if this is inconsistent. I might be adding sentence counts from other docs to more than one langauge model
+            total_seg_ll = prev_seg_ll+best_seg_ll
+            self.update_best_lm_word_counts(doc_i, lm, best_word_counts, total_seg_ll)
+            self.dp_matrices[doc_i][u][lm] = total_seg_ll
+            '''
             word_counts = self.best_lm_word_counts[doc_i][lm]["wc"]
             word_counts_h1 = word_counts+self.slice_docs(u, doc_i) #Note that these are only counts from other documents
             cum_sum = np.sum(self.data.doc_word_counts(doc_i)[lm:u+1,:], axis=0)
@@ -153,11 +186,14 @@ class TopicTrackingVIModel(object):
             total_seg_ll = prev_seg_ll+best_seg_ll
             self.update_best_lm_word_counts(doc_i, lm, best_word_counts, total_seg_ll)
             self.dp_matrices[doc_i][u][lm] = total_seg_ll
+            '''
     
     def dp_segmentation(self):
         for u in range(self.data.max_doc_len):
             for lm in range(u+1):
+                print("u: %d lm: %d"%(u, lm))
                 self.segment_u(u, lm)
+                
             for doc_i in range(self.data.n_docs):
                 self.best_seg_tracker[doc_i][u] = np.argmax(self.dp_matrices[doc_i][u,0:u+1])
                 
@@ -247,27 +283,33 @@ def sigle_vs_md_eval(doc_synth, beta):
     '''
     single_docs = doc_synth.get_single_docs()
     single_doc_wd = []
+    start = time.time()
     for doc in single_docs:
         data = Data(doc)
         vi_tt_model = TopicTrackingVIModel(beta, data)
         vi_tt_model.dp_segmentation()
         single_doc_wd += eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc)
+    end = time.time()
+    sd_time = (end - start)
         
     single_doc_wd = ['%.3f' % wd for wd in single_doc_wd]
     data = Data(doc_synth)
     vi_tt_model = TopicTrackingVIModel(beta, data)
+    start = time.time()
     vi_tt_model.dp_segmentation()
+    end = time.time()
+    md_time = (end - start)
     multi_doc_wd = eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc_synth)
     multi_doc_wd = ['%.3f' % wd for wd in multi_doc_wd]
-    print("Single:%s\nMulti: %s" % (str(single_doc_wd), str(multi_doc_wd)))
+    print("Single:%s time: %f\nMulti: %s time: %f" % (str(single_doc_wd), sd_time, str(multi_doc_wd), md_time))
     
     
-W = 5
+W = 10
 beta = np.array([0.6]*W)
 n_docs = 15
-doc_len = 40
-pi = .08
-sent_len = 15
+doc_len = 20 
+pi = .2
+sent_len = 5
 doc_synth = CVBSynDoc(beta, pi, sent_len, doc_len, n_docs)
 data = Data(doc_synth)
 
