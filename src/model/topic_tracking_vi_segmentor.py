@@ -9,13 +9,14 @@ from tqdm import trange
 from dataset.synthetic_doc_cvb import CVBSynDoc
 from sklearn.metrics.cluster import adjusted_rand_score
 from scipy.special import gammaln
+import eval.eval_tools as eval_tools
 
 class TopicTrackingVIModel(object):
 
-    def __init__(self, beta, docs):
+    def __init__(self, beta, data):
         self.beta = beta
-        self.W = docs.W
-        self.data = Data(docs)
+        self.W = data.W
+        self.data = data
         
         self.dp_matrices = self.init_dp_matrices()
         self.best_lm_word_counts = self.init_best_lm_word_counts() #best_lm_word_counts are the word count from OTHER documents that allowed the highest likelihood of a language model
@@ -175,6 +176,8 @@ class TopicTrackingVIModel(object):
                 break
             seg_points.append(seg_point)
             u = seg_point-1
+            if u == -1:
+                break
         seg_points.reverse()
         hyp_seg = []
         seg_begin = 0
@@ -187,7 +190,17 @@ class TopicTrackingVIModel(object):
         hyp_seg += [0]*seg_len
         hyp_seg[-1] = 0
         return hyp_seg
-            
+    
+    def get_all_segmentations(self):
+        '''
+        Returns a single vector with the final
+        segmentation for all documents.
+        '''
+        all_segs = []
+        for doc_i in range(self.data.n_docs):
+            all_segs += self.get_segmentation(doc_i)
+        return all_segs
+    
 class Data(object):
     '''
     Wrapper class for MultiDocument object. Represent the full collection of documents.
@@ -195,6 +208,7 @@ class Data(object):
     individual word counts for each document. 
     '''
     def __init__(self, docs):
+        self.W = docs.W
         self.n_docs = docs.n_docs
         self.doc_lens = []
         self.docs_word_counts = []
@@ -224,18 +238,40 @@ class Data(object):
         '''
         return self.docs_word_counts[doc_i]
     
+def sigle_vs_md_eval(doc_synth, beta):
+    '''
+    Print the WD results when segmenting single documents
+    and all of them simultaneously (multi-doc model)
+    :param doc_synth: collection of synthetic documents
+    :param beta: beta prior vector
+    '''
+    single_docs = doc_synth.get_single_docs()
+    single_doc_wd = []
+    for doc in single_docs:
+        data = Data(doc)
+        vi_tt_model = TopicTrackingVIModel(beta, data)
+        vi_tt_model.dp_segmentation()
+        single_doc_wd += eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc)
+        
+    single_doc_wd = ['%.3f' % wd for wd in single_doc_wd]
+    data = Data(doc_synth)
+    vi_tt_model = TopicTrackingVIModel(beta, data)
+    vi_tt_model.dp_segmentation()
+    multi_doc_wd = eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc_synth)
+    multi_doc_wd = ['%.3f' % wd for wd in multi_doc_wd]
+    print("Single:%s\nMulti: %s" % (str(single_doc_wd), str(multi_doc_wd)))
+    
+    
 W = 5
 beta = np.array([0.6]*W)
-n_docs = 2
+n_docs = 15
 doc_len = 40
 pi = .08
 sent_len = 15
 doc_synth = CVBSynDoc(beta, pi, sent_len, doc_len, n_docs)
+data = Data(doc_synth)
 
-vi_tt_model = TopicTrackingVIModel(beta, doc_synth)
-vi_tt_model.dp_segmentation()
-print(vi_tt_model.get_segmentation(0))
-print(doc_synth.rho.tolist())
+sigle_vs_md_eval(doc_synth, beta)
 
 '''
 K = 3

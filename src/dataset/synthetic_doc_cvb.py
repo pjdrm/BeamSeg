@@ -5,12 +5,14 @@ Created on Dec 14, 2017
 '''
 import numpy as np
 from scipy import int32
+import copy
 
 class CVBSynDoc(object):
     '''
     classdocs
     '''
     def __init__(self, beta, pi, sent_len, doc_len, n_docs):
+        self.isMD = False if n_docs == 1 else True
         self.n_docs = n_docs
         n_sents = doc_len*n_docs
         self.W = len(beta)
@@ -33,3 +35,19 @@ class CVBSynDoc(object):
                 k += 1
             if u in self.docs_index:
                 k = 0
+                
+    def get_single_docs(self):
+        doc_l = []
+        doc_begin = 0
+        for doc_end in self.docs_index:
+            doc = copy.deepcopy(self)
+            doc.n_sents = doc_end - doc_begin
+            doc.n_docs = 1
+            doc.docs_index = [doc.n_sents]
+            doc.rho = doc.rho[doc_begin:doc_end]
+            doc.rho[-1] = 0
+            doc.U_W_counts = doc.U_W_counts[doc_begin:doc_end, :]
+            doc.isMD = False
+            doc_begin = doc_end
+            doc_l.append(doc)
+        return doc_l
