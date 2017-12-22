@@ -142,56 +142,37 @@ class TopicTrackingVIModel(object):
         :param lm: language model index
         '''
         for doc_i in range(self.data.n_docs):
-            best_seg_ll = -np.inf
             word_counts = self.best_lm_word_counts[doc_i][lm]["wc"]
             cum_sum = np.sum(self.data.doc_word_counts(doc_i)[lm:u+1,:], axis=0)
+            best_seg_ll = -np.inf #self.segment_ll(word_counts+cum_sum)
             other_docs = list(range(self.data.n_docs))
             other_docs.pop(doc_i)
-            doc_combs = list(chain.from_iterable(combinations(other_docs, r) for r in range(1,len(other_docs)+1))) #all n combinations of docs
-            for doc_comb in doc_combs+[[doc_i]]:#[[doc_i]] is the hypothesis of only adding the u sentence from doc_i
-                other_doc_word_counts = word_counts+self.aggregate_u_counts(u, doc_comb)
-                seg_ll = self.segment_ll(other_doc_word_counts+cum_sum)
-                if seg_ll > best_seg_ll:
-                    best_word_counts = other_doc_word_counts
-                    best_seg_ll = seg_ll
-                    
-            best_word_counts -= self.data.doc_word_counts(doc_i)[u]
-            prev_seg_ll = self.get_prev_seg_ll(u, lm, doc_i)#TODO: figure out if this is inconsistent. I might be adding sentence counts from other docs to more than one langauge model
-            total_seg_ll = prev_seg_ll+best_seg_ll
-            self.update_best_lm_word_counts(doc_i, lm, best_word_counts, total_seg_ll)
-            self.dp_matrices[doc_i][u][lm] = total_seg_ll
-            '''
-            word_counts = self.best_lm_word_counts[doc_i][lm]["wc"]
-            word_counts_h1 = word_counts+self.slice_docs(u, doc_i) #Note that these are only counts from other documents
-            cum_sum = np.sum(self.data.doc_word_counts(doc_i)[lm:u+1,:], axis=0)
-            #This assumes a segment u to lm with all documents
-            all_docs_u_lm_seg_ll = self.segment_ll(word_counts_h1+cum_sum)
             
-            if u > 0 and u != lm:
-                #u == lm is the diagonal, for which only one case exists
-                word_counts_h2 = word_counts
-                #This is the case where I had to the language model on u from doc_i
-                u_lm_seg_ll = self.segment_ll(word_counts_h2+cum_sum)#By adding cum_sums[doc_i][u] counts I am just considering the sentence from this doc_i to the LM
-            else:
-                u_lm_seg_ll = -np.inf
-                
-            if all_docs_u_lm_seg_ll > u_lm_seg_ll:
-                best_word_counts = word_counts_h1
-                best_seg_ll = all_docs_u_lm_seg_ll
-            else:
-                best_word_counts = word_counts_h2
-                best_seg_ll = u_lm_seg_ll
-                
+            best_word_counts = np.zeros(self.W)
+            '''
+            This is an approximation where we add sentences counts from other documents
+            and compute the segment likelihood. If it increases we keep the counts,
+            otherwise they are discarded.
+            '''
+            for other_doc in other_docs:
+                word_counts_other_doc = self.data.doc_word_counts(other_doc)[u]
+                seg_ll = self.segment_ll(word_counts+best_word_counts+word_counts_other_doc+cum_sum)
+                if seg_ll > best_seg_ll:
+                    print("Doc %d improves" % other_doc)
+                    best_word_counts += word_counts_other_doc
+                    best_seg_ll = seg_ll
+            best_word_counts += word_counts
+            
             prev_seg_ll = self.get_prev_seg_ll(u, lm, doc_i)#TODO: figure out if this is inconsistent. I might be adding sentence counts from other docs to more than one langauge model
             total_seg_ll = prev_seg_ll+best_seg_ll
             self.update_best_lm_word_counts(doc_i, lm, best_word_counts, total_seg_ll)
             self.dp_matrices[doc_i][u][lm] = total_seg_ll
-            '''
+            
     
     def dp_segmentation(self):
         for u in range(self.data.max_doc_len):
             for lm in range(u+1):
-                print("u: %d lm: %d"%(u, lm))
+                #print("u: %d lm: %d"%(u, lm))
                 self.segment_u(u, lm)
                 
             for doc_i in range(self.data.n_docs):
@@ -306,8 +287,8 @@ def sigle_vs_md_eval(doc_synth, beta):
     
 W = 10
 beta = np.array([0.6]*W)
-n_docs = 15
-doc_len = 20 
+n_docs = 10
+doc_len = 40 
 pi = .2
 sent_len = 5
 doc_synth = CVBSynDoc(beta, pi, sent_len, doc_len, n_docs)
@@ -315,20 +296,6 @@ data = Data(doc_synth)
 
 sigle_vs_md_eval(doc_synth, beta)
 
-'''
-K = 3
-W = 5
-alpha = [15]*K
-beta = [0.6]*W 
-n_words = 1000
-n_iters = 1000
-
-doc_synth = CVBSynDoc(alpha, beta, n_words)
-vi_tt_model = TopicTrackingVIModel(alpha, beta, doc_synth, n_cvb_iters=n_iters)
-vi_tt_model.cvb_algorithm()
-hyp_word_topics = vi_tt_model.get_word_topics()
-ref_word_topics = doc_synth.Z
-print(hyp_word_topics)
-print("ARI %f", adjusted_rand_score(ref_word_topics, hyp_word_topics))
-'''
-        
+#vi_tt_model = TopicTrackingVIModel(beta, data)
+#vi_tt_model.dp_segmentation()
+#print(eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc_synth))
