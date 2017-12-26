@@ -104,7 +104,7 @@ class TopicTrackingVIModel(object):
             This is the diagonal case for which there are no sentences from other docs
             Thus, there are nos restrictions of other docs.
             '''
-            possible_docs = range(self.data.n_docs)
+            possible_docs = list(range(self.data.n_docs))
             possible_docs.pop(doc)
             return possible_docs
         
@@ -338,8 +338,8 @@ sent_len = 5
 doc_synth = CVBSynDoc(beta, pi, sent_len, doc_len, n_docs)
 data = Data(doc_synth)
 
-sigle_vs_md_eval(doc_synth, beta)
+#sigle_vs_md_eval(doc_synth, beta)
 
-#vi_tt_model = TopicTrackingVIModel(beta, data)
-#vi_tt_model.dp_segmentation()
-#print(eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc_synth))
+vi_tt_model = TopicTrackingVIModel(beta, data)
+vi_tt_model.dp_segmentation()
+print(eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc_synth))
