@@ -19,10 +19,13 @@ class TopicTrackingVIModel(object):
         self.W = data.W
         self.data = data
         
-        self.dp_matrices = self.init_dp_matrices()
+        #self.dp_matrices = self.init_dp_matrices()
+        self.dp_matrix = np.zeros((self.data.max_doc_len, self.data.max_doc_len))
         self.best_lm_docs = self.init_best_lm_docs()#keeps track which (other) documents' sentences contributed to the highest likelihood of a language model
         self.best_lm_word_counts = self.init_best_lm_word_counts()#best_lm_word_counts are the word count from OTHER documents that allowed the highest likelihood of a language model
         self.best_seg_tracker = self.init_seg_tracker()
+        self.doc_combs_list = self.init_doc_combs()#All n possible combinations (up to the number of documents). Its a list of pairs where the first element is the combination and second the remaining docs
+        self.best_segmentation = [[] for i in range( self.data.max_doc_len)]
         
         self.seg_ll_C = gammaln(self.beta.sum())-gammaln(self.beta).sum()
     
@@ -51,8 +54,6 @@ class TopicTrackingVIModel(object):
                 best_lm_doc_i.append(lm_doc_i)
             best_lm_docs.append(best_lm_doc_i)
         return best_lm_docs
-                
-            
         
     def init_best_lm_word_counts(self):
         best_lm_word_counts = [[] for i in range(self.data.n_docs)]
@@ -68,6 +69,15 @@ class TopicTrackingVIModel(object):
             best_seg_tracker.append(np.zeros(self.data.doc_len(doc_i), dtype=np.int32))
         
         return best_seg_tracker
+    
+    def init_doc_combs(self):
+        all_docs = set(range(self.data.n_docs))
+        doc_combs = set(chain.from_iterable(combinations(all_docs, r) for r in range(1,len(all_docs)+1)))
+        doc_combs_list = []
+        for doc_comb in doc_combs:
+            other_docs = all_docs - doc_comb
+            doc_combs_list.append([doc_comb, other_docs])
+        return doc_combs_list
         
     def slice_docs(self, u, doc_i):
         '''
@@ -175,6 +185,40 @@ class TopicTrackingVIModel(object):
         seg_ll = self.seg_ll_C+f1-f2
         return seg_ll
     
+    def docs_segment_word_counts(self, u_begin, u_end, docs):
+        '''
+        Returns the commulative counts of the documents from their
+        segment u_begin to u_end.
+        :param u_begin: segment beginning sentence index
+        :param u_end: segment end sentence index
+        :param docs: list of documents
+        '''
+        word_counts = np.zeros(self.W)
+        for doc_i in docs:
+            if self.data.doc_len(doc_i) >= u_end:
+                u_end_real = self.data.doc_len(doc_i)
+            else:
+                u_end_real = u_end
+            word_counts += self.data.doc_word_counts(doc_i)[u_begin:u_end_real+1]
+        return word_counts
+        
+    def fit_sentence(self, u, docs, u_clusters):
+        '''
+        Adds the u sentece of the docs to the best u_cluster. That is,
+        the cluster where u-1 (of the corresponding doc) is located. Note
+        that the cluster is for the best likelihood, thus, we need to add
+        u to the same cluster as u-1.
+        :param u: sentence index
+        :param docs: list of documents
+        :param u_clusters: list of SentenceCluster corresponding to the best segmentation up to u-1
+        '''
+        for doc in docs:
+            for u_cluster in reversed(u_clusters):#We reverse because we are only checking the document list of the cluster
+                if u_cluster.has_doc(u-1, doc):
+                    u_cluster.add_sent(u,doc)
+                    break
+        return u_clusters
+    
     def segment_u(self, u, lm):
         '''
         Estimates, for all documents, the best segmentation
@@ -182,47 +226,34 @@ class TopicTrackingVIModel(object):
         :param u: sentence index
         :param lm: language model index
         '''
-        for doc_i in range(self.data.n_docs):
-            word_counts = self.best_lm_word_counts[doc_i][lm]["wc"]
-            cum_sum = np.sum(self.data.doc_word_counts(doc_i)[lm:u+1,:], axis=0)
-            best_seg_ll = -np.inf #self.segment_ll(word_counts+cum_sum)
-            best_doc_comb = None
-            other_docs = self.possible_other_docs(doc_i, u, lm)
+        best_seg_ll = -np.inf
+        best_seg_clusters = None
+        for doc_comb, other_docs in self.doc_combs_list:
+            best_prev_seg = copy.deepcopy(self.best_segmentation[lm-1])
+            doc_comb_word_counts = self.docs_segment_word_counts(u, lm, doc_comb)
+            updated_clusters = self.fit_sentence(u, other_docs, best_prev_seg)
+            segmentation_ll = 0.0
+            for u_cluster in updated_clusters:
+                segmentation_ll += self.segment_ll(u_cluster.get_word_counts())
+            segmentation_ll = self.segment_ll(doc_comb_word_counts)
+            if segmentation_ll >= best_seg_ll:
+                best_seg_ll = segmentation_ll
+                u_list = list(range(u, lm+1))*len(doc_comb)
+                doc_list = []
+                for doc_i in doc_comb:
+                    doc_list += [doc_i]*(u-lm+1)
+                new_cluster = SentenceCluster(u_list, doc_list)
+                best_prev_seg.append(new_cluster)
+                best_seg_clusters = best_prev_seg
+        self.best_segmentation[lm] = best_seg_clusters
             
-            doc_combs = list(chain.from_iterable(combinations(other_docs, r) for r in range(1,len(other_docs)+1)))#all n combinations of docs
-            for doc_comb in doc_combs:
-                other_doc_word_counts = word_counts+self.aggregate_u_counts(u, doc_comb)
-                seg_ll = self.segment_ll(other_doc_word_counts+cum_sum)
-                if seg_ll > best_seg_ll:
-                    best_word_counts = other_doc_word_counts
-                    best_seg_ll = seg_ll
-                    best_doc_comb = doc_comb
-                    
-            seg_ll_doc_i_u_only = self.segment_ll(word_counts+cum_sum) #case of only adding the u sentence from doc_i
-            if seg_ll_doc_i_u_only > best_seg_ll:
-                best_seg_ll = seg_ll_doc_i_u_only
-                best_doc_comb = [doc_i] #Irrelevant though
-                best_word_counts = word_counts
-                
-            if best_doc_comb is None:
-                print()
-            prev_seg_ll = self.get_prev_seg_ll(u, lm, doc_i) #TODO: figure out if this is inconsistent. I might be adding sentence counts from other docs to more than one langauge model
-            total_seg_ll = prev_seg_ll+best_seg_ll
-            self.update_best_lm_docs(doc_i, u, lm, best_doc_comb)
-            self.update_best_lm_word_counts(doc_i, lm, best_word_counts, total_seg_ll)
-            self.dp_matrices[doc_i][u][lm] = total_seg_ll
-            
-    
     def dp_segmentation(self):
         for u in range(self.data.max_doc_len):
             for lm in range(u+1):
                 #print("u: %d lm: %d"%(u, lm))
                 self.segment_u(u, lm)
                 
-            for doc_i in range(self.data.n_docs):
-                self.best_seg_tracker[doc_i][u] = np.argmax(self.dp_matrices[doc_i][u,0:u+1])
-                
-    def get_segmentation(self, doc_i):
+    def get_segmentation(self, doc_i):#TODO: needs to be redone, segmentation is now based on the SentenceCluster class
         '''
         Returns the final segmentation for a document.
         This is done by backtracking the best segmentations
@@ -299,6 +330,28 @@ class Data(object):
         '''
         return self.docs_word_counts[doc_i]
     
+class SentenceCluster(object):
+    '''
+    Class to keep track of a set of sentences (possibly from different documents)
+    that belong to the same segment.
+    '''
+    def __init__(self, u_list, doc_list):
+        self.u_list = u_list
+        self.doc_list = doc_list
+    
+    def has_doc(self, doc_i):
+        return doc_i in self.doc_list
+    
+    def add_sent(self, u, doc_i):
+        self.u_list.append(u)
+        self.doc_list.append(doc_i)
+        
+    def get_word_counts(self, data):
+        word_counts = np.zeros(data.W)
+        for u, doc_i in zip(self.u_list, self.doc_list):
+            word_counts += data.doc_word_counts(doc_i)[u] #TODO: this looks super inefficient, I should be doing a single slice per document
+        return word_counts
+            
 def sigle_vs_md_eval(doc_synth, beta):
     '''
     Print the WD results when segmenting single documents
