@@ -226,32 +226,39 @@ class TopicTrackingVIModel(object):
         :param u: sentence index
         :param lm: language model index
         '''
+        if lm == 0:#The first column corresponds to having all sentences from all docs in a single segment (there is only one language model)
+            word_counts = self.docs_segment_word_counts(u, lm, range(self.data.n_docs))
+            segmentation_ll = self.segment_ll(word_counts)
+            u_clusters = [SentenceCluster(u, lm, list(range(self.data.n_docs)), self.data)]
+            return segmentation_ll, u_clusters
+            
         best_seg_ll = -np.inf
         best_seg_clusters = None
         for doc_comb, other_docs in self.doc_combs_list:
             best_prev_seg = copy.deepcopy(self.best_segmentation[lm-1])
-            doc_comb_word_counts = self.docs_segment_word_counts(u, lm, doc_comb)
+            doc_comb_seg = SentenceCluster(u, lm, doc_comb, self.data)
             updated_clusters = self.fit_sentence(u, other_docs, best_prev_seg)
             segmentation_ll = 0.0
             for u_cluster in updated_clusters:
                 segmentation_ll += self.segment_ll(u_cluster.get_word_counts())
-            segmentation_ll = self.segment_ll(doc_comb_word_counts)
+            segmentation_ll = self.segment_ll(doc_comb_seg.word_counts)
             if segmentation_ll >= best_seg_ll:
                 best_seg_ll = segmentation_ll
-                u_list = list(range(u, lm+1))*len(doc_comb)
-                doc_list = []
-                for doc_i in doc_comb:
-                    doc_list += [doc_i]*(u-lm+1)
-                new_cluster = SentenceCluster(u_list, doc_list)
-                best_prev_seg.append(new_cluster)
+                best_prev_seg.append(doc_comb_seg)
                 best_seg_clusters = best_prev_seg
-        self.best_segmentation[lm] = best_seg_clusters
+        return best_seg_ll, best_seg_clusters
             
     def dp_segmentation(self):
         for u in range(self.data.max_doc_len):
+            best_seg_ll = -np.inf
+            best_seg_clusters = None
             for lm in range(u+1):
                 #print("u: %d lm: %d"%(u, lm))
-                self.segment_u(u, lm)
+                seg_ll, seg_clusters = self.segment_u(u, lm)
+                if seg_ll > best_seg_ll:
+                    best_seg_ll = seg_ll
+                    best_seg_clusters = seg_clusters
+            self.best_segmentation[lm] = best_seg_clusters
                 
     def get_segmentation(self, doc_i):#TODO: needs to be redone, segmentation is now based on the SentenceCluster class
         '''
@@ -335,9 +342,20 @@ class SentenceCluster(object):
     Class to keep track of a set of sentences (possibly from different documents)
     that belong to the same segment.
     '''
-    def __init__(self, u_list, doc_list):
-        self.u_list = u_list
-        self.doc_list = doc_list
+    def __init__(self, u, lm, docs, data):
+        self.data = data
+        self.u_list = []
+        self.doc_list = []
+        self.word_counts = np.zeros(self.data.W)
+        seg_len = u-lm+1
+        for doc_i in docs:
+            if self.data.doc_len(doc_i) >= u:
+                u_end = self.data.doc_len(doc_i)
+            else:
+                u_end = u_end
+            self.u_list += list(range(lm, u_end+1))
+            self.doc_list += [doc_i]*seg_len
+            self.word_counts += self.data.doc_word_counts(doc_i)[lm:u_end+1]
     
     def has_doc(self, doc_i):
         return doc_i in self.doc_list
@@ -345,12 +363,10 @@ class SentenceCluster(object):
     def add_sent(self, u, doc_i):
         self.u_list.append(u)
         self.doc_list.append(doc_i)
+        self.word_counts += self.data.doc_word_counts(doc_i)[u]
         
-    def get_word_counts(self, data):
-        word_counts = np.zeros(data.W)
-        for u, doc_i in zip(self.u_list, self.doc_list):
-            word_counts += data.doc_word_counts(doc_i)[u] #TODO: this looks super inefficient, I should be doing a single slice per document
-        return word_counts
+    def get_word_counts(self):
+        return self.word_counts
             
 def sigle_vs_md_eval(doc_synth, beta):
     '''
