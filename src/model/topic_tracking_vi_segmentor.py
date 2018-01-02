@@ -134,8 +134,6 @@ class TopicTrackingVIModel(object):
             
     def dp_segmentation(self):
         for u_end in range(self.data.max_doc_len):
-            if u_end == self.data.max_doc_len-1:
-                print()
             best_seg_ll = -np.inf
             best_seg_clusters = None
             for u_begin in range(u_end+1):
@@ -162,7 +160,6 @@ class TopicTrackingVIModel(object):
                     found_doc = True
             if found_doc:
                 hyp_seg[-1] = 1
-        #hyp_seg[0] = 0
         return hyp_seg
     
     def get_all_segmentations(self):
@@ -290,12 +287,12 @@ def sigle_vs_md_eval(doc_synth, beta):
         
     print("Single:%s time: %f\nMulti: %s time: %f" % (str(single_doc_wd), sd_time, str(multi_doc_wd), md_time))
     
-W = 10
+W = 300
 beta = np.array([0.6]*W)
 n_docs = 2
-doc_len = 4
-pi = 0.00
-sent_len = 200
+doc_len = 10
+pi = 0.06
+sent_len = 10
 doc_synth = CVBSynDoc(beta, pi, sent_len, doc_len, n_docs)
 data = Data(doc_synth)
 
