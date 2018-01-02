@@ -62,6 +62,11 @@ class TopicTrackingVIModel(object):
                     break
     
     def get_last_cluster(self, doc_i, u_clusters):
+        '''
+        Returns the last cluster index where doc_i is present
+        :param doc_i: document index
+        :param u_clusters: list of sentence cluster corresponding to a segmentation
+        '''
         found_doc = False
         for cluster_i, u_cluster in enumerate(u_clusters):
             if u_cluster.has_doc(doc_i):
@@ -72,10 +77,19 @@ class TopicTrackingVIModel(object):
         return len(u_clusters)-1 #case where the last cluster was the last one in the list
     
     def new_seg_point(self, u_begin, u_end, doc_comb, u_clusters):
+        '''
+        Considers the segment u_begin to u_end as a new segmentation points for all
+        documents in doc_comb. The senteces are added to the corresponding cluster
+        (a new cluster is generated if necesary).
+        :param u_begin: beginning sentence index
+        :param u_end: end sentence index
+        :param doc_comb: list of document indexes
+        :param u_clusters: list of sentence cluster corresponding to a segmentation
+        '''
         n_cluster = len(u_clusters)
         for doc_i in doc_comb:
             cluster_i = self.get_last_cluster(doc_i, u_clusters)
-            if cluster_i+1 < n_cluster:
+            if cluster_i+1 < n_cluster: #The language model corresponding to this cluster might already exists due to other documents having different segmentation at this stage
                 u_clusters[cluster_i+1].add_sents(u_begin, u_end, doc_i)
             else:
                 new_cluster = SentenceCluster(u_begin, u_end, [doc_i], self.data)
@@ -276,16 +290,15 @@ def sigle_vs_md_eval(doc_synth, beta):
     
 W = 300
 beta = np.array([0.6]*W)
-n_docs = 10
-doc_len = 20
-pi = 0.06
-sent_len = 15
+n_docs = 2
+doc_len = 15
+pi = 0.00
+sent_len = 100
 doc_synth = CVBSynDoc(beta, pi, sent_len, doc_len, n_docs)
 data = Data(doc_synth)
 
-sigle_vs_md_eval(doc_synth, beta)
+#sigle_vs_md_eval(doc_synth, beta)
 
-'''
 vi_tt_model = TopicTrackingVIModel(beta, data)
 vi_tt_model.dp_segmentation()
 
@@ -302,4 +315,3 @@ for md_seg, gs_seg in zip(md_segs, gs_segs):
     print("MD: " + str(md_seg)+"\n")
     
 print(eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc_synth))
-'''
