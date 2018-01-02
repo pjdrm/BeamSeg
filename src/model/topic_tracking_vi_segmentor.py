@@ -21,6 +21,7 @@ class TopicTrackingVIModel(object):
         
         self.doc_combs_list = self.init_doc_combs()#All n possible combinations (up to the number of documents). Its a list of pairs where the first element is the combination and second the remaining docs
         self.best_segmentation = [[] for i in range( self.data.max_doc_len)]
+        self.last_lm = self.init_last_lm()
         
         self.seg_ll_C = gammaln(self.beta.sum())-gammaln(self.beta).sum()
     
@@ -32,6 +33,15 @@ class TopicTrackingVIModel(object):
             other_docs = all_docs - set(doc_comb)
             doc_combs_list.append([doc_comb, other_docs])
         return doc_combs_list
+    
+    def init_last_lm(self):
+        last_lm = []
+        for u in range(self.data.max_doc_len):
+            dict = {}
+            for doc_i in range(self.data.n_docs):
+                dict[doc_i] = 0
+            last_lm.append(dict)
+        return last_lm
     
     def segment_ll(self, word_counts):
         '''
@@ -262,7 +272,7 @@ beta = np.array([0.6]*W)
 n_docs = 2
 doc_len = 4
 pi = 0.0
-sent_len = 100
+sent_len = 1000
 doc_synth = CVBSynDoc(beta, pi, sent_len, doc_len, n_docs)
 data = Data(doc_synth)
 
@@ -271,3 +281,15 @@ data = Data(doc_synth)
 vi_tt_model = TopicTrackingVIModel(beta, data)
 vi_tt_model.dp_segmentation()
 print(eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc_synth))
+
+md_segs = []
+for doc_i in range(vi_tt_model.data.n_docs):
+    md_segs.append(vi_tt_model.get_segmentation(doc_i))
+        
+gs_segs = []
+for gs_doc in doc_synth.get_single_docs():
+    gs_segs.append(gs_doc.rho)
+    
+for md_seg, gs_seg in zip(md_segs, gs_segs):
+    print("GS: " + str(gs_seg.tolist()))
+    print("MD: " + str(md_seg)+"\n")
