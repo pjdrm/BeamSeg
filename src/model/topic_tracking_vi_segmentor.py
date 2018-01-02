@@ -79,8 +79,8 @@ class TopicTrackingVIModel(object):
     def new_seg_point(self, u_begin, u_end, doc_comb, u_clusters):
         '''
         Considers the segment u_begin to u_end as a new segmentation points for all
-        documents in doc_comb. The senteces are added to the corresponding cluster
-        (a new cluster is generated if necesary).
+        documents in doc_comb. The sentences are added to the corresponding cluster
+        (a new cluster is generated if necessary).
         :param u_begin: beginning sentence index
         :param u_end: end sentence index
         :param doc_comb: list of document indexes
@@ -134,6 +134,8 @@ class TopicTrackingVIModel(object):
             
     def dp_segmentation(self):
         for u_end in range(self.data.max_doc_len):
+            if u_end == self.data.max_doc_len-1:
+                print()
             best_seg_ll = -np.inf
             best_seg_clusters = None
             for u_begin in range(u_end+1):
@@ -288,12 +290,12 @@ def sigle_vs_md_eval(doc_synth, beta):
         
     print("Single:%s time: %f\nMulti: %s time: %f" % (str(single_doc_wd), sd_time, str(multi_doc_wd), md_time))
     
-W = 300
+W = 10
 beta = np.array([0.6]*W)
 n_docs = 2
-doc_len = 15
+doc_len = 4
 pi = 0.00
-sent_len = 100
+sent_len = 200
 doc_synth = CVBSynDoc(beta, pi, sent_len, doc_len, n_docs)
 data = Data(doc_synth)
 

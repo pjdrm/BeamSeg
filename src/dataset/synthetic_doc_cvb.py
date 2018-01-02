@@ -18,8 +18,8 @@ class CVBSynDoc(object):
         self.W = len(beta)
         self.rho = np.random.binomial(1, pi, size=n_sents)
         #The last sentence of each document must be 1
-        for u_end in range(doc_len-1, n_sents, doc_len):
-            self.rho[u_end] = 1
+        for u in range(doc_len-1, n_sents, doc_len):
+            self.rho[u] = 1
         #... except last sentence.
         self.rho[-1] = 0
         self.docs_index = range(doc_len, n_sents+1, doc_len)
@@ -28,12 +28,12 @@ class CVBSynDoc(object):
             
         self.U_W_counts = np.zeros((n_sents, self.W), dtype=int32)
         k = 0
-        for u_end in range(len(self.rho)):
+        for u in range(len(self.rho)):
             word_counts = np.random.multinomial(sent_len, self.phi[k], size=1)
-            self.U_W_counts[u_end] = word_counts
-            if self.rho[u_end] == 1:
+            self.U_W_counts[u] = word_counts
+            if self.rho[u] == 1:
                 k += 1
-            if u_end in self.docs_index:
+            if u+1 in self.docs_index:
                 k = 0
                 
     def get_single_docs(self):
