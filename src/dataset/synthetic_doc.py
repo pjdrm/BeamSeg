@@ -31,7 +31,7 @@ class SyntheticDocument(object):
         self.inv_vocab =  {v: k for k, v in self.vocab.items()}
         self.sents_len = np.array([self.sentence_l]*self.n_sents)
         self.rho = np.random.binomial(1, self.pi, size=self.n_sents)
-        #I assume that a sentence u with rho_u = 1 belong to the previous segment.
+        #I assume that a sentence u_end with rho_u = 1 belong to the previous segment.
         #rho_u = 1 means a segment is coming next, this does not make sense for 
         #the last sentence. Thus, we set it to 0.
         self.rho[-1] = 0
@@ -221,8 +221,8 @@ class SyntheticRndTopicMultiDoc(SyntheticDocument):
             self.doc_names.append("d" + str(i) + ".txt")
         
         #The last sentence of each document must be 1
-        for u in range(self.doc_len-1, self.n_sents, self.doc_len):
-            self.rho[u] = 1
+        for u_end in range(self.doc_len-1, self.n_sents, self.doc_len):
+            self.rho[u_end] = 1
         #... except last sentence.
         self.rho[-1] = 0
         self.rho_eq_1 = np.append(np.nonzero(self.rho)[0], [self.n_sents-1])
@@ -274,8 +274,8 @@ class SyntheticDittoDocs(SyntheticDocument):
         
         self.rho = np.tile(data.rho, n_copies)
         #The last sentence of each document must be 1
-        for u in range(data.n_sents-1, data.n_sents*n_copies, data.n_sents):
-            self.rho[u] = 1
+        for u_end in range(data.n_sents-1, data.n_sents*n_copies, data.n_sents):
+            self.rho[u_end] = 1
         #... except last sentence.
         self.rho[-1] = 0
         self.rho_eq_1 = np.append(np.nonzero(self.rho)[0], [self.n_sents-1])
