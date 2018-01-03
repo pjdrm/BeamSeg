@@ -6,7 +6,7 @@ Created on Nov 1, 2017
 import numpy as np
 import copy
 from tqdm import trange
-from dataset.synthetic_doc_cvb import CVBSynDoc
+from dataset.synthetic_doc_cvb import CVBSynDoc, CVBSynDoc2
 from scipy.special import gammaln
 import eval.eval_tools as eval_tools
 from itertools import chain, combinations
@@ -165,9 +165,9 @@ class TopicTrackingVIModel(object):
                 if seg_ll > best_seg_ll:
                     best_seg_ll = seg_ll
                     best_seg_clusters = seg_clusters
-            self.print_seg(best_seg_clusters)
+            #self.print_seg(best_seg_clusters)
             self.best_segmentation[u_end] = best_seg_clusters
-        print("==========================")
+        #print("==========================")
     
 class Data(object):
     '''
@@ -216,12 +216,17 @@ class SentenceCluster(object):
         self.u_list = []
         self.doc_list = []
         self.word_counts = np.zeros(self.data.W)
-        seg_len = u_end-u_begin+1
         for doc_i in docs:
-            if self.data.doc_len(doc_i) < u_end:
-                u_end_true = self.data.doc_len(doc_i)
+            doc_i_len = self.data.doc_len(doc_i)
+            #Accounting for documents with different lengths
+            if u_begin > doc_i_len-1:
+                continue
+            
+            if u_end > doc_i_len-1:
+                u_end_true = doc_i_len-1#-1 (?)
             else:
                 u_end_true = u_end
+            seg_len = u_end_true-u_begin+1
             self.u_list += list(range(u_begin, u_end_true+1))
             self.doc_list += [doc_i]*seg_len
             self.word_counts += np.sum(self.data.doc_word_counts(doc_i)[u_begin:u_end_true+1], axis=0)
@@ -230,6 +235,13 @@ class SentenceCluster(object):
         return doc_i in self.doc_list
     
     def add_sents(self, u_begin, u_end, doc_i):
+        doc_i_len = self.data.doc_len(doc_i)
+        #Accounting for documents with different lengths
+        if u_begin > doc_i_len-1:
+            return
+        if u_end > doc_i_len-1:
+            u_end = doc_i_len-1
+            
         seg = list(range(u_begin, u_end+1))
         seg_len = u_end-u_begin+1
         self.u_list += seg
@@ -304,14 +316,15 @@ def md_eval(doc_synth, beta):
     
 W = 80
 beta = np.array([0.3]*W)
-n_docs = 4
+n_docs = 2
 doc_len = 40
-pi = 0.1
+pi = 0.4
 sent_len = 10
-doc_synth = CVBSynDoc(beta, pi, sent_len, doc_len, n_docs)
+#doc_synth = CVBSynDoc(beta, pi, sent_len, doc_len, n_docs)
+doc_synth = CVBSynDoc2(beta, pi, sent_len, 3, n_docs)
 data = Data(doc_synth)
 
-sigle_vs_md_eval(doc_synth, beta)
-#md_eval(doc_synth, beta)
+#sigle_vs_md_eval(doc_synth, beta)
+md_eval(doc_synth, beta)
 #md_eval(doc_synth, beta)
 
