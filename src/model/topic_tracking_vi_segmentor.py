@@ -111,6 +111,16 @@ class TopicTrackingVIModel(object):
         seg_ll = self.seg_ll_C+f1-f2
         return seg_ll
     
+    def segmentation_ll(self, u_clusters):
+        '''
+        Returns the log likelihood of the segmetnation of all documents.
+        :param u_clusters: list of SentenceCluster corresponding to the best segmentation up to u-1
+        '''
+        segmentation_ll = 0.0
+        for u_cluster in u_clusters:
+            segmentation_ll += self.segment_ll(u_cluster.get_word_counts())
+        return segmentation_ll
+    
     def fit_sentences(self, u_begin, u_end, docs, u_clusters):
         '''
         Adds the u sentences (a segment) of the docs to the best u_cluster. That is,
@@ -166,45 +176,76 @@ class TopicTrackingVIModel(object):
             self.fit_sentences(u_begin, u_end, other_docs, best_seg) #Note that this changes best_seg
             self.new_seg_point(u_begin, u_end, doc_comb, best_seg) #Note that this changes best_seg
             #if self.valid_segmentation(best_seg):
-            segmentation_ll = 0.0
-            for u_cluster in best_seg:
-                segmentation_ll += self.segment_ll(u_cluster.get_word_counts())
+            segmentation_ll = self.segmentation_ll(best_seg)
             if segmentation_ll >= best_seg_ll:
                 best_seg_ll = segmentation_ll
                 best_seg_clusters = best_seg
         return best_seg_ll, best_seg_clusters
+    
+    def segment_u_fast(self, u_begin, u_end):
+        '''
+        Estimates, for all documents, the best segmentation
+        from u_end to u_begin (column index in the DP matrix).
+        Implements a faster version that does not explroe all self.doc_combs_list.
+        :param u_end: sentence index
+        :param u_begin: language model index
+        '''
+        if u_begin == 0:#The first column corresponds to having all sentences from all docs in a single segment (there is only one language model)
+            u_cluster = SentenceCluster(u_begin, u_end, list(range(self.data.n_docs)), self.data)
+            segmentation_ll = self.segment_ll(u_cluster.get_word_counts())
+            return segmentation_ll, [u_cluster]
+           
+        final_seg_clusters = copy.deepcopy(self.best_segmentation[u_begin-1])
+        prev_doc_comb = set(range(self.data.n_docs))
+        self.new_seg_point(u_begin, u_end, prev_doc_comb, final_seg_clusters)
+        final_seg_ll = self.segmentation_ll(final_seg_clusters)
+        all_docs = set(range(self.data.n_docs))
             
-    def dp_segmentation(self, min_seg_diff=False):
-        for u_end in range(self.data.max_doc_len):
+        while 1:
+            doc_combs = combinations(prev_doc_comb, len(prev_doc_comb)-1)
+            best_seg_ll = -np.inf
+            best_doc_comb = None
+            for doc_comb in doc_combs:
+                if len(doc_comb) == 0:
+                    break #Means we have reached a point where we dont segment any of the documents.
+                doc_comb = set(doc_comb)
+                best_seg = copy.deepcopy(self.best_segmentation[u_begin-1])
+                other_docs = all_docs-doc_comb
+                self.fit_sentences(u_begin, u_end, other_docs, best_seg) #Note that this changes best_seg
+                self.new_seg_point(u_begin, u_end, doc_comb, best_seg) #Note that this changes best_seg
+                segmentation_ll = self.segmentation_ll(best_seg)
+                if segmentation_ll >= best_seg_ll:
+                    best_seg_ll = segmentation_ll
+                    best_seg_clusters = best_seg
+                    best_doc_comb = doc_comb
+                    
+            if best_seg_ll > final_seg_ll:
+                prev_doc_comb = best_doc_comb
+                final_seg_ll = best_seg_ll
+                final_seg_clusters = best_seg_clusters
+            else:
+                break
+        
+        return final_seg_ll, final_seg_clusters
+            
+    def dp_segmentation(self, fast_seg=False):
+        if fast_seg:
+            seg_func = self.segment_u_fast
+        else:
+            seg_func = self.segment_u
+        
+        t = trange(self.data.max_doc_len, desc='', leave=True)
+        for u_end in t:
             best_seg_ll = -np.inf
             best_seg_clusters = None
-            full_seg_clusters = []
-            full_seg_ll = []
             for u_begin in range(u_end+1):
-                seg_ll, seg_clusters = self.segment_u(u_begin, u_end)
-                if min_seg_diff and u_end == self.data.max_doc_len-1:
-                    full_seg_clusters.append(seg_clusters)
-                    full_seg_ll.append(seg_ll)
-                else:
-                    if seg_ll > best_seg_ll:
+                seg_ll, seg_clusters = seg_func(u_begin, u_end)
+                if seg_ll > best_seg_ll:
                         best_seg_ll = seg_ll
                         best_seg_clusters = seg_clusters
+                t.set_description("Matrix: (%d,%d)" % (u_end, u_begin))
             self.best_segmentation[u_end] = best_seg_clusters
             #self.print_seg(best_seg_clusters)
-        if min_seg_diff:
-            self.best_segmentation[u_end] = best_seg_clusters
-            bests_segs_indexes = np.array(full_seg_ll).argsort()[:2]
-            best_seg_diff = np.inf
-            best_seg = None
-            for c_i in bests_segs_indexes:
-                u_cluster = full_seg_clusters[c_i]
-                if len(u_cluster) == 1:
-                    continue
-                seg_diff = self.get_seg_diff(u_cluster)
-                if seg_diff < best_seg_diff:
-                    best_seg_diff = seg_diff
-                    best_seg = u_cluster
-            self.best_segmentation[self.data.max_doc_len-1] = best_seg
         #print("==========================")
     
 class Data(object):
@@ -323,33 +364,36 @@ def sigle_vs_md_eval(doc_synth, beta):
     for doc_i in range(vi_tt_model.data.n_docs):
         md_segs.append(vi_tt_model.get_segmentation(doc_i, vi_tt_model.best_segmentation[-1]))
      
-    '''   
-    md_segs_valid_segs = []
+    md_fast_segs = []
     vi_tt_model = TopicTrackingVIModel(beta, data)
-    vi_tt_model.dp_segmentation(min_seg_diff=True)
-    multi_valid_doc_wd = eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc_synth)
-    multi_valid_doc_wd = ['%.3f' % wd for wd in multi_valid_doc_wd]
+    start = time.time()
+    vi_tt_model.dp_segmentation(fast_seg=True)
+    end = time.time()
+    md_fast_time = (end - start)
+    multi_fast_doc_wd = eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc_synth)
+    multi_fast_doc_wd = ['%.3f' % wd for wd in multi_fast_doc_wd]
     for doc_i in range(vi_tt_model.data.n_docs):
-        md_segs_valid_segs.append(vi_tt_model.get_segmentation(doc_i, vi_tt_model.best_segmentation[-1]))
-    '''
+        md_fast_segs.append(vi_tt_model.get_segmentation(doc_i, vi_tt_model.best_segmentation[-1]))
         
     gs_segs = []
     for gs_doc in doc_synth.get_single_docs():
         gs_segs.append(gs_doc.rho)
         
-    for sd_seg, md_seg, gs_seg in zip(sd_segs, md_segs, gs_segs):
+    for sd_seg, md_seg, md_segs_valid_seg, gs_seg in zip(sd_segs, md_segs, md_fast_segs, gs_segs):
         print("GS: " + str(gs_seg.tolist()))
         print("SD: " + str(sd_seg))
         print("MD: " + str(md_seg))
-        #print("MV: " + str(md_segs_valid_seg)+"\n")
+        print("MF: " + str(md_segs_valid_seg)+"\n")
         
     print("Single:%s time: %f\nMulti: %s time: %f" % (str(single_doc_wd), sd_time, str(multi_doc_wd), md_time))
-    #print("MultiV:%s" % (str(multi_valid_doc_wd)))
+    print("MultiV:%s time: %f" % (str(multi_fast_doc_wd), md_fast_time))
     
 def md_eval(doc_synth, beta):
     vi_tt_model = TopicTrackingVIModel(beta, data)
-    vi_tt_model.dp_segmentation()
-    
+    start = time.time()
+    vi_tt_model.dp_segmentation(fast_seg=True)
+    end = time.time()
+    seg_time = (end - start)
     md_segs = []
     for doc_i in range(vi_tt_model.data.n_docs):
         md_segs.append(vi_tt_model.get_segmentation(doc_i, vi_tt_model.best_segmentation[-1]))
@@ -361,14 +405,15 @@ def md_eval(doc_synth, beta):
     for md_seg, gs_seg in zip(md_segs, gs_segs):
         print("GS: " + str(gs_seg.tolist()))
         print("MD: " + str(md_seg)+"\n")
+    print("Time: %f" % seg_time)
         
     print(eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc_synth))
     
-W = 80
+W = 300
 beta = np.array([0.3]*W)
-n_docs = 3
+n_docs = 15
 doc_len = 20
-pi = 0.12
+pi = 0.1 
 sent_len = 10
 #doc_synth = CVBSynDoc(beta, pi, sent_len, doc_len, n_docs)
 n_seg = 3
@@ -377,5 +422,3 @@ data = Data(doc_synth)
 
 sigle_vs_md_eval(doc_synth, beta)
 #md_eval(doc_synth, beta)
-#md_eval(doc_synth, beta)
-
