@@ -358,7 +358,7 @@ def sigle_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_fla
     end = time.time()
     sd_time = (end - start)
     #single_doc_wd = ['%.3f' % wd for wd in single_doc_wd]
-    time_wd_results.append(("SD", sd_time, single_doc_wd))
+    time_wd_results.append(("SD", sd_time, ['%.3f' % wd for wd in single_doc_wd]))
     
     data = Data(doc_synth)
     if md_all_combs:
@@ -367,10 +367,9 @@ def sigle_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_fla
         vi_tt_model.dp_segmentation()
         end = time.time()
         md_time = (end - start)
-        time_wd_results.append(("MD", md_time))
         multi_doc_wd = eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc_synth)
         #multi_doc_wd = ['%.3f' % wd for wd in multi_doc_wd]
-        time_wd_results.append(multi_doc_wd)
+        time_wd_results.append(("MD", md_time, ['%.3f' % wd for wd in multi_doc_wd]))
         
         md_segs = []
         for doc_i in range(vi_tt_model.data.n_docs):
@@ -385,7 +384,7 @@ def sigle_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_fla
         md_fast_time = (end - start)
         multi_fast_doc_wd = eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc_synth)
         #multi_fast_doc_wd = ['%.3f' % wd for wd in multi_fast_doc_wd]
-        time_wd_results.append(("MF", md_fast_time, multi_fast_doc_wd))
+        time_wd_results.append(("MF", md_fast_time, ['%.3f' % wd for wd in multi_fast_doc_wd]))
         for doc_i in range(vi_tt_model.data.n_docs):
             md_fast_segs.append(vi_tt_model.get_segmentation(doc_i, vi_tt_model.best_segmentation[-1]))
         
@@ -396,15 +395,27 @@ def sigle_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_fla
             
         print_segmentation("GS", gs_segs)
         print_segmentation("SD", sd_segs)
-        if md_all_combs:
-            print_segmentation("MD", md_segs)
-        if md_fast:
-            print_segmentation("MF", md_fast_segs)
+        if md_all_combs and md_fast:
+            for doc_i in range(doc_synth.n_docs):
+                print("%s: %s" % ("GS", str(gs_segs[doc_i])))
+                print("%s: %s" % ("SD", str(sd_segs[doc_i])))
+                print("%s: %s" % ("MD", str(md_segs[doc_i])))
+                print("%s: %s\n" % ("MF", str(md_fast_segs[doc_i])))
+        elif md_all_combs:
+            for doc_i in range(doc_synth.n_docs):
+                print("%s: %s" % ("GS", str(gs_segs[doc_i])))
+                print("%s: %s" % ("SD", str(sd_segs[doc_i])))
+                print("%s: %s\n" % ("MD", str(md_segs[doc_i])))
+        else:
+            for doc_i in range(doc_synth.n_docs):
+                print("%s: %s" % ("GS", str(gs_segs[doc_i])))
+                print("%s: %s" % ("SD", str(sd_segs[doc_i])))
+                print("%s: %s\n" % ("MF", str(md_fast_segs[doc_i])))
     else:
         return single_doc_wd, multi_fast_doc_wd
       
     for time_res in time_wd_results:  
-        print("%s: %s time: .3%f\n" % (time_res[0], time_res[1]))
+        print("%s: %s time: %f" % (time_res[0], time_res[2], time_res[1]))
     
 def md_eval(doc_synth, beta):
     vi_tt_model = TopicTrackingVIModel(beta, data)
@@ -528,6 +539,6 @@ n_seg = 3
 doc_synth = CVBSynDoc2(beta, pi, sent_len, n_seg, n_docs)
 data = Data(doc_synth)
 
-incremental_eval(doc_synth, beta)
-#sigle_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_flag=True)
+#incremental_eval(doc_synth, beta)
+sigle_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_flag=True)
 #md_eval(doc_synth, beta)
