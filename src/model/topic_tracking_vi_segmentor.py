@@ -11,6 +11,8 @@ from scipy.special import gammaln
 import eval.eval_tools as eval_tools
 from itertools import chain, combinations
 import time
+import toyplot
+import toyplot.pdf
 
 class TopicTrackingVIModel(object):
 
@@ -113,7 +115,7 @@ class TopicTrackingVIModel(object):
     
     def segmentation_ll(self, u_clusters):
         '''
-        Returns the log likelihood of the segmetnation of all documents.
+        Returns the log likelihood of the segmentation of all documents.
         :param u_clusters: list of SentenceCluster corresponding to the best segmentation up to u-1
         '''
         segmentation_ll = 0.0
@@ -329,16 +331,22 @@ class SentenceCluster(object):
         
     def get_word_counts(self):
         return self.word_counts
-            
-def sigle_vs_md_eval(doc_synth, beta):
+
+def print_segmentation(seg_desc, seg_results):
+    for seg in seg_results:
+        print("%s: %s" % (seg_desc, str(seg)))
+        
+def sigle_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_flag=False):
     '''
     Print the WD results when segmenting single documents
     and all of them simultaneously (multi-doc model)
     :param doc_synth: collection of synthetic documents
     :param beta: beta prior vector
+    :param print_flag: boolean to print or not the segmentation results
     '''
     single_docs = doc_synth.get_single_docs()
     single_doc_wd = []
+    time_wd_results = []
     start = time.time()
     sd_segs = []
     for doc in single_docs:
@@ -349,44 +357,54 @@ def sigle_vs_md_eval(doc_synth, beta):
         single_doc_wd += eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc)
     end = time.time()
     sd_time = (end - start)
-        
-    single_doc_wd = ['%.3f' % wd for wd in single_doc_wd]
-    data = Data(doc_synth)
-    vi_tt_model = TopicTrackingVIModel(beta, data)
-    start = time.time()
-    vi_tt_model.dp_segmentation()
-    end = time.time()
-    md_time = (end - start)
-    multi_doc_wd = eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc_synth)
-    multi_doc_wd = ['%.3f' % wd for wd in multi_doc_wd]
+    #single_doc_wd = ['%.3f' % wd for wd in single_doc_wd]
+    time_wd_results.append(("SD", sd_time, single_doc_wd))
     
-    md_segs = []
-    for doc_i in range(vi_tt_model.data.n_docs):
-        md_segs.append(vi_tt_model.get_segmentation(doc_i, vi_tt_model.best_segmentation[-1]))
-     
-    md_fast_segs = []
-    vi_tt_model = TopicTrackingVIModel(beta, data)
-    start = time.time()
-    vi_tt_model.dp_segmentation(fast_seg=True)
-    end = time.time()
-    md_fast_time = (end - start)
-    multi_fast_doc_wd = eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc_synth)
-    multi_fast_doc_wd = ['%.3f' % wd for wd in multi_fast_doc_wd]
-    for doc_i in range(vi_tt_model.data.n_docs):
-        md_fast_segs.append(vi_tt_model.get_segmentation(doc_i, vi_tt_model.best_segmentation[-1]))
+    data = Data(doc_synth)
+    if md_all_combs:
+        vi_tt_model = TopicTrackingVIModel(beta, data)
+        start = time.time()
+        vi_tt_model.dp_segmentation()
+        end = time.time()
+        md_time = (end - start)
+        time_wd_results.append(("MD", md_time))
+        multi_doc_wd = eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc_synth)
+        #multi_doc_wd = ['%.3f' % wd for wd in multi_doc_wd]
+        time_wd_results.append(multi_doc_wd)
         
-    gs_segs = []
-    for gs_doc in doc_synth.get_single_docs():
-        gs_segs.append(gs_doc.rho)
+        md_segs = []
+        for doc_i in range(vi_tt_model.data.n_docs):
+            md_segs.append(vi_tt_model.get_segmentation(doc_i, vi_tt_model.best_segmentation[-1]))
+    
+    if md_fast: 
+        md_fast_segs = []
+        vi_tt_model = TopicTrackingVIModel(beta, data)
+        start = time.time()
+        vi_tt_model.dp_segmentation(fast_seg=True)
+        end = time.time()
+        md_fast_time = (end - start)
+        multi_fast_doc_wd = eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc_synth)
+        #multi_fast_doc_wd = ['%.3f' % wd for wd in multi_fast_doc_wd]
+        time_wd_results.append(("MF", md_fast_time, multi_fast_doc_wd))
+        for doc_i in range(vi_tt_model.data.n_docs):
+            md_fast_segs.append(vi_tt_model.get_segmentation(doc_i, vi_tt_model.best_segmentation[-1]))
         
-    for sd_seg, md_seg, md_segs_valid_seg, gs_seg in zip(sd_segs, md_segs, md_fast_segs, gs_segs):
-        print("GS: " + str(gs_seg.tolist()))
-        print("SD: " + str(sd_seg))
-        print("MD: " + str(md_seg))
-        print("MF: " + str(md_segs_valid_seg)+"\n")
-        
-    print("Single:%s time: %f\nMulti: %s time: %f" % (str(single_doc_wd), sd_time, str(multi_doc_wd), md_time))
-    print("MultiV:%s time: %f" % (str(multi_fast_doc_wd), md_fast_time))
+    if print_flag:
+        gs_segs = []
+        for gs_doc in doc_synth.get_single_docs():
+            gs_segs.append(gs_doc.rho.tolist())
+            
+        print_segmentation("GS", gs_segs)
+        print_segmentation("SD", sd_segs)
+        if md_all_combs:
+            print_segmentation("MD", md_segs)
+        if md_fast:
+            print_segmentation("MF", md_fast_segs)
+    else:
+        return single_doc_wd, multi_fast_doc_wd
+      
+    for time_res in time_wd_results:  
+        print("%s: %s time: .3%f\n" % (time_res[0], time_res[1]))
     
 def md_eval(doc_synth, beta):
     vi_tt_model = TopicTrackingVIModel(beta, data)
@@ -409,16 +427,107 @@ def md_eval(doc_synth, beta):
         
     print(eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc_synth))
     
+def merge_docs(target_docs):
+    target_docs_copy = copy.deepcopy(target_docs)
+    merged_doc = target_docs_copy[0]
+    all_rho = []
+    all_docs_index = []
+    all_U_W_counts = None
+    carry_index = 0
+    for doc_synth in target_docs:
+        new_index = (np.array(doc_synth.docs_index)+carry_index).tolist()
+        carry_index = new_index[-1]
+        all_docs_index += new_index
+        doc_synth.rho[-1] = 1
+        all_rho += doc_synth.rho.tolist()
+        if all_U_W_counts is None:
+            all_U_W_counts = doc_synth.U_W_counts
+        else:
+            all_U_W_counts = np.vstack((all_U_W_counts, doc_synth.U_W_counts))
+            
+    all_rho[-1] = 0
+    
+    merged_doc.n_docs = len(target_docs)
+    merged_doc.rho = all_rho
+    merged_doc.docs_index = all_docs_index
+    merged_doc.U_W_counts = all_U_W_counts
+    merged_doc.isMD = True
+    
+    return merged_doc
+    
+def incremental_eval(doc_synth, beta):
+    def grouped_bars(axes, data, group_names, group_width=None):
+        if group_width is None:
+            group_width=1 - 1.0 / (data.shape[1] + 1)
+            
+        group_left_edges = np.arange(data.shape[0], dtype="float") - (group_width / 2.0)
+        bar_width = group_width / data.shape[1]
+        
+        marks = []
+        axes.x.ticks.locator = toyplot.locator.Explicit(labels=group_names)
+        for index, series in enumerate(data.T):
+            left_edges = group_left_edges + (index * bar_width)
+            right_edges = group_left_edges + ((index + 1) * bar_width)
+            marks.append(axes.bars(left_edges, right_edges, series, opacity=0.5))
+            
+        return marks
+
+    single_docs = doc_synth.get_single_docs()
+    all_sd_results = []
+    all_md_results = []
+    for i in range(1, doc_synth.n_docs+1):
+        target_docs = single_docs[:i]
+        merged_doc_synth = merge_docs(target_docs)
+        sd_results, md_results = sigle_vs_md_eval(merged_doc_synth, beta, md_all_combs=False)
+        all_sd_results.append(sd_results)
+        all_md_results.append(md_results)
+        
+    final_results = []
+    for sd_wds, mf_wds in zip(all_sd_results, all_md_results):
+        n_ties = 0.0
+        n_mf_win = 0.0
+        n_mf_lost = 0.0
+        for sd_wd, mf_wd in zip(sd_wds, mf_wds):
+            if sd_wd == mf_wd:
+                n_ties += 1.0
+            elif mf_wd > sd_wd:
+                n_mf_win += 1.0
+            else:
+                n_mf_lost += 1.0
+        n_total = n_ties+n_mf_win+n_mf_lost
+        n_ties_percent = n_ties/n_total
+        n_mf_win_percent = n_mf_win/n_total
+        n_mf_lost_percent = n_mf_lost/n_total
+        final_results.append(np.array([n_ties_percent, n_mf_win_percent, n_mf_lost_percent])*100.0)
+        
+    group_names = list(range(1, doc_synth.n_docs+1))
+    canvas = toyplot.Canvas(width=300, height=300)
+    axes = canvas.cartesian()
+    axes.x.label.text = "#Docs"
+    axes.y.label.text = "Percentage"
+    marks = grouped_bars(axes, np.array(final_results), group_names)
+    canvas.legend([
+    ("Tie", marks[0]),
+    ("Win", marks[1]),
+    ("Lose", marks[2])
+    ],
+    corner=("top-right", 0, 100, 50),
+    );
+    toyplot.pdf.render(canvas, "incremental_eval_results.pdf")
+    
+    
+    
 W = 300
 beta = np.array([0.3]*W)
-n_docs = 15
+n_docs = 3
 doc_len = 20
-pi = 0.1 
+pi = 0.1
 sent_len = 10
 #doc_synth = CVBSynDoc(beta, pi, sent_len, doc_len, n_docs)
 n_seg = 3
 doc_synth = CVBSynDoc2(beta, pi, sent_len, n_seg, n_docs)
 data = Data(doc_synth)
 
-sigle_vs_md_eval(doc_synth, beta)
+incremental_eval(doc_synth, beta)
+#sigle_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_flag=True)
 #md_eval(doc_synth, beta)
