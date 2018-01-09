@@ -393,8 +393,6 @@ def sigle_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_fla
         for gs_doc in doc_synth.get_single_docs():
             gs_segs.append(gs_doc.rho.tolist())
             
-        print_segmentation("GS", gs_segs)
-        print_segmentation("SD", sd_segs)
         if md_all_combs and md_fast:
             for doc_i in range(doc_synth.n_docs):
                 print("%s: %s" % ("GS", str(gs_segs[doc_i])))
