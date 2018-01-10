@@ -336,7 +336,7 @@ def print_segmentation(seg_desc, seg_results):
     for seg in seg_results:
         print("%s: %s" % (seg_desc, str(seg)))
         
-def sigle_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_flag=False):
+def single_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_flag=False):
     '''
     Print the WD results when segmenting single documents
     and all of them simultaneously (multi-doc model)
@@ -409,11 +409,10 @@ def sigle_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_fla
                 print("%s: %s" % ("GS", str(gs_segs[doc_i])))
                 print("%s: %s" % ("SD", str(sd_segs[doc_i])))
                 print("%s: %s\n" % ("MF", str(md_fast_segs[doc_i])))
-    else:
-        return single_doc_wd, multi_fast_doc_wd
-      
     for time_res in time_wd_results:  
         print("%s: %s time: %f" % (time_res[0], time_res[2], time_res[1]))
+    
+    return single_doc_wd, multi_fast_doc_wd
     
 def md_eval(doc_synth, beta):
     vi_tt_model = TopicTrackingVIModel(beta, data)
@@ -457,7 +456,7 @@ def merge_docs(target_docs):
     all_rho[-1] = 0
     
     merged_doc.n_docs = len(target_docs)
-    merged_doc.rho = all_rho
+    merged_doc.rho = np.array(all_rho)
     merged_doc.docs_index = all_docs_index
     merged_doc.U_W_counts = all_U_W_counts
     merged_doc.isMD = True
@@ -487,7 +486,7 @@ def incremental_eval(doc_synth, beta):
     for i in range(1, doc_synth.n_docs+1):
         target_docs = single_docs[:i]
         merged_doc_synth = merge_docs(target_docs)
-        sd_results, md_results = sigle_vs_md_eval(merged_doc_synth, beta, md_all_combs=False)
+        sd_results, md_results = single_vs_md_eval(merged_doc_synth, beta, md_all_combs=False, print_flag=True)
         all_sd_results.append(sd_results)
         all_md_results.append(md_results)
         
@@ -517,8 +516,8 @@ def incremental_eval(doc_synth, beta):
     marks = grouped_bars(axes, np.array(final_results), group_names)
     canvas.legend([
     ("Tie", marks[0]),
-    ("Win", marks[1]),
-    ("Lose", marks[2])
+    ("Lose", marks[1]),
+    ("Win", marks[2])
     ],
     corner=("top-right", 0, 100, 50),
     );
@@ -528,7 +527,7 @@ def incremental_eval(doc_synth, beta):
     
 W = 300
 beta = np.array([0.3]*W)
-n_docs = 3
+n_docs = 5
 doc_len = 20
 pi = 0.1
 sent_len = 10
@@ -537,6 +536,6 @@ n_seg = 3
 doc_synth = CVBSynDoc2(beta, pi, sent_len, n_seg, n_docs)
 data = Data(doc_synth)
 
-#incremental_eval(doc_synth, beta)
-sigle_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_flag=True)
+incremental_eval(doc_synth, beta)
+single_vs_md_eval(doc_synth, beta, md_all_combs=False, md_fast=True, print_flag=True)
 #md_eval(doc_synth, beta)
