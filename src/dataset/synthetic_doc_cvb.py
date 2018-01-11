@@ -101,3 +101,42 @@ class CVBSynDoc2(object):
             doc_begin = doc_end
             doc_l.append(doc)
         return doc_l
+    
+class CVBSynDoc3(object):
+    '''
+    This version forces all documents to have the same number of segments
+    '''
+    def __init__(self, beta):
+        self.isMD = True
+        self.n_docs = 2
+        self.W = len(beta)
+        self.rho = [0, 0, 0, 0, 0, 0, 0, 0, 1]
+        self.rho += [0, 0, 0, 0, 0, 0, 0, 0, 0]
+        self.docs_index = [9, 18]
+        self.rho = np.array(self.rho)
+        self.K = 2
+        self.phi = np.array([np.random.dirichlet(beta) for k in range(self.K)])
+        n_sents = len(self.rho)
+        self.U_W_counts = np.zeros((n_sents, self.W), dtype=int32)
+        k = 0
+        sent_len = 10
+        for u in range(len(self.rho)):
+            word_counts = np.random.multinomial(sent_len, self.phi[0], size=1)
+            self.U_W_counts[u] = word_counts
+        self.U_W_counts[4] = np.random.multinomial(sent_len, self.phi[1], size=1)
+                
+    def get_single_docs(self):
+        doc_l = []
+        doc_begin = 0
+        for doc_end in self.docs_index:
+            doc = copy.deepcopy(self)
+            doc.n_sents = doc_end - doc_begin
+            doc.n_docs = 1
+            doc.docs_index = [doc.n_sents]
+            doc.rho = doc.rho[doc_begin:doc_end]
+            doc.rho[-1] = 0
+            doc.U_W_counts = doc.U_W_counts[doc_begin:doc_end, :]
+            doc.isMD = False
+            doc_begin = doc_end
+            doc_l.append(doc)
+        return doc_l

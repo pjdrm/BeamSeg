@@ -6,7 +6,7 @@ Created on Nov 1, 2017
 import numpy as np
 import copy
 from tqdm import trange
-from dataset.synthetic_doc_cvb import CVBSynDoc, CVBSynDoc2
+from dataset.synthetic_doc_cvb import CVBSynDoc, CVBSynDoc2, CVBSynDoc3
 from scipy.special import gammaln
 import eval.eval_tools as eval_tools
 from itertools import chain, combinations
@@ -188,7 +188,12 @@ class TopicTrackingVIModel(object):
         '''
         Estimates, for all documents, the best segmentation
         from u_end to u_begin (column index in the DP matrix).
-        Implements a faster version that does not explroe all self.doc_combs_list.
+        Implements a faster version that does not explore all self.doc_combs_list.
+        The exploration heuristic consists of starting by considering a segmentation
+        point (i. e., an entry of the DP matrix) for all documents. Then all n_docs-1
+        combinations are tried. The ones that improve the seg_ll from the previous step
+        are tracked. We keep iterating (pulling a document out of the document combination)
+        until no seg_ll improvements can be observed.
         :param u_end: sentence index
         :param u_begin: language model index
         '''
@@ -198,15 +203,17 @@ class TopicTrackingVIModel(object):
             return segmentation_ll, [u_cluster]
            
         final_seg_clusters = copy.deepcopy(self.best_segmentation[u_begin-1])
-        prev_doc_comb = set(range(self.data.n_docs))
-        self.new_seg_point(u_begin, u_end, prev_doc_comb, final_seg_clusters)
+        prev_doc_combs = [set(range(self.data.n_docs))]
+        self.new_seg_point(u_begin, u_end, prev_doc_combs[0], final_seg_clusters)
         final_seg_ll = self.segmentation_ll(final_seg_clusters)
         all_docs = set(range(self.data.n_docs))
             
         while 1:
-            doc_combs = combinations(prev_doc_comb, len(prev_doc_comb)-1)
+            doc_combs = set()
+            for doc_comb in prev_doc_combs:
+                doc_combs.update(combinations(doc_comb, len(doc_comb)-1))
             best_seg_ll = -np.inf
-            best_doc_comb = None
+            best_doc_combs = []
             for doc_comb in doc_combs:
                 if len(doc_comb) == 0:
                     break #Means we have reached a point where we dont segment any of the documents.
@@ -216,26 +223,62 @@ class TopicTrackingVIModel(object):
                 self.fit_sentences(u_begin, u_end, other_docs, best_seg) #Note that this changes best_seg
                 self.new_seg_point(u_begin, u_end, doc_comb, best_seg) #Note that this changes best_seg
                 segmentation_ll = self.segmentation_ll(best_seg)
-                if segmentation_ll >= best_seg_ll:
+                if segmentation_ll >= final_seg_ll:
+                    best_doc_combs.append(doc_comb)
+                    
+                if segmentation_ll > best_seg_ll:
                     best_seg_ll = segmentation_ll
                     best_seg_clusters = best_seg
-                    best_doc_comb = doc_comb
                     
             if best_seg_ll > final_seg_ll:
-                prev_doc_comb = best_doc_comb
+                prev_doc_combs = best_doc_combs
                 final_seg_ll = best_seg_ll
                 final_seg_clusters = best_seg_clusters
             else:
                 break
         
         return final_seg_ll, final_seg_clusters
-            
-    def dp_segmentation(self, fast_seg=False):
-        if fast_seg:
-            seg_func = self.segment_u_fast
-        else:
-            seg_func = self.segment_u
+    
+    def segment_u_fast2(self, u_begin, u_end):
+        '''
+        Estimates, for all documents, the best segmentation
+        from u_end to u_begin (column index in the DP matrix).
+        Implements a faster version that does not explore all self.doc_combs_list.
+        The heuristic considers adding (or not) the current segmentation point of an
+        individual documents. The corresponding sentences are added to the option
+        that yields the highest likelihood. In each step we go to the next document
+        and we stop until all of them are covered.
+        :param u_end: sentence index
+        :param u_begin: language model index
+        '''
+        if u_begin == 0:#The first column corresponds to having all sentences from all docs in a single segment (there is only one language model)
+            u_cluster = SentenceCluster(u_begin, u_end, list(range(self.data.n_docs)), self.data)
+            segmentation_ll = self.segment_ll(u_cluster.get_word_counts())
+            return segmentation_ll, [u_cluster]
         
+        best_seg = self.best_segmentation[u_begin-1]
+        final_seg_ll = None
+        for doc_i in range(self.data.n_docs):
+            seg_fit_prev = copy.deepcopy(best_seg)
+            self.fit_sentences(u_begin, u_end, [doc_i], seg_fit_prev) #Note that this changes seg_fit_prev
+            seg_fit_prev_ll = self.segmentation_ll(seg_fit_prev) #Case where we did not open a "new" segment
+            
+            seg_new_seg = copy.deepcopy(best_seg)
+            self.new_seg_point(u_begin, u_end, [doc_i], seg_new_seg) #Note that this changes seg_new_seg
+            seg_new_ll = self.segmentation_ll(seg_new_seg) #Case where we opened a "new" segment
+            
+            if seg_fit_prev_ll > seg_new_ll:
+                best_seg = seg_fit_prev
+                final_seg_ll = seg_fit_prev_ll
+            else:
+                best_seg = seg_new_seg
+                final_seg_ll = seg_new_ll
+                
+        return final_seg_ll, best_seg
+            
+    def dp_segmentation(self, seg_func=None):
+        if seg_func is None:
+            seg_func = self.segment_u
         t = trange(self.data.max_doc_len, desc='', leave=True)
         for u_end in t:
             best_seg_ll = -np.inf
@@ -364,7 +407,7 @@ def single_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_fl
     if md_all_combs:
         vi_tt_model = TopicTrackingVIModel(beta, data)
         start = time.time()
-        vi_tt_model.dp_segmentation()
+        vi_tt_model.dp_segmentation(vi_tt_model.segment_u)
         end = time.time()
         md_time = (end - start)
         multi_doc_wd = eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc_synth)
@@ -376,17 +419,26 @@ def single_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_fl
             md_segs.append(vi_tt_model.get_segmentation(doc_i, vi_tt_model.best_segmentation[-1]))
     
     if md_fast: 
-        md_fast_segs = []
+        md_fast1_segs = []
         vi_tt_model = TopicTrackingVIModel(beta, data)
         start = time.time()
-        vi_tt_model.dp_segmentation(fast_seg=True)
+        vi_tt_model.dp_segmentation(vi_tt_model.segment_u_fast)
         end = time.time()
         md_fast_time = (end - start)
         multi_fast_doc_wd = eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc_synth)
-        #multi_fast_doc_wd = ['%.3f' % wd for wd in multi_fast_doc_wd]
         time_wd_results.append(("MF", md_fast_time, ['%.3f' % wd for wd in multi_fast_doc_wd]))
         for doc_i in range(vi_tt_model.data.n_docs):
-            md_fast_segs.append(vi_tt_model.get_segmentation(doc_i, vi_tt_model.best_segmentation[-1]))
+            md_fast1_segs.append(vi_tt_model.get_segmentation(doc_i, vi_tt_model.best_segmentation[-1]))
+            
+        md_fast2_segs = []
+        start = time.time()
+        vi_tt_model.dp_segmentation(vi_tt_model.segment_u_fast2)
+        end = time.time()
+        md_fast2_time = (end - start)
+        multi_fast2_doc_wd = eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc_synth)
+        time_wd_results.append(("F2", md_fast2_time, ['%.3f' % wd for wd in multi_fast2_doc_wd]))
+        for doc_i in range(vi_tt_model.data.n_docs):
+            md_fast2_segs.append(vi_tt_model.get_segmentation(doc_i, vi_tt_model.best_segmentation[-1]))
         
     if print_flag:
         gs_segs = []
@@ -398,7 +450,8 @@ def single_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_fl
                 print("%s: %s" % ("GS", str(gs_segs[doc_i])))
                 print("%s: %s" % ("SD", str(sd_segs[doc_i])))
                 print("%s: %s" % ("MD", str(md_segs[doc_i])))
-                print("%s: %s\n" % ("MF", str(md_fast_segs[doc_i])))
+                print("%s: %s\n" % ("MF", str(md_fast1_segs[doc_i])))
+                print("%s: %s\n" % ("F2", str(md_fast2_segs[doc_i])))
         elif md_all_combs:
             for doc_i in range(doc_synth.n_docs):
                 print("%s: %s" % ("GS", str(gs_segs[doc_i])))
@@ -408,7 +461,8 @@ def single_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_fl
             for doc_i in range(doc_synth.n_docs):
                 print("%s: %s" % ("GS", str(gs_segs[doc_i])))
                 print("%s: %s" % ("SD", str(sd_segs[doc_i])))
-                print("%s: %s\n" % ("MF", str(md_fast_segs[doc_i])))
+                print("%s: %s\n" % ("MF", str(md_fast1_segs[doc_i])))
+                print("%s: %s\n" % ("F2", str(md_fast2_segs[doc_i])))
     for time_res in time_wd_results:  
         print("%s: %s time: %f" % (time_res[0], time_res[2], time_res[1]))
     
@@ -525,17 +579,18 @@ def incremental_eval(doc_synth, beta):
     
     
     
-W = 300
+W = 10
 beta = np.array([0.3]*W)
-n_docs = 5
+n_docs = 9
 doc_len = 20
 pi = 0.1
 sent_len = 10
 #doc_synth = CVBSynDoc(beta, pi, sent_len, doc_len, n_docs)
 n_seg = 3
 doc_synth = CVBSynDoc2(beta, pi, sent_len, n_seg, n_docs)
+#doc_synth = CVBSynDoc3(beta)
 data = Data(doc_synth)
 
-incremental_eval(doc_synth, beta)
-single_vs_md_eval(doc_synth, beta, md_all_combs=False, md_fast=True, print_flag=True)
+#incremental_eval(doc_synth, beta)
+single_vs_md_eval(doc_synth, beta, md_all_combs=True , md_fast=True, print_flag=True)
 #md_eval(doc_synth, beta)
