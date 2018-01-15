@@ -14,17 +14,25 @@ import time
 import toyplot
 import toyplot.pdf
 
+SEG_FAST = "fast"
+SEG_ALL_COMBS = "all_combs"
+
 class TopicTrackingVIModel(object):
 
-    def __init__(self, beta, data):
+    def __init__(self, beta, data, seg_type=None):
         self.beta = beta
         self.W = data.W
         self.data = data
-        
-        self.doc_combs_list = self.init_doc_combs()#All n possible combinations (up to the number of documents). Its a list of pairs where the first element is the combination and second the remaining docs
         self.best_segmentation = [[] for i in range( self.data.max_doc_len)]
-        
         self.seg_ll_C = gammaln(self.beta.sum())-gammaln(self.beta).sum()
+        
+        if seg_type is None or seg_type == SEG_ALL_COMBS:
+            self.seg_func = self.segment_u
+            self.doc_combs_list = self.init_doc_combs()#All n possible combinations (up to the number of documents). Its a list of pairs where the first element is the combination and second the remaining docs
+        elif seg_type == SEG_FAST:
+            self.seg_func = self.segment_u_fast
+        else:
+            raise Exception("ERROR: unknown seg_type")
     
     def init_doc_combs(self):
         all_docs = set(range(self.data.n_docs))
@@ -221,15 +229,13 @@ class TopicTrackingVIModel(object):
                 
         return final_seg_ll, best_seg
             
-    def dp_segmentation(self, seg_func=None):
-        if seg_func is None:
-            seg_func = self.segment_u
+    def dp_segmentation(self):
         t = trange(self.data.max_doc_len, desc='', leave=True)
         for u_end in t:
             best_seg_ll = -np.inf
             best_seg_clusters = None
             for u_begin in range(u_end+1):
-                seg_ll, seg_clusters = seg_func(u_begin, u_end)
+                seg_ll, seg_clusters = self.seg_func(u_begin, u_end)
                 if seg_ll > best_seg_ll:
                         best_seg_ll = seg_ll
                         best_seg_clusters = seg_clusters
@@ -350,9 +356,9 @@ def single_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_fl
     
     data = Data(doc_synth)
     if md_all_combs:
-        vi_tt_model = TopicTrackingVIModel(beta, data)
+        vi_tt_model = TopicTrackingVIModel(beta, data, seg_type=SEG_ALL_COMBS)
         start = time.time()
-        vi_tt_model.dp_segmentation(vi_tt_model.segment_u)
+        vi_tt_model.dp_segmentation()
         end = time.time()
         md_time = (end - start)
         multi_doc_wd = eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc_synth)
@@ -365,9 +371,9 @@ def single_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_fl
     
     if md_fast: 
         md_fast_segs = []
-        vi_tt_model = TopicTrackingVIModel(beta, data)
+        vi_tt_model = TopicTrackingVIModel(beta, data, seg_type=SEG_FAST)
         start = time.time()
-        vi_tt_model.dp_segmentation(vi_tt_model.segment_u_fast)
+        vi_tt_model.dp_segmentation()
         end = time.time()
         md_fast_time = (end - start)
         multi_fast_doc_wd = eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc_synth)
@@ -402,9 +408,9 @@ def single_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_fl
     return single_doc_wd, multi_fast_doc_wd
     
 def md_eval(doc_synth, beta):
-    vi_tt_model = TopicTrackingVIModel(beta, data)
+    vi_tt_model = TopicTrackingVIModel(beta, data, seg_type=SEG_FAST)
     start = time.time()
-    vi_tt_model.dp_segmentation(fast_seg=True)
+    vi_tt_model.dp_segmentation()
     end = time.time()
     seg_time = (end - start)
     md_segs = []
@@ -512,18 +518,19 @@ def incremental_eval(doc_synth, beta):
     
     
     
-W = 10
-beta = np.array([0.3]*W)
-n_docs = 3
+W = 3000
+beta = np.array([0.1]*W)
+n_docs = 20
 doc_len = 20
-pi = 0.1
-sent_len = 10
+pi = 0.28
+sent_len = 8
 #doc_synth = CVBSynDoc(beta, pi, sent_len, doc_len, n_docs)
-n_seg = 3
+n_seg = 4
 doc_synth = CVBSynDoc2(beta, pi, sent_len, n_seg, n_docs)
 #doc_synth = CVBSynDoc3(beta)
 data = Data(doc_synth)
 
 #incremental_eval(doc_synth, beta)
-single_vs_md_eval(doc_synth, beta, md_all_combs=True , md_fast=True, print_flag=True)
+single_vs_md_eval(doc_synth, beta, md_all_combs=False , md_fast=True, print_flag=True)
+#single_vs_md_eval(doc_synth, beta, md_all_combs=False , md_fast=True, print_flag=True)
 #md_eval(doc_synth, beta)

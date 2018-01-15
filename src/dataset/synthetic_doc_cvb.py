@@ -118,12 +118,11 @@ class CVBSynDoc3(object):
         self.phi = np.array([np.random.dirichlet(beta) for k in range(self.K)])
         n_sents = len(self.rho)
         self.U_W_counts = np.zeros((n_sents, self.W), dtype=int32)
-        k = 0
         sent_len = 10
         for u in range(len(self.rho)):
             word_counts = np.random.multinomial(sent_len, self.phi[0], size=1)
             self.U_W_counts[u] = word_counts
-        self.U_W_counts[4] = np.random.multinomial(sent_len, self.phi[1], size=1)
+        self.U_W_counts[3] = np.random.multinomial(sent_len, self.phi[1], size=1)
                 
     def get_single_docs(self):
         doc_l = []
