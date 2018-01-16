@@ -92,23 +92,6 @@ class TopicTrackingVIModel(object):
                 return cluster_i-1
         return len(u_clusters)-1 #case where the last cluster was the last one in the list
     
-    def get_seg_diff(self, u_clusters):
-        doc_segs_counts = {k:0 for k in range(self.data.n_docs)}
-        for u_cluster in u_clusters:
-            doc_set = set(u_cluster.doc_list)
-            for doc_i in doc_set:
-                doc_segs_counts[doc_i] += 1
-        
-        min_segs = np.inf
-        max_segs = -np.inf
-        for doc_i in doc_segs_counts:
-            n_segs = doc_segs_counts[doc_i]
-            if n_segs <= min_segs:
-                min_segs = n_segs
-            if n_segs >= max_segs:
-                max_segs = n_segs
-        return max_segs-min_segs
-    
     def segment_ll(self, word_counts):
         '''
         Returns the likelihood if we considering all sentences (word_counts)
@@ -237,8 +220,8 @@ class TopicTrackingVIModel(object):
             for u_begin in range(u_end+1):
                 seg_ll, seg_clusters = self.seg_func(u_begin, u_end)
                 if seg_ll > best_seg_ll:
-                        best_seg_ll = seg_ll
-                        best_seg_clusters = seg_clusters
+                    best_seg_ll = seg_ll
+                    best_seg_clusters = seg_clusters
                 t.set_description("Matrix: (%d,%d)" % (u_end, u_begin))
             self.best_segmentation[u_end] = best_seg_clusters
             #self.print_seg(best_seg_clusters)
@@ -518,11 +501,11 @@ def incremental_eval(doc_synth, beta):
     
     
     
-W = 3000
+W = 1800
 beta = np.array([0.1]*W)
-n_docs = 20
+n_docs = 18
 doc_len = 20
-pi = 0.28
+pi = 0.25
 sent_len = 8
 #doc_synth = CVBSynDoc(beta, pi, sent_len, doc_len, n_docs)
 n_seg = 4
