@@ -25,6 +25,7 @@ class TopicTrackingVIModel(object):
         self.data = data
         self.best_segmentation = [[] for i in range( self.data.max_doc_len)]
         self.seg_ll_C = gammaln(self.beta.sum())-gammaln(self.beta).sum()
+        self.qz = self.init_variational_params(self.data.total_words, self.data.max_doc_len)
         
         if seg_type is None or seg_type == SEG_ALL_COMBS:
             self.seg_func = self.segment_u
@@ -42,6 +43,12 @@ class TopicTrackingVIModel(object):
             other_docs = all_docs - set(doc_comb)
             doc_combs_list.append([doc_comb, other_docs])
         return doc_combs_list
+    
+    def init_variational_params(self, total_words, K):
+        qz = np.zeros((total_words, K))
+        for wi in range(total_words):
+            qz[wi] = np.random.dirichlet([1.0/K]*K)
+        return qz
     
     def print_seg(self, u_clusters):
         print("==========================")
@@ -91,6 +98,41 @@ class TopicTrackingVIModel(object):
             elif found_doc:
                 return cluster_i-1
         return len(u_clusters)-1 #case where the last cluster was the last one in the list
+    
+    def get_wi_segment(self, doc_i, wi):
+        '''
+        Returns the u_cluster for the wi word of document doc_i
+        '''
+        return None
+    
+    def get_k_segment(self, doc_i, k):
+        '''
+        Returns the set of word from documents doc_i
+        that are in the segment (u_cluster) with topic k
+        '''
+        u_cluster = self.k_cluster[k] #TODO: create this variable and update accordingly
+        return u_cluster.get_word_set(doc_i) #TODO: implement get_word_set
+    
+    def qz_minus_wi_sum(self, doc_i, wi, k):
+        wi_segment = self.get_wi_segment(doc_i, wi) #TODO: implement get_wi_segment
+        w_set = wi_segment.get_words()-wi
+        if k == wi_segment.k:
+            return w_set
+        else:
+            k_diff = k-wi_segment.k
+            if k_diff < 0:
+                #Case we need to merge with the segments in front
+                sign = 1
+            else:
+                #Case we need to merge with the segments behind
+                sign = -1
+            for k_btw in range(np.abs(k_diff)):
+                w_set += self.get_k_segment(doc_i, k+k_btw*sign)
+            return w_set
+            
+    def variational_update(self, doc_i, wi, k, u_clusters):
+        w_set_f1 = self.qz_minus_wi_sum(doc_i, wi, k, u_clusters)
+        
     
     def segment_ll(self, word_counts):
         '''
@@ -240,6 +282,9 @@ class Data(object):
         self.docs_word_counts = []
         self.multi_doc_slicer(docs)
         self.max_doc_len = np.max(self.doc_lens)
+        self.total_words = 0 #Number of words in full document collection
+        for doc_i in range(self.n_docs):
+            self.total_words += np.sum(self.doc_word_counts(doc_i))
         
     def multi_doc_slicer(self, docs):
         doc_begin = 0
@@ -513,7 +558,7 @@ doc_synth = CVBSynDoc2(beta, pi, sent_len, n_seg, n_docs)
 #doc_synth = CVBSynDoc3(beta)
 data = Data(doc_synth)
 
-incremental_eval(doc_synth, beta)
+#incremental_eval(doc_synth, beta)
 #single_vs_md_eval(doc_synth, beta, md_all_combs=False , md_fast=True, print_flag=True)
 #single_vs_md_eval(doc_synth, beta, md_all_combs=False , md_fast=True, print_flag=True)
-#md_eval(doc_synth, beta)
+md_eval(doc_synth, beta)
