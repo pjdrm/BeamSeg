@@ -485,7 +485,7 @@ def incremental_eval(doc_synth, beta):
         final_results.append(np.array([n_ties_percent, n_mf_win_percent, n_mf_lost_percent])*100.0)
         
     group_names = list(range(1, doc_synth.n_docs+1))
-    canvas = toyplot.Canvas(width=300, height=300)
+    canvas = toyplot.Canvas(width=600, height=300)
     axes = canvas.cartesian()
     axes.x.label.text = "#Docs"
     axes.y.label.text = "Percentage"
@@ -513,7 +513,7 @@ doc_synth = CVBSynDoc2(beta, pi, sent_len, n_seg, n_docs)
 #doc_synth = CVBSynDoc3(beta)
 data = Data(doc_synth)
 
-#incremental_eval(doc_synth, beta)
-single_vs_md_eval(doc_synth, beta, md_all_combs=False , md_fast=True, print_flag=True)
+incremental_eval(doc_synth, beta)
+#single_vs_md_eval(doc_synth, beta, md_all_combs=False , md_fast=True, print_flag=True)
 #single_vs_md_eval(doc_synth, beta, md_all_combs=False , md_fast=True, print_flag=True)
 #md_eval(doc_synth, beta)
