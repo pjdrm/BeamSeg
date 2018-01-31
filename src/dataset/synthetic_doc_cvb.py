@@ -35,7 +35,7 @@ class CVBSynDoc(object):
                 k += 1
             if u+1 in self.docs_index:
                 k = 0
-                
+
     def get_single_docs(self):
         doc_l = []
         doc_begin = 0
@@ -75,16 +75,31 @@ class CVBSynDoc2(object):
         self.rho = np.array(self.rho)
         self.K = n_segs
         self.phi = np.array([np.random.dirichlet(beta) for k in range(self.K)])
-            
+        
+        self.W_I_words = []
+        doc_i = 0
+        self.d_u_wi_indexes = []
         self.U_W_counts = np.zeros((n_sents, self.W), dtype=int32)
         k = 0
         for u in range(len(self.rho)):
-            word_counts = np.random.multinomial(sent_len, self.phi[k], size=1)
-            self.U_W_counts[u] = word_counts
+            wi_list = []
+            for w in range(sent_len):
+                word_counts = np.random.multinomial(1, self.phi[k], size=1)
+                wi = np.nonzero(word_counts)[1][0]
+                wi_list.append(wi)
+                self.W_I_words.append(wi)
+                self.U_W_counts[u] += word_counts
+            
+            self.d_u_wi_indexes[doc_i].append(wi_list)    
             if self.rho[u] == 1:
                 k += 1
+                
             if u+1 in self.docs_index:
                 k = 0
+                doc_i += 1
+                self.d_u_wi_indexes.append([])
+                
+        self.W_I_words = np.array(self.W_I_words)
                 
     def get_single_docs(self):
         doc_l = []
