@@ -24,10 +24,12 @@ class TopicTrackingVIModel(object):
         self.C_beta = np.sum(self.beta)
         self.W = data.W
         self.data = data
-        self.best_segmentation = [[] for i in range( self.data.max_doc_len)]
+        self.best_segmentation = [[] for i in range(self.data.max_doc_len)]
         self.k_cluster = [None]*self.data.max_doc_len
         self.seg_ll_C = gammaln(self.beta.sum())-gammaln(self.beta).sum()
-        self.qz = self.init_variational_params(self.data.total_words, self.data.max_doc_len)
+        #List of matrices (one for each topic). Lines are words in the document collection and columns the vocabulary indexes.
+        #The entries contains the value of the corresponding variational parameter.
+        self.qz = self.init_variational_params(self.data.total_words, self.data.W, self.data.max_doc_len) 
         
         if seg_type is None or seg_type == SEG_ALL_COMBS:
             self.seg_func = self.segment_u
@@ -46,10 +48,18 @@ class TopicTrackingVIModel(object):
             doc_combs_list.append([doc_comb, other_docs])
         return doc_combs_list
     
-    def init_variational_params(self, total_words, K):
-        qz = np.zeros((total_words, K))
+    def init_variational_params(self, total_words, W, K, vocab_dict):
+        qz = []
+        for k in range(K):
+            qz_k = np.zeros((total_words, W))
+            qz.append(qz_k)
+            
         for wi in range(total_words):
-            qz[wi] = np.random.dirichlet([1.0/K]*K)
+            qz_K = np.random.dirichlet([1.0/K]*K)
+            w = vocab_dict[wi]
+            for k in range(K):
+                qz[k][wi,w] = qz_K[k]
+                
         return qz
     
     def print_seg(self, u_clusters):
@@ -145,6 +155,13 @@ class TopicTrackingVIModel(object):
             return words
             
     def var_update_k_val(self, doc_i, wi, k, u_clusters):
+        '''
+        Return the value of the numerator for the variational update expression.
+        :param doc_i: document index
+        :param wi: word index (relative to the full collection of documents)
+        :param k: topic/language model/segment index
+        :param u_clusters: list of sentence clusters representing a segmentation of all documents
+        '''
         words_update = self.qz_words_minus_wi(doc_i, wi, k, u_clusters)
         E_counts_f2 = self.qz[words_update, k]
         Var_counts_f2 = np.sum(E_counts_f2*(1.0-E_counts_f2))
@@ -162,6 +179,13 @@ class TopicTrackingVIModel(object):
         return num
         
     def var_param_update(self, doc_i, wi, k, u_clusters):
+        '''
+        Updates the variational parameter of word wi for topic k.
+        :param doc_i: document index
+        :param wi: word index (relative to the full collection of documents)
+        :param k: topic/language model/segment index
+        :param u_clusters: list of sentence clusters representing a segmentation of all documents
+        '''
         num_k = self.var_update_k_val(doc_i, wi, k, u_clusters)
         denom = num_k
         for k_denom in range(self.data.max_doc_len): #TODO: seems very inefficient, would like to do it in a single matrix operation
@@ -170,7 +194,17 @@ class TopicTrackingVIModel(object):
             denom += self.var_update_k_val(doc_i, wi, k_denom, u_clusters)
         denom = np.exp(denom)
         return num_k/denom
-        
+    
+    def variational_step(self, u_clusters):
+        '''
+        Update the variational parameters for all words and all topics.
+        :param u_clusters: list of sentence clusters representing the current segmentation state 
+        '''
+        for k in range(self.data.max_doc_len):
+            for doc_i in range(self.data.n_docs):
+                for u in self.data.d_u_wi_indexes[doc_i]:
+                    for wi in self.data.d_u_wi_indexes[doc_i][u]:
+                        self.var_param_update(doc_i, wi, k, u_clusters)
     
     def segment_ll(self, word_counts):
         '''
@@ -191,7 +225,8 @@ class TopicTrackingVIModel(object):
         '''
         segmentation_ll = 0.0
         for u_cluster in u_clusters:
-            segmentation_ll += self.segment_ll(u_cluster.get_word_counts())
+            qz_counts = np.sum(self.qz[u_cluster.k][u_cluster.wi_list], axis=0)
+            segmentation_ll += self.segment_ll(qz_counts)
         return segmentation_ll
     
     def fit_sentences(self, u_begin, u_end, docs, u_clusters):
@@ -223,7 +258,7 @@ class TopicTrackingVIModel(object):
         '''
         for doc_i in doc_comb:
             cluster_i = self.get_last_cluster(doc_i, u_clusters)
-            target_cluster = self.k_cluster[cluster_i+n_skips+1] #For new segmentation points the target cluster is the last cluster (topiv) where doc_i appear +1
+            target_cluster = self.k_cluster[cluster_i+n_skips+1] #For new segmentation points the target cluster is the last cluster (topic) where doc_i appear +1
             if target_cluster is not None: #The language model corresponding to this cluster might already exists due to other documents having different segmentation at this stage
                 target_cluster.add_sents(u_begin, u_end, doc_i)
             else:
@@ -240,7 +275,7 @@ class TopicTrackingVIModel(object):
         '''
         if u_begin == 0:#The first column corresponds to having all sentences from all docs in a single segment (there is only one language model)
             u_cluster = SentenceCluster(u_begin, u_end, list(range(self.data.n_docs)), self.data)
-            segmentation_ll = self.segment_ll(u_cluster.get_word_counts())
+            segmentation_ll = self.segmentation_ll([u_cluster])
             return segmentation_ll, [u_cluster]
            
         best_seg_ll = -np.inf
@@ -270,7 +305,7 @@ class TopicTrackingVIModel(object):
         '''
         if u_begin == 0: #The first column corresponds to having all sentences from all docs in a single segment (there is only one language model)
             u_cluster = SentenceCluster(u_begin, u_end, list(range(self.data.n_docs)), self.data, 0)
-            segmentation_ll = self.segment_ll(u_cluster.get_word_counts())
+            segmentation_ll = self.segmentation_ll([u_cluster])
             return segmentation_ll, [u_cluster]
         
         best_seg = self.best_segmentation[u_begin-1]
@@ -304,7 +339,7 @@ class TopicTrackingVIModel(object):
                 
         return final_seg_ll, best_seg
             
-    def dp_segmentation(self):
+    def dp_segmentation_step(self):
         t = trange(self.data.max_doc_len, desc='', leave=True)
         for u_end in t:
             best_seg_ll = -np.inf
@@ -318,6 +353,18 @@ class TopicTrackingVIModel(object):
             self.best_segmentation[u_end] = best_seg_clusters
             #self.print_seg(best_seg_clusters)
         #print("==========================")
+        
+    def segment_docs(self, n_iters=3): #TODO: check if the segmentation changes and use that as criteria for stopping
+        '''
+        Segments the full collection of documents. Alternates between using a Dynamic Programming
+        procedure for segmentation and performing variational inference to update the
+        certainty about words belonging to a topic (segments/language model).
+        :param n_iters: number of iterations to perform
+        '''
+        for i in range(n_iters):
+            self.dp_segmentation_step()
+            best_segmetnation = self.best_segmentation[-1]
+            self.variational_step(best_segmetnation)
     
 class Data(object):
     '''
@@ -371,7 +418,6 @@ class SentenceCluster(object):
         self.data = data
         self.u_list = []
         self.doc_list = []
-        self.word_counts = np.zeros(self.data.W)
         
         for doc_i in docs:
             doc_i_len = self.data.doc_len(doc_i)
@@ -386,7 +432,6 @@ class SentenceCluster(object):
             seg_len = u_end_true-u_begin+1
             self.u_list += list(range(u_begin, u_end_true+1))
             self.doc_list += [doc_i]*seg_len
-            self.word_counts += np.sum(self.data.doc_word_counts(doc_i)[u_begin:u_end_true+1], axis=0)
         
         self.wi_list = []
         for doc_i, u in zip(self.doc_list, self.u_list):
@@ -411,15 +456,11 @@ class SentenceCluster(object):
         seg_len =  u_end-u_begin+1
         self.u_list += seg
         self.doc_list += [doc_i]*seg_len
-        self.word_counts += np.sum(self.data.doc_word_counts(doc_i)[u_begin:u_end+1], axis=0)
         
         for u in seg:
             d_u_words = self.data.d_u_wi_indexes[doc_i][u]
             self.wi_list += d_u_words
         
-    def get_word_counts(self):
-        return self.word_counts
-    
     def get_segment(self, doc_i):
         '''
         Returns the first and last sentences (u_begin, u_end) of the doc_i
@@ -456,7 +497,7 @@ def single_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_fl
     for doc in single_docs:
         data = Data(doc)
         vi_tt_model = TopicTrackingVIModel(beta, data)
-        vi_tt_model.dp_segmentation()
+        vi_tt_model.dp_segmentation_step()
         sd_segs.append(vi_tt_model.get_segmentation(0, vi_tt_model.best_segmentation[-1]))
         single_doc_wd += eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc)
     end = time.time()
@@ -468,7 +509,7 @@ def single_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_fl
     if md_all_combs:
         vi_tt_model = TopicTrackingVIModel(beta, data, seg_type=SEG_ALL_COMBS)
         start = time.time()
-        vi_tt_model.dp_segmentation()
+        vi_tt_model.dp_segmentation_step()
         end = time.time()
         md_time = (end - start)
         multi_doc_wd = eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc_synth)
@@ -483,7 +524,7 @@ def single_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_fl
         md_fast_segs = []
         vi_tt_model = TopicTrackingVIModel(beta, data, seg_type=SEG_FAST)
         start = time.time()
-        vi_tt_model.dp_segmentation()
+        vi_tt_model.dp_segmentation_step()
         end = time.time()
         md_fast_time = (end - start)
         multi_fast_doc_wd = eval_tools.wd_evaluator(vi_tt_model.get_all_segmentations(), doc_synth)
@@ -520,7 +561,7 @@ def single_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_fl
 def md_eval(doc_synth, beta):
     vi_tt_model = TopicTrackingVIModel(beta, data, seg_type=SEG_FAST)
     start = time.time()
-    vi_tt_model.dp_segmentation()
+    vi_tt_model.dp_segmentation_step()
     end = time.time()
     seg_time = (end - start)
     md_segs = []
