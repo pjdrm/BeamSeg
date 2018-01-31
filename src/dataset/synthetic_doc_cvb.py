@@ -78,16 +78,18 @@ class CVBSynDoc2(object):
         
         self.W_I_words = []
         doc_i = 0
-        self.d_u_wi_indexes = []
+        self.d_u_wi_indexes = [[] for i in range(self.n_docs)]
         self.U_W_counts = np.zeros((n_sents, self.W), dtype=int32)
         k = 0
+        wi = 0
         for u in range(len(self.rho)):
             wi_list = []
-            for w in range(sent_len):
-                word_counts = np.random.multinomial(1, self.phi[k], size=1)
-                wi = np.nonzero(word_counts)[1][0]
+            for word in range(sent_len):
+                word_counts = np.random.multinomial(1, self.phi[k])
+                w = np.nonzero(word_counts)[0][0] #w is a vocabulary index
                 wi_list.append(wi)
-                self.W_I_words.append(wi)
+                wi += 1
+                self.W_I_words.append(w)
                 self.U_W_counts[u] += word_counts
             
             self.d_u_wi_indexes[doc_i].append(wi_list)    
@@ -97,7 +99,6 @@ class CVBSynDoc2(object):
             if u+1 in self.docs_index:
                 k = 0
                 doc_i += 1
-                self.d_u_wi_indexes.append([])
                 
         self.W_I_words = np.array(self.W_I_words)
                 

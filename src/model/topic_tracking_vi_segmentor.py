@@ -25,11 +25,10 @@ class TopicTrackingVIModel(object):
         self.W = data.W
         self.data = data
         self.best_segmentation = [[] for i in range(self.data.max_doc_len)]
-        self.k_cluster = [None]*self.data.max_doc_len
         self.seg_ll_C = gammaln(self.beta.sum())-gammaln(self.beta).sum()
         #List of matrices (one for each topic). Lines are words in the document collection and columns the vocabulary indexes.
         #The entries contains the value of the corresponding variational parameter.
-        self.qz = self.init_variational_params(self.data.total_words, self.data.W, self.data.max_doc_len) 
+        self.qz = self.init_variational_params(self.data.total_words, self.data.W, self.data.max_doc_len, self.data.W_I_words) 
         
         if seg_type is None or seg_type == SEG_ALL_COMBS:
             self.seg_func = self.segment_u
@@ -48,7 +47,7 @@ class TopicTrackingVIModel(object):
             doc_combs_list.append([doc_comb, other_docs])
         return doc_combs_list
     
-    def init_variational_params(self, total_words, W, K, vocab_dict):
+    def init_variational_params(self, total_words, W, K, W_I_words):
         qz = []
         for k in range(K):
             qz_k = np.zeros((total_words, W))
@@ -56,7 +55,7 @@ class TopicTrackingVIModel(object):
             
         for wi in range(total_words):
             qz_K = np.random.dirichlet([1.0/K]*K)
-            w = vocab_dict[wi]
+            w = W_I_words[wi]
             for k in range(K):
                 qz[k][wi,w] = qz_K[k]
                 
@@ -121,13 +120,16 @@ class TopicTrackingVIModel(object):
                 return u_cluster
         return None #Should never happen...
     
-    def get_k_segment(self, doc_i, k):
+    def get_k_segment(self, doc_i, k, u_clusters):
         '''
         Returns the set of word from documents doc_i
         that are in the segment (u_cluster) with topic k
         '''
-        u_cluster = self.k_cluster[k] #TODO: create this variable and update accordingly
-        u_begin, u_end = u_cluster.get_segment(doc_i)
+        for u_cluster in u_clusters:
+            if u_cluster.k == k:
+                target_u_cluster = u_cluster
+                break
+        u_begin, u_end = target_u_cluster.get_segment(doc_i)
         words = []
         for u in range(u_begin, u_end+1):
             words += self.data.d_u_wi_indexes[doc_i][u]
@@ -258,13 +260,16 @@ class TopicTrackingVIModel(object):
         '''
         for doc_i in doc_comb:
             cluster_i = self.get_last_cluster(doc_i, u_clusters)
-            target_cluster = self.k_cluster[cluster_i+n_skips+1] #For new segmentation points the target cluster is the last cluster (topic) where doc_i appear +1
+            target_cluster = None #For new segmentation points the target cluster is the last cluster (topic) where doc_i appear +1
+            for u_cluster in u_clusters: #Checking if the target cluster already exists
+                if u_cluster.k == cluster_i+n_skips+1:
+                    target_cluster = u_cluster
+                    break
             if target_cluster is not None: #The language model corresponding to this cluster might already exists due to other documents having different segmentation at this stage
                 target_cluster.add_sents(u_begin, u_end, doc_i)
             else:
-                new_cluster = SentenceCluster(u_begin, u_end, [doc_i], self.data, cluster_i+n_skips)
+                new_cluster = SentenceCluster(u_begin, u_end, [doc_i], self.data, cluster_i+n_skips+1)
                 u_clusters.append(new_cluster)
-                self.k_cluster[cluster_i+n_skips+1] = new_cluster
                 
     def segment_u(self, u_begin, u_end):
         '''
@@ -561,7 +566,7 @@ def single_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_fl
 def md_eval(doc_synth, beta):
     vi_tt_model = TopicTrackingVIModel(beta, data, seg_type=SEG_FAST)
     start = time.time()
-    vi_tt_model.dp_segmentation_step()
+    vi_tt_model.segment_docs()
     end = time.time()
     seg_time = (end - start)
     md_segs = []
@@ -669,14 +674,14 @@ def incremental_eval(doc_synth, beta):
     
     
     
-W = 1800
+W = 10
 beta = np.array([0.1]*W)
-n_docs = 18
+n_docs = 2
 doc_len = 20
 pi = 0.25
 sent_len = 8
 #doc_synth = CVBSynDoc(beta, pi, sent_len, doc_len, n_docs)
-n_seg = 4
+n_seg = 2
 doc_synth = CVBSynDoc2(beta, pi, sent_len, n_seg, n_docs)
 #doc_synth = CVBSynDoc3(beta)
 data = Data(doc_synth)
