@@ -125,11 +125,16 @@ class TopicTrackingVIModel(object):
         Returns the set of word from documents doc_i
         that are in the segment (u_cluster) with topic k
         '''
+        target_u_cluster = None
         for u_cluster in u_clusters:
             if u_cluster.k == k:
                 target_u_cluster = u_cluster
                 break
+        if target_u_cluster is None:
+            return []
         u_begin, u_end = target_u_cluster.get_segment(doc_i)
+        if u_begin is None:
+            return []
         words = []
         for u in range(u_begin, u_end+1):
             words += self.data.d_u_wi_indexes[doc_i][u]
@@ -140,12 +145,12 @@ class TopicTrackingVIModel(object):
         Returns the set of words that influence the qz update
         of wi.
         '''
-        wi_segment = self.get_wi_segment(wi, u_clusters)
-        words = wi_segment.get_words()-wi
-        if k == wi_segment.k:
+        wi_u_cluster = self.get_wi_segment(wi, u_clusters)
+        words = list(set(wi_u_cluster.get_words())-set([wi]))
+        if k == wi_u_cluster.k:
             return words
         else:
-            k_diff = k-wi_segment.k
+            k_diff = wi_u_cluster.k-k
             if k_diff < 0:
                 #Case we need to merge with the segments in front
                 sign = 1
@@ -153,7 +158,7 @@ class TopicTrackingVIModel(object):
                 #Case we need to merge with the segments behind
                 sign = -1
             for k_btw in range(np.abs(k_diff)):
-                words += self.get_k_segment(doc_i, k+k_btw*sign)
+                words += self.get_k_segment(doc_i, k+k_btw*sign, u_clusters)
             return words
             
     def var_update_k_val(self, doc_i, wi, k, u_clusters):
@@ -165,17 +170,17 @@ class TopicTrackingVIModel(object):
         :param u_clusters: list of sentence clusters representing a segmentation of all documents
         '''
         words_update = self.qz_words_minus_wi(doc_i, wi, k, u_clusters)
-        E_counts_f2 = self.qz[words_update, k]
-        Var_counts_f2 = np.sum(E_counts_f2*(1.0-E_counts_f2))
-        C_beta_E_counts_f2_sum = np.sum(self.C_beta+E_counts_f2)
-        E_q_f2 = np.log(C_beta_E_counts_f2_sum)-(Var_counts_f2/(2.0*(C_beta_E_counts_f2_sum)**2))
+        E_counts_f2 = self.qz[k][words_update]
+        Var_counts_f2 = E_counts_f2*(1.0-E_counts_f2)
+        C_beta_E_counts_f2_sum = self.C_beta+np.sum(E_counts_f2)
+        E_q_f2 = np.log(C_beta_E_counts_f2_sum)-(np.sum(Var_counts_f2)/(2.0*(C_beta_E_counts_f2_sum)**2))
         
         
-        word_mask = (self.data.W_I_words[words_update]==self.data.W_I_words[wi]).astype(np.int)
+        word_mask = np.array([(self.data.W_I_words[words_update]==self.data.W_I_words[wi]).astype(np.int)]).T
         E_counts_f1 = E_counts_f2*word_mask
-        Var_counts_f1 = np.sum(E_counts_f1*(1.0-E_counts_f1))
-        C_beta_E_counts_f1_sum = np.sum(self.C_beta+E_counts_f1)
-        E_q_f1 = np.log(C_beta_E_counts_f1_sum)-(Var_counts_f1/(2.0*(C_beta_E_counts_f1_sum)**2))
+        Var_counts_f1 = Var_counts_f2*word_mask
+        C_beta_E_counts_f1_sum = self.C_beta+np.sum(E_counts_f1)
+        E_q_f1 = np.log(C_beta_E_counts_f1_sum)-(np.sum(Var_counts_f1)/(2.0*(C_beta_E_counts_f1_sum)**2))
         num = np.exp(E_q_f1-E_q_f2)
         
         return num
@@ -205,7 +210,7 @@ class TopicTrackingVIModel(object):
         for k in range(self.data.max_doc_len):
             for doc_i in range(self.data.n_docs):
                 for u in self.data.d_u_wi_indexes[doc_i]:
-                    for wi in self.data.d_u_wi_indexes[doc_i][u]:
+                    for wi in u:
                         self.var_param_update(doc_i, wi, k, u_clusters)
     
     def segment_ll(self, word_counts):
@@ -368,8 +373,8 @@ class TopicTrackingVIModel(object):
         '''
         for i in range(n_iters):
             self.dp_segmentation_step()
-            best_segmetnation = self.best_segmentation[-1]
-            self.variational_step(best_segmetnation)
+            best_segmentation = self.best_segmentation[-1]
+            self.variational_step(best_segmentation)
     
 class Data(object):
     '''
@@ -466,6 +471,9 @@ class SentenceCluster(object):
             d_u_words = self.data.d_u_wi_indexes[doc_i][u]
             self.wi_list += d_u_words
         
+    def get_words(self):
+        return self.wi_list
+    
     def get_segment(self, doc_i):
         '''
         Returns the first and last sentences (u_begin, u_end) of the doc_i
