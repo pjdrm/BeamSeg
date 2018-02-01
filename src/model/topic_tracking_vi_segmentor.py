@@ -698,7 +698,7 @@ sent_len = 6
 #doc_synth = CVBSynDoc(beta, pi, sent_len, doc_len, n_docs)
 n_seg = 5
 doc_synth = CVBSynDoc2(beta, pi, sent_len, n_seg, n_docs)
-#doc_synth = CVBSynDoc3(beta)
+#doc_synth = CVBSynDoc3(beta) 
 data = Data(doc_synth)
 
 #incremental_eval(doc_synth, beta)
