@@ -19,16 +19,17 @@ SEG_ALL_COMBS = "all_combs"
 
 class TopicTrackingVIModel(object):
 
-    def __init__(self, beta, data, seg_type=None):
+    def __init__(self, beta, data, seg_type=None, max_topics=None):
         self.beta = beta
         self.C_beta = np.sum(self.beta)
         self.W = data.W
         self.data = data
         self.best_segmentation = [[] for i in range(self.data.max_doc_len)]
         self.seg_ll_C = gammaln(self.beta.sum())-gammaln(self.beta).sum()
+        self.max_topics = self.data.max_doc_len if max_topics is None else max_topics
         #List of matrices (one for each topic). Lines are words in the document collection and columns the vocabulary indexes.
         #The entries contains the value of the corresponding variational parameter.
-        self.qz = self.init_variational_params(self.data.total_words, self.data.W, self.data.max_doc_len, self.data.W_I_words) 
+        self.qz = self.init_variational_params(self.data.total_words, self.data.W, self.max_topics, self.data.W_I_words)
         
         if seg_type is None or seg_type == SEG_ALL_COMBS:
             self.seg_func = self.segment_u
@@ -195,7 +196,7 @@ class TopicTrackingVIModel(object):
         '''
         num_k = self.var_update_k_val(doc_i, wi, k, u_clusters)
         denom = num_k
-        for k_denom in range(self.data.max_doc_len): #TODO: seems very inefficient, would like to do it in a single matrix operation
+        for k_denom in range(self.max_topics): #TODO: seems very inefficient, would like to do it in a single matrix operation
             if k_denom == k:
                 continue
             denom += self.var_update_k_val(doc_i, wi, k_denom, u_clusters)
@@ -207,7 +208,7 @@ class TopicTrackingVIModel(object):
         Update the variational parameters for all words and all topics.
         :param u_clusters: list of sentence clusters representing the current segmentation state 
         '''
-        for k in range(self.data.max_doc_len):
+        for k in range(self.max_topics):
             for doc_i in range(self.data.n_docs):
                 for u in self.data.d_u_wi_indexes[doc_i]:
                     for wi in u:
@@ -325,13 +326,19 @@ class TopicTrackingVIModel(object):
             self.fit_sentences(u_begin, u_end, [doc_i], seg_fit_prev) #Note that this changes seg_fit_prev
             seg_fit_prev_ll = self.segmentation_ll(seg_fit_prev) #Case where we did not open a "new" segment
             
-            seg_new_seg = copy.deepcopy(best_seg)
-            self.new_seg_point(u_begin, u_end, [doc_i], seg_new_seg, n_skips=0) #Note that this changes seg_new_seg
-            seg_new_ll = self.segmentation_ll(seg_new_seg) #Case where we opened a "new" segment
+            if len(best_seg) < self.max_topics:
+                seg_new_seg = copy.deepcopy(best_seg)
+                self.new_seg_point(u_begin, u_end, [doc_i], seg_new_seg, n_skips=0) #Note that this changes seg_new_seg
+                seg_new_ll = self.segmentation_ll(seg_new_seg) #Case where we opened a "new" segment
+            else:
+                seg_new_ll = -np.inf
             
-            seg_new_seg_skip = copy.deepcopy(best_seg)
-            self.new_seg_point(u_begin, u_end, [doc_i], seg_new_seg_skip, n_skips=1) #Note that this changes seg_new_seg_skip
-            seg_new_skip_ll = self.segmentation_ll(seg_new_seg_skip) #Case where we opened a "new" segment and skip a topic
+            if len(best_seg) < self.max_topics-1:
+                seg_new_seg_skip = copy.deepcopy(best_seg)
+                self.new_seg_point(u_begin, u_end, [doc_i], seg_new_seg_skip, n_skips=1) #Note that this changes seg_new_seg_skip
+                seg_new_skip_ll = self.segmentation_ll(seg_new_seg_skip) #Case where we opened a "new" segment and skip a topic
+            else:
+                seg_new_skip_ll = -np.inf
             
             seg_ll_list = [seg_fit_prev_ll, seg_new_ll, seg_new_skip_ll]
             max_ll = max(seg_ll_list)
@@ -571,10 +578,10 @@ def single_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_fl
     
     return single_doc_wd, multi_fast_doc_wd
     
-def md_eval(doc_synth, beta):
-    vi_tt_model = TopicTrackingVIModel(beta, data, seg_type=SEG_FAST)
+def md_eval(data, beta, n_seg):
+    vi_tt_model = TopicTrackingVIModel(beta, data, seg_type=SEG_FAST, max_topics=n_seg)
     start = time.time()
-    vi_tt_model.segment_docs()
+    vi_tt_model.segment_docs(n_iters=80)
     end = time.time()
     seg_time = (end - start)
     md_segs = []
@@ -684,12 +691,12 @@ def incremental_eval(doc_synth, beta):
     
 W = 10
 beta = np.array([0.1]*W)
-n_docs = 2
+n_docs = 5
 doc_len = 20
 pi = 0.25
-sent_len = 8
+sent_len = 6
 #doc_synth = CVBSynDoc(beta, pi, sent_len, doc_len, n_docs)
-n_seg = 2
+n_seg = 5
 doc_synth = CVBSynDoc2(beta, pi, sent_len, n_seg, n_docs)
 #doc_synth = CVBSynDoc3(beta)
 data = Data(doc_synth)
@@ -697,4 +704,4 @@ data = Data(doc_synth)
 #incremental_eval(doc_synth, beta)
 #single_vs_md_eval(doc_synth, beta, md_all_combs=False , md_fast=True, print_flag=True)
 #single_vs_md_eval(doc_synth, beta, md_all_combs=False , md_fast=True, print_flag=True)
-md_eval(doc_synth, beta)
+md_eval(data, beta, n_seg)
