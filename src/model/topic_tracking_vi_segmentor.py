@@ -202,7 +202,7 @@ class TopicTrackingVIModel(object):
                 continue
             denom += self.var_update_k_val(doc_i, wi, k_denom, u_clusters)
         denom = np.exp(denom)
-        return num_k/denom
+        self.qz[k][wi][self.data.W_I_words[wi]] = num_k/denom
     
     def variational_step(self, u_clusters):
         '''
@@ -395,6 +395,7 @@ class TopicTrackingVIModel(object):
                 log_str = "\nGS: "+str(self.data.docs_rho_gs[doc_i].tolist())+\
                           "\nVI: "+str(self.get_segmentation(doc_i, self.best_segmentation[-1]))
                 doc_i_log.info(log_str)
+        print("\n")
     
 class Data(object):
     '''
@@ -595,7 +596,7 @@ def single_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_fl
 def md_eval(data, beta, n_seg):
     vi_tt_model = TopicTrackingVIModel(beta, data, seg_type=SEG_FAST, max_topics=5)
     start = time.time()
-    vi_tt_model.segment_docs(n_iters=10)
+    vi_tt_model.segment_docs(n_iters=20)
     end = time.time()
     seg_time = (end - start)
     md_segs = []
