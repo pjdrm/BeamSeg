@@ -13,6 +13,7 @@ from itertools import chain, combinations
 import time
 import toyplot
 import toyplot.pdf
+from debug import log_tools
 
 SEG_FAST = "fast"
 SEG_ALL_COMBS = "all_combs"
@@ -357,8 +358,7 @@ class TopicTrackingVIModel(object):
         return final_seg_ll, best_seg
             
     def dp_segmentation_step(self):
-        t = trange(self.data.max_doc_len, desc='', leave=True)
-        for u_end in t:
+        for u_end in range(self.data.max_doc_len):
             best_seg_ll = -np.inf
             best_seg_clusters = None
             for u_begin in range(u_end+1):
@@ -366,22 +366,35 @@ class TopicTrackingVIModel(object):
                 if seg_ll > best_seg_ll:
                     best_seg_ll = seg_ll
                     best_seg_clusters = seg_clusters
-                t.set_description("Matrix: (%d,%d)" % (u_end, u_begin))
             self.best_segmentation[u_end] = best_seg_clusters
             #self.print_seg(best_seg_clusters)
         #print("==========================")
         
-    def segment_docs(self, n_iters=3): #TODO: check if the segmentation changes and use that as criteria for stopping
+    def segment_docs(self, n_iters=3, log_dir="../logs/"): #TODO: check if the segmentation changes and use that as criteria for stopping
         '''
         Segments the full collection of documents. Alternates between using a Dynamic Programming
         procedure for segmentation and performing variational inference to update the
         certainty about words belonging to a topic (segments/language model).
         :param n_iters: number of iterations to perform
         '''
-        for i in range(n_iters):
+        log_files = [log_tools.log_init(log_dir+"doc"+str(doc_i)+"_segs.txt") for doc_i in range(data.n_docs)]
+        t = trange(n_iters, desc='', leave=True)
+        for i in t:
+            start = time.time()
             self.dp_segmentation_step()
+            end = time.time()
+            dp_step_time = (end - start)
             best_segmentation = self.best_segmentation[-1]
+            start = time.time()
             self.variational_step(best_segmentation)
+            end = time.time()
+            variational_step_time = (end - start)
+            t.set_description("DP_time: %.1f VI_time: %.1f" % (dp_step_time, variational_step_time))
+            for doc_i in range(data.n_docs):
+                doc_i_log = log_files[doc_i]
+                log_str = "\nGS: "+str(self.data.docs_rho_gs[doc_i].tolist())+\
+                          "\nVI: "+str(self.get_segmentation(doc_i, self.best_segmentation[-1]))
+                doc_i_log.info(log_str)
     
 class Data(object):
     '''
@@ -390,6 +403,7 @@ class Data(object):
     individual word counts for each document. 
     '''
     def __init__(self, docs):
+        self.docs_rho_gs = [doc.rho for doc in docs.get_single_docs()]
         self.W = docs.W
         self.W_I_words = docs.W_I_words #Vector the vocabulary indexes of ith word in the full collection
         self.d_u_wi_indexes = docs.d_u_wi_indexes #Contains the a list of word indexes organizes by document and by sentence
@@ -579,9 +593,9 @@ def single_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_fl
     return single_doc_wd, multi_fast_doc_wd
     
 def md_eval(data, beta, n_seg):
-    vi_tt_model = TopicTrackingVIModel(beta, data, seg_type=SEG_FAST, max_topics=n_seg)
+    vi_tt_model = TopicTrackingVIModel(beta, data, seg_type=SEG_FAST, max_topics=5)
     start = time.time()
-    vi_tt_model.segment_docs(n_iters=80)
+    vi_tt_model.segment_docs(n_iters=10)
     end = time.time()
     seg_time = (end - start)
     md_segs = []
@@ -589,8 +603,8 @@ def md_eval(data, beta, n_seg):
         md_segs.append(vi_tt_model.get_segmentation(doc_i, vi_tt_model.best_segmentation[-1]))
             
     gs_segs = []
-    for gs_doc in doc_synth.get_single_docs():
-        gs_segs.append(gs_doc.rho)
+    for gs_doc in data.docs_rho_gs:
+        gs_segs.append(gs_doc)
         
     for md_seg, gs_seg in zip(md_segs, gs_segs):
         print("GS: " + str(gs_seg.tolist()))
@@ -691,12 +705,12 @@ def incremental_eval(doc_synth, beta):
     
 W = 10
 beta = np.array([0.1]*W)
-n_docs = 5
+n_docs = 2
 doc_len = 20
-pi = 0.25
+pi = 0.15
 sent_len = 6
 #doc_synth = CVBSynDoc(beta, pi, sent_len, doc_len, n_docs)
-n_seg = 5
+n_seg = 3
 doc_synth = CVBSynDoc2(beta, pi, sent_len, n_seg, n_docs)
 #doc_synth = CVBSynDoc3(beta) 
 data = Data(doc_synth)
