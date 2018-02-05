@@ -25,9 +25,9 @@ class TopicTrackingVIModel(object):
         self.C_beta = np.sum(self.beta)
         self.W = data.W
         self.data = data
+        self.max_topics = self.data.max_doc_len if max_topics is None else max_topics
         self.best_segmentation = [[] for i in range(self.data.max_doc_len)]
         self.seg_ll_C = gammaln(self.beta.sum())-gammaln(self.beta).sum()
-        self.max_topics = self.data.max_doc_len if max_topics is None else max_topics
         #List of matrices (one for each topic). Lines are words in the document collection and columns the vocabulary indexes.
         #The entries contains the value of the corresponding variational parameter.
         self.qz = self.init_variational_params(self.data.total_words, self.data.W, self.max_topics, self.data.W_I_words)
@@ -196,24 +196,24 @@ class TopicTrackingVIModel(object):
         :param u_clusters: list of sentence clusters representing a segmentation of all documents
         '''
         num_k = self.var_update_k_val(doc_i, wi, k, u_clusters)
-        denom = num_k
-        for k_denom in range(self.max_topics): #TODO: seems very inefficient, would like to do it in a single matrix operation
-            if k_denom == k:
-                continue
-            denom += self.var_update_k_val(doc_i, wi, k_denom, u_clusters)
-        denom = np.exp(denom)
-        self.qz[k][wi][self.data.W_I_words[wi]] = num_k/denom
+        self.qz[k][wi][self.data.W_I_words[wi]] = num_k
+        return num_k
     
     def variational_step(self, u_clusters):
         '''
         Update the variational parameters for all words and all topics.
         :param u_clusters: list of sentence clusters representing the current segmentation state 
         '''
+        norm_const = np.zeros(self.data.total_words)
         for k in range(self.max_topics):
             for doc_i in range(self.data.n_docs):
                 for u in self.data.d_u_wi_indexes[doc_i]:
                     for wi in u:
-                        self.var_param_update(doc_i, wi, k, u_clusters)
+                        wi_num_k = self.var_param_update(doc_i, wi, k, u_clusters)
+                        norm_const[wi] += wi_num_k
+                        
+        for k in range(self.max_topics):
+            self.qz[k] = self.qz[k]/np.array([norm_const]).T 
     
     def segment_ll(self, word_counts):
         '''
@@ -269,13 +269,13 @@ class TopicTrackingVIModel(object):
             cluster_i = self.get_last_cluster(doc_i, u_clusters)
             target_cluster = None #For new segmentation points the target cluster is the last cluster (topic) where doc_i appear +1
             for u_cluster in u_clusters: #Checking if the target cluster already exists
-                if u_cluster.k == cluster_i+n_skips+1:
+                if u_cluster.k == u_clusters[cluster_i].k+n_skips+1:
                     target_cluster = u_cluster
                     break
             if target_cluster is not None: #The language model corresponding to this cluster might already exists due to other documents having different segmentation at this stage
                 target_cluster.add_sents(u_begin, u_end, doc_i)
             else:
-                new_cluster = SentenceCluster(u_begin, u_end, [doc_i], self.data, cluster_i+n_skips+1)
+                new_cluster = SentenceCluster(u_begin, u_end, [doc_i], self.data, u_clusters[cluster_i].k+n_skips+1)
                 u_clusters.append(new_cluster)
                 
     def segment_u(self, u_begin, u_end):
@@ -323,24 +323,34 @@ class TopicTrackingVIModel(object):
         best_seg = self.best_segmentation[u_begin-1]
         final_seg_ll = None
         for doc_i in range(self.data.n_docs):
+            doc_i_len = self.data.doc_len(doc_i)
+            #Accounting for documents with different lengths
+            if u_begin > doc_i_len-1:
+                continue
+            
             seg_fit_prev = copy.deepcopy(best_seg)
             self.fit_sentences(u_begin, u_end, [doc_i], seg_fit_prev) #Note that this changes seg_fit_prev
             seg_fit_prev_ll = self.segmentation_ll(seg_fit_prev) #Case where we did not open a "new" segment
             
-            if len(best_seg) < self.max_topics:
+            current_highest_k = max(best_seg, key=lambda item: item.k).k
+            if current_highest_k < self.max_topics-1:
                 seg_new_seg = copy.deepcopy(best_seg)
                 self.new_seg_point(u_begin, u_end, [doc_i], seg_new_seg, n_skips=0) #Note that this changes seg_new_seg
                 seg_new_ll = self.segmentation_ll(seg_new_seg) #Case where we opened a "new" segment
             else:
                 seg_new_ll = -np.inf
             
-            if len(best_seg) < self.max_topics-1:
+            if current_highest_k < self.max_topics-2:
                 seg_new_seg_skip = copy.deepcopy(best_seg)
                 self.new_seg_point(u_begin, u_end, [doc_i], seg_new_seg_skip, n_skips=1) #Note that this changes seg_new_seg_skip
                 seg_new_skip_ll = self.segmentation_ll(seg_new_seg_skip) #Case where we opened a "new" segment and skip a topic
             else:
                 seg_new_skip_ll = -np.inf
             
+            if seg_fit_prev_ll == seg_new_ll: #JUST FOR DEBUG
+                seg_new_seg = copy.deepcopy(best_seg)
+                self.new_seg_point(u_begin, u_end, [doc_i], seg_new_seg, n_skips=0) #Note that this changes seg_new_seg
+                
             seg_ll_list = [seg_fit_prev_ll, seg_new_ll, seg_new_skip_ll]
             max_ll = max(seg_ll_list)
             max_index = seg_ll_list.index(max_ll)
@@ -382,19 +392,22 @@ class TopicTrackingVIModel(object):
         for i in t:
             start = time.time()
             self.dp_segmentation_step()
+            for doc_i in range(data.n_docs):
+                doc_i_log = log_files[doc_i]
+                log_str = "\nGS: "+str(self.data.docs_rho_gs[doc_i].tolist())+\
+                          "\nVI: "+str(self.get_segmentation(doc_i, self.best_segmentation[-1]))
+                doc_i_log.info(log_str)
             end = time.time()
             dp_step_time = (end - start)
+            
             best_segmentation = self.best_segmentation[-1]
             start = time.time()
             self.variational_step(best_segmentation)
             end = time.time()
             variational_step_time = (end - start)
             t.set_description("DP_time: %.1f VI_time: %.1f" % (dp_step_time, variational_step_time))
-            for doc_i in range(data.n_docs):
-                doc_i_log = log_files[doc_i]
-                log_str = "\nGS: "+str(self.data.docs_rho_gs[doc_i].tolist())+\
-                          "\nVI: "+str(self.get_segmentation(doc_i, self.best_segmentation[-1]))
-                doc_i_log.info(log_str)
+            if i < n_iters-1:
+                self.best_segmentation = [[] for i in range(self.data.max_doc_len)]
         print("\n")
     
 class Data(object):
@@ -594,7 +607,7 @@ def single_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_fl
     return single_doc_wd, multi_fast_doc_wd
     
 def md_eval(data, beta, n_seg):
-    vi_tt_model = TopicTrackingVIModel(beta, data, seg_type=SEG_FAST, max_topics=5)
+    vi_tt_model = TopicTrackingVIModel(beta, data, seg_type=SEG_FAST, max_topics=n_seg+1)
     start = time.time()
     vi_tt_model.segment_docs(n_iters=20)
     end = time.time()
@@ -708,7 +721,7 @@ W = 10
 beta = np.array([0.1]*W)
 n_docs = 2
 doc_len = 20
-pi = 0.15
+pi = 0.2
 sent_len = 6
 #doc_synth = CVBSynDoc(beta, pi, sent_len, doc_len, n_docs)
 n_seg = 3
