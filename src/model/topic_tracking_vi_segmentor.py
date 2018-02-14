@@ -219,15 +219,17 @@ class TopicTrackingVIModel(object):
         E_counts_f2 = self.qz[k][words_update]
         Var_counts_f2 = E_counts_f2*(1.0-E_counts_f2)
         C_beta_E_counts_f2_sum = self.C_beta+np.sum(E_counts_f2)
-        E_q_f2 = np.log(C_beta_E_counts_f2_sum)-(np.sum(Var_counts_f2)/(2.0*(C_beta_E_counts_f2_sum)**2))
-        
+        #E_q_f2 = np.log(C_beta_E_counts_f2_sum)-(np.sum(Var_counts_f2)/(2.0*(C_beta_E_counts_f2_sum)**2))
         
         word_mask = np.array([(self.data.W_I_words[words_update]==self.data.W_I_words[wi]).astype(np.int)]).T
         E_counts_f1 = E_counts_f2*word_mask
-        Var_counts_f1 = Var_counts_f2*word_mask
-        C_beta_E_counts_f1_sum = self.C_beta+np.sum(E_counts_f1)
-        E_q_f1 = np.log(C_beta_E_counts_f1_sum)-(np.sum(Var_counts_f1)/(2.0*(C_beta_E_counts_f1_sum)**2))
-        num = np.exp(E_q_f1-E_q_f2)
+        Var_counts_f1 = np.sum(Var_counts_f2*word_mask)
+        C_beta_E_counts_f1_sum = self.beta[self.data.W_I_words[wi]]+np.sum(E_counts_f1)
+        Var_counts_f1 = Var_counts_f1/(2.0*(C_beta_E_counts_f1_sum)**2)
+        Var_counts_f2 = np.sum(Var_counts_f2)/(2.0*(C_beta_E_counts_f2_sum)**2)
+        #E_q_f1 = np.log(C_beta_E_counts_f1_sum)-(np.sum(Var_counts_f1)/(2.0*(C_beta_E_counts_f1_sum)**2))
+        #num = np.exp(E_q_f1-E_q_f2)
+        num = C_beta_E_counts_f1_sum*(1.0/C_beta_E_counts_f2_sum)*np.exp(-Var_counts_f1+Var_counts_f2)
         
         return num
         
@@ -462,11 +464,10 @@ class TopicTrackingVIModel(object):
         best_seg = copy.deepcopy(self.best_segmentation[u_begin-1])
         total_ll = 0.0
         for k in range(self.max_topics):
-            k_seg = copy.deepcopy(best_seg)
             u_k_cluster = None
-            for u_cluster in k_seg:
+            for u_cluster in best_seg:
                 if u_cluster.k == k:
-                    u_k_cluster = u_cluster
+                    u_k_cluster = copy.deepcopy(u_cluster)
                     break
                 
             for doc_i in range(self.data.n_docs):
@@ -477,11 +478,10 @@ class TopicTrackingVIModel(object):
                 
                 if u_k_cluster is None:
                     u_k_cluster = SentenceCluster(u_begin, u_end, [doc_i], self.data, k)
-                    k_seg.append(u_k_cluster)
                 else:
                     u_k_cluster.add_sents(u_begin, u_end, doc_i)
                 
-            total_ll += self.segmentation_ll(k_seg)
+            total_ll += self.segmentation_ll([u_k_cluster])
         
         best_seg = self.get_var_seg(u_begin, u_end, best_seg)
         return total_ll, best_seg
@@ -861,8 +861,6 @@ def incremental_eval(doc_synth, beta):
     );
     toyplot.pdf.render(canvas, "incremental_eval_results.pdf")
     
-    
-    
 W = 8
 beta = np.array([0.1]*W)
 n_docs = 2
@@ -878,5 +876,5 @@ data = Data(doc_synth)
 #incremental_eval(doc_synth, beta)
 #single_vs_md_eval(doc_synth, beta, md_all_combs=False , md_fast=True, print_flag=True)
 #single_vs_md_eval(doc_synth, beta, md_all_combs=False , md_fast=True, print_flag=True)
-iters = 20
+iters = 200
 md_eval(data, beta, n_seg, iters)
