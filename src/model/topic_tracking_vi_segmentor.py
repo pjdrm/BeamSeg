@@ -39,7 +39,7 @@ class TopicTrackingVIModel(object):
             self.seg_func = self.segment_u
             self.doc_combs_list = self.init_doc_combs()#All n possible combinations (up to the number of documents). Its a list of pairs where the first element is the combination and second the remaining docs
         elif seg_type == SEG_FAST:
-            self.seg_func = self.segment_u_fast_v2
+            self.seg_func = self.segment_u_fast_v3
         else:
             raise Exception("ERROR: unknown seg_type")
     
@@ -152,7 +152,7 @@ class TopicTrackingVIModel(object):
                     return u_cluster
         return None
         
-    def qz_words_minus_wi(self, rho, doc_i, u, wi, k, u_clusters):
+    def qz_words_minus_wi_gibbs(self, rho, doc_i, u, wi, k, u_clusters):
         '''
         Returns the set of words that influence the qz update
         of wi.
@@ -206,6 +206,32 @@ class TopicTrackingVIModel(object):
                 words += self.get_k_segment(doc_i, k+k_btw*sign, u_clusters)
             '''
             return words
+        
+    def qz_words_minus_wi_seg_flip(self, doc_i, u, wi, k, u_clusters):
+        '''
+        Returns the set of words that influence the qz update
+        of wi.
+        '''
+        wi_u_cluster = self.get_wi_segment(wi, u_clusters)
+        if k == wi_u_cluster.k:
+            words = list(set(wi_u_cluster.get_words())-set([wi]))
+            return words
+        else:
+            u_begin, u_end = wi_u_cluster.get_segment(doc_i)
+            words = []
+            for u in range(u_begin, u_end+1):
+                u_wi_indexes = self.data.d_u_wi_indexes[doc_i][u]
+                words += u_wi_indexes
+            words = list(set(words)-set([wi]))
+        
+            #If wi is a different topic than the one we are updating (k)
+            #we need find the words from other documents in that topic. 
+            for u_cluster in u_clusters:  #TODO: seems like I am adding words from doc_i from other clusters. I dont think I want that.
+                if u_cluster.k == k:
+                    words += u_cluster.get_words_minus_doc(doc_i)
+                    break
+                
+            return words
             
     def var_update_k_val(self, rho, doc_i, u, wi, k, u_clusters):
         '''
@@ -215,7 +241,8 @@ class TopicTrackingVIModel(object):
         :param k: topic/language model/segment index
         :param u_clusters: list of sentence clusters representing a segmentation of all documents
         '''
-        words_update = self.qz_words_minus_wi(rho, doc_i, u, wi, k, u_clusters)
+        #words_update = self.qz_words_minus_wi_gibbs(rho, doc_i, u, wi, k, u_clusters)
+        words_update = self.qz_words_minus_wi_seg_flip(doc_i, u, wi, k, u_clusters)
         E_counts_f2 = self.qz[k][words_update]
         Var_counts_f2 = E_counts_f2*(1.0-E_counts_f2)
         C_beta_E_counts_f2_sum = self.C_beta+np.sum(E_counts_f2)
@@ -281,7 +308,8 @@ class TopicTrackingVIModel(object):
         '''
         segmentation_ll = 0.0
         for u_cluster in u_clusters:
-            qz_counts = np.sum(self.qz[u_cluster.k][u_cluster.wi_list], axis=0)
+            #qz_counts = np.sum(self.qz[u_cluster.k][u_cluster.wi_list], axis=0)
+            qz_counts = u_cluster.get_word_counts() #Version that does not use qz weight at all
             segmentation_ll += self.segment_ll(qz_counts)
         return segmentation_ll
     
@@ -410,23 +438,32 @@ class TopicTrackingVIModel(object):
                 
         return final_seg_ll, best_seg
     
+    def get_best_k(self, doc_i, u_begin, u_end, u_clusters):
+        wi_list = self.data.d_u_wi_indexes[doc_i][u_begin:u_end+1]
+        wi_list = list(chain(*wi_list))
+        best_qz_sum = 0.0
+        best_k = -1
+        if len(u_clusters) == 0:
+            last_cluster_i = 0
+        else:
+            last_cluster_i = self.get_last_cluster(doc_i, u_clusters)
+        for k in range(last_cluster_i, self.max_topics): #last_cluster_i was here before
+            qz_sum = np.sum(self.qz[k][wi_list])
+            if qz_sum > best_qz_sum:
+                best_qz_sum = qz_sum
+                best_k = k
+        if best_k == -1:
+            print()
+        return best_k
+        
     def get_var_seg(self, u_begin, u_end, best_seg):
         for doc_i in range(self.data.n_docs):
             doc_i_len = self.data.doc_len(doc_i)
             #Accounting for documents with different lengths
             if u_begin > doc_i_len-1:
                 continue
-            wi_list = self.data.d_u_wi_indexes[doc_i][u_begin:u_end+1] #TODO: double check this is correct
-            wi_list = list(chain(*wi_list))
-            best_qz_sum = 0.0
-            best_k = -1
-            last_cluster_i = self.get_last_cluster(doc_i, best_seg)
-            for k in range(last_cluster_i, self.max_topics):
-                qz_sum = np.sum(self.qz[k][wi_list])
-                if qz_sum > best_qz_sum:
-                    best_qz_sum = qz_sum
-                    best_k = k
             
+            best_k = self.get_best_k(doc_i, u_begin, u_end, best_seg)
             u_k_cluster = None
             for u_cluster in best_seg:
                 if u_cluster.k == best_k:
@@ -484,6 +521,50 @@ class TopicTrackingVIModel(object):
             total_ll += self.segmentation_ll([u_k_cluster])
         
         best_seg = self.get_var_seg(u_begin, u_end, best_seg)
+        return total_ll, best_seg
+    
+    def segment_u_fast_v3(self, u_begin, u_end):
+        '''
+        
+        :param u_end: sentence index
+        :param u_begin: language model index
+        '''
+        #Seems that doing this for u_begin==0 is bad. Imagine, because of initialization, we end up with a single segment on k=0.
+        #The VI updates for k=0 will have all words from other segments, which will lower the confidence in k=0. Other topics will
+        #have better updates since we flip the rho value and discard many words that are bad. Thus, the weights will prefer other 
+        #topics (different from k=0). In the code bellow I was always forcing k=0, probably thats why its not working.
+        '''
+        if u_begin == 0: #The first column corresponds to having all sentences from all docs in a single segment (there is only one language model)
+            u_cluster = SentenceCluster(u_begin, u_end, list(range(self.data.n_docs)), self.data, 0)
+            total_ll = 0.0
+            k0_cluster = SentenceCluster(u_begin, u_end, list(range(self.data.n_docs)), self.data, 0)
+            total_ll += self.segmentation_ll([k0_cluster])
+            return total_ll, [u_cluster] #TODO: maybe I think break based on qz
+        '''
+        
+        best_seg = copy.deepcopy(self.best_segmentation[u_begin-1])
+        for doc_i in range(self.data.n_docs):
+            doc_i_len = self.data.doc_len(doc_i)
+            #Accounting for documents with different lengths
+            if u_begin > doc_i_len-1:
+                continue
+            
+            best_k = self.get_best_k(doc_i, u_begin, u_end, best_seg)
+            u_k_cluster = None
+            for u_cluster in best_seg:
+                if u_cluster.k == best_k:
+                    u_k_cluster = u_cluster
+                    break
+                
+            if u_k_cluster is None:
+                u_k_cluster = SentenceCluster(u_begin, u_end, [doc_i], self.data, best_k)
+                best_seg.append(u_k_cluster)
+            else:
+                u_k_cluster.add_sents(u_begin, u_end, doc_i)
+            
+        total_ll = self.segmentation_ll(best_seg)
+        
+        #best_seg = self.get_var_seg(u_begin, u_end, best_seg)
         return total_ll, best_seg
             
     def dp_segmentation_step(self):
@@ -595,6 +676,7 @@ class SentenceCluster(object):
         self.data = data
         self.u_list = []
         self.doc_list = []
+        self.word_counts = np.zeros(self.data.W)
         
         for doc_i in docs:
             doc_i_len = self.data.doc_len(doc_i)
@@ -614,6 +696,7 @@ class SentenceCluster(object):
         for doc_i, u in zip(self.doc_list, self.u_list):
             d_u_words = self.data.d_u_wi_indexes[doc_i][u]
             self.wi_list += d_u_words
+            self.word_counts += np.sum(self.data.doc_word_counts(doc_i)[u_begin:u_end_true+1], axis=0)
     
     def has_word(self, wi):
         return wi in self.wi_list
@@ -633,10 +716,14 @@ class SentenceCluster(object):
         seg_len =  u_end-u_begin+1
         self.u_list += seg
         self.doc_list += [doc_i]*seg_len
+        self.word_counts += np.sum(self.data.doc_word_counts(doc_i)[u_begin:u_end+1], axis=0)
         
         for u in seg:
             d_u_words = self.data.d_u_wi_indexes[doc_i][u]
             self.wi_list += d_u_words
+            
+    def get_word_counts(self):
+        return self.word_counts
         
     def get_words(self):
         return self.wi_list
@@ -860,6 +947,11 @@ def incremental_eval(doc_synth, beta):
     corner=("top-right", 0, 100, 50),
     );
     toyplot.pdf.render(canvas, "incremental_eval_results.pdf")
+
+use_seed = True
+seed = 17#14
+if use_seed:
+    np.random.seed(seed)
     
 W = 8
 beta = np.array([0.1]*W)
@@ -876,5 +968,5 @@ data = Data(doc_synth)
 #incremental_eval(doc_synth, beta)
 #single_vs_md_eval(doc_synth, beta, md_all_combs=False , md_fast=True, print_flag=True)
 #single_vs_md_eval(doc_synth, beta, md_all_combs=False , md_fast=True, print_flag=True)
-iters = 200
+iters = 20
 md_eval(data, beta, n_seg, iters)
