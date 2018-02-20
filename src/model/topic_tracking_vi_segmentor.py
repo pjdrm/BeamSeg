@@ -14,6 +14,7 @@ import time
 import toyplot
 import toyplot.pdf
 from debug import log_tools
+import operator
 
 np.set_printoptions(threshold=np.inf)
 np.set_printoptions(formatter={'float': '{: 0.3f}'.format})
@@ -72,6 +73,20 @@ class TopicTrackingVIModel(object):
             seg = self.get_segmentation(doc_i, u_clusters)
             print("Doc %d: %s" % (doc_i, str(seg)))
             
+    def get_cluster_order(self, doc_i, u_clusters):
+        cluster_k_list = []
+        for u_cluster in u_clusters:
+            for u, doc_j in zip(u_cluster.u_list, u_cluster.doc_list):
+                if doc_j != doc_i:
+                    continue
+                cluster_k_list.append([u_cluster.k, u])
+                break
+        cluster_k_list = sorted(cluster_k_list, key=lambda x: x[1])
+        ret_list = []
+        for cluster_k in cluster_k_list:
+            ret_list.append(cluster_k[0])
+        return ret_list
+    
     def get_segmentation(self, doc_i, u_clusters):
         '''
         Returns the final segmentation for a document.
@@ -80,14 +95,18 @@ class TopicTrackingVIModel(object):
         :param doc_i: document index
         '''
         hyp_seg = []
-        for u_cluster in u_clusters:
-            found_doc = False
-            for u, doc_j in zip(u_cluster.u_list, u_cluster.doc_list):
-                if doc_j == doc_i:
-                    hyp_seg.append(0)
-                    found_doc = True
-            if found_doc:
-                hyp_seg[-1] = 1
+        cluster_order = self.get_cluster_order(doc_i, u_clusters)
+        for u_cluster_k in cluster_order:
+            for u_cluster in u_clusters:
+                if u_cluster.k != u_cluster_k:
+                    continue
+                found_doc = False
+                for doc_j in u_cluster.doc_list:
+                    if doc_j == doc_i:
+                        hyp_seg.append(0)
+                        found_doc = True
+                if found_doc:
+                    hyp_seg[-1] = 1
         return hyp_seg
     
     def get_all_segmentations(self):
@@ -106,14 +125,46 @@ class TopicTrackingVIModel(object):
         :param doc_i: document index
         :param u_clusters: list of sentence cluster corresponding to a segmentation
         '''
-        found_doc = False
+        last_sent = -1
+        last_cluster = -1
         for cluster_i, u_cluster in enumerate(u_clusters):
             if u_cluster.has_doc(doc_i):
-                if not found_doc:
-                    found_doc = True
-            elif found_doc:
-                return cluster_i-1
-        return len(u_clusters)-1 #Case where the last cluster was the last one in the list
+                last_sent_u_cluster = -1
+                for u, doc_j in zip(u_cluster.u_list, u_cluster.doc_list):
+                    if doc_i != doc_j:
+                        continue
+                    last_sent_u_cluster = u
+                if last_sent_u_cluster > last_sent:
+                    last_cluster = cluster_i
+                    last_sent = last_sent_u_cluster
+        if last_cluster == -1:
+            last_cluster = 0
+        return last_cluster
+    
+    def get_valid_insert_clusters(self, doc_i, u_clusters):
+        if len(u_clusters) == 0:
+            return range(0, self.max_topics)
+        last_sent = -1
+        last_cluster_i = -1
+        u_clusters_with_doc_i = []
+        for u_cluster in u_clusters:
+            if u_cluster.has_doc(doc_i):
+                u_clusters_with_doc_i.append(u_cluster.k)
+                last_sent_u_cluster = -1
+                for u, doc_j in zip(u_cluster.u_list, u_cluster.doc_list):
+                    if doc_i != doc_j:
+                        continue
+                    last_sent_u_cluster = u
+                if last_sent_u_cluster > last_sent:
+                    last_cluster_i = u_cluster.k
+                    last_sent = last_sent_u_cluster
+                    
+        invalid_clusters = set(u_clusters_with_doc_i)
+        if last_cluster_i != -1:
+            invalid_clusters = invalid_clusters-set([last_cluster_i])
+            
+        valid_clusters = list(set(range(0, self.max_topics))-invalid_clusters)
+        return valid_clusters
     
     def get_wi_segment(self, wi, u_clusters):
         '''
@@ -443,6 +494,7 @@ class TopicTrackingVIModel(object):
         wi_list = list(chain(*wi_list))
         best_qz_sum = 0.0
         best_k = -1
+        '''
         if len(u_clusters) == 0:
             last_cluster_i = 0
         else:
@@ -452,8 +504,41 @@ class TopicTrackingVIModel(object):
             if qz_sum > best_qz_sum:
                 best_qz_sum = qz_sum
                 best_k = k
+        '''
+        possible_clusters = self.get_valid_insert_clusters(doc_i, u_clusters)
+        for k in possible_clusters:
+            qz_sum = np.sum(self.qz[k][wi_list])
+            if qz_sum > best_qz_sum:
+                best_qz_sum = qz_sum
+                best_k = k
+                
         if best_k == -1:
+            possible_clusters = self.get_valid_insert_clusters(doc_i, u_clusters)
             print()
+            
+        return best_k
+    
+    def get_best_k_voting(self, doc_i, u_begin, u_end, u_clusters):
+        wi_list = self.data.d_u_wi_indexes[doc_i][u_begin:u_end+1]
+        wi_list = list(chain(*wi_list))
+        
+        possible_clusters = self.get_valid_insert_clusters(doc_i, u_clusters)
+        k_votes = {key: 0 for key in possible_clusters}
+        for wi in wi_list:
+            best_cluster = -1
+            best_qz = -1
+            for k in possible_clusters:
+                qz = self.qz[k][wi][self.data.W_I_words[wi]]
+                if qz > best_qz:
+                    best_cluster = k
+                    best_qz = qz
+            k_votes[best_cluster] += 1
+        
+        best_k = max(k_votes.iteritems(), key=operator.itemgetter(1))[0]
+                
+        if best_k == -1:
+            print("WARNING: inavlid best_k")
+            
         return best_k
         
     def get_var_seg(self, u_begin, u_end, best_seg):
@@ -549,7 +634,7 @@ class TopicTrackingVIModel(object):
             if u_begin > doc_i_len-1:
                 continue
             
-            best_k = self.get_best_k(doc_i, u_begin, u_end, best_seg)
+            best_k = self.get_best_k_voting(doc_i, u_begin, u_end, best_seg)
             u_k_cluster = None
             for u_cluster in best_seg:
                 if u_cluster.k == best_k:
@@ -569,6 +654,8 @@ class TopicTrackingVIModel(object):
             
     def dp_segmentation_step(self):
         for u_end in range(self.data.max_doc_len):
+            #if u_end == 17:
+            #    print()
             best_seg_ll = -np.inf
             best_seg_clusters = None
             for u_begin in range(u_end+1):
@@ -948,17 +1035,17 @@ def incremental_eval(doc_synth, beta):
     );
     toyplot.pdf.render(canvas, "incremental_eval_results.pdf")
 
-use_seed = True
-seed = 17#14
+use_seed = False
+seed = 24
 if use_seed:
     np.random.seed(seed)
     
-W = 8
+W = 300
 beta = np.array([0.1]*W)
-n_docs = 2
+n_docs = 3
 doc_len = 20
-pi = 0.2
-sent_len = 6
+pi = 0.08
+sent_len = 8
 #doc_synth = CVBSynDoc(beta, pi, sent_len, doc_len, n_docs)
 n_seg = 3
 doc_synth = CVBSynDoc2(beta, pi, sent_len, n_seg, n_docs)
