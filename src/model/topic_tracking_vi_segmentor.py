@@ -16,7 +16,7 @@ import toyplot.pdf
 from debug import log_tools
 import operator
 
-np.set_printoptions(threshold=np.inf)
+np.set_printoptions(threshold=np.inf, linewidth=200)
 np.set_printoptions(formatter={'float': '{: 0.3f}'.format})
 
 SEG_FAST = "fast"
@@ -292,8 +292,8 @@ class TopicTrackingVIModel(object):
         :param k: topic/language model/segment index
         :param u_clusters: list of sentence clusters representing a segmentation of all documents
         '''
-        #words_update = self.qz_words_minus_wi_gibbs(rho, doc_i, u, wi, k, u_clusters)
-        words_update = self.qz_words_minus_wi_seg_flip(doc_i, u, wi, k, u_clusters)
+        words_update = self.qz_words_minus_wi_gibbs(rho, doc_i, u, wi, k, u_clusters)
+        #words_update = self.qz_words_minus_wi_seg_flip(doc_i, u, wi, k, u_clusters)
         E_counts_f2 = self.qz[k][words_update]
         Var_counts_f2 = E_counts_f2*(1.0-E_counts_f2)
         C_beta_E_counts_f2_sum = self.C_beta+np.sum(E_counts_f2)
@@ -404,6 +404,97 @@ class TopicTrackingVIModel(object):
                 new_cluster = SentenceCluster(u_begin, u_end, [doc_i], self.data, u_clusters[cluster_i].k+n_skips+1)
                 u_clusters.append(new_cluster)
                 
+    def get_best_k(self, doc_i, u_begin, u_end, u_clusters):
+        wi_list = self.data.d_u_wi_indexes[doc_i][u_begin:u_end+1]
+        wi_list = list(chain(*wi_list))
+        best_qz_sum = 0.0
+        best_k = -1
+        '''
+        if len(u_clusters) == 0:
+            last_cluster_i = 0
+        else:
+            last_cluster_i = self.get_last_cluster(doc_i, u_clusters)
+        for k in range(last_cluster_i, self.max_topics): #last_cluster_i was here before
+            qz_sum = np.sum(self.qz[k][wi_list])
+            if qz_sum > best_qz_sum:
+                best_qz_sum = qz_sum
+                best_k = k
+        '''
+        possible_clusters = self.get_valid_insert_clusters(doc_i, u_clusters)
+        for k in possible_clusters:
+            qz_sum = np.sum(self.qz[k][wi_list])
+            if qz_sum > best_qz_sum:
+                best_qz_sum = qz_sum
+                best_k = k
+                
+        if best_k == -1:
+            possible_clusters = self.get_valid_insert_clusters(doc_i, u_clusters)
+            print()
+            
+        return best_k
+    
+    def get_best_k_voting(self, doc_i, u_begin, u_end, u_clusters):
+        wi_list = self.data.d_u_wi_indexes[doc_i][u_begin:u_end+1]
+        wi_list = list(chain(*wi_list))
+        
+        possible_clusters = self.get_valid_insert_clusters(doc_i, u_clusters)
+        k_votes = {key: 0 for key in possible_clusters}
+        for wi in wi_list:
+            best_cluster = -1
+            best_qz = -1
+            for k in possible_clusters:
+                qz = self.qz[k][wi][self.data.W_I_words[wi]]
+                if qz > best_qz:
+                    best_cluster = k
+                    best_qz = qz
+            k_votes[best_cluster] += 1
+        
+        best_k = max(k_votes.iteritems(), key=operator.itemgetter(1))[0]
+                
+        if best_k == -1:
+            print("WARNING: inavlid best_k")
+            
+        return best_k
+    
+    def get_best_k_voting_u0(self, u_end):
+        k_votes = {key: 0 for key in range(self.max_topics)}
+        for doc_i in range(self.data.n_docs):
+            wi_list = self.data.d_u_wi_indexes[doc_i][0:u_end+1]
+            wi_list = list(chain(*wi_list))
+            for wi in wi_list:
+                best_cluster = -1
+                best_qz = -1
+                for k in range(self.max_topics):
+                    qz = self.qz[k][wi][self.data.W_I_words[wi]]
+                    if qz > best_qz:
+                        best_cluster = k
+                        best_qz = qz
+            k_votes[best_cluster] += 1
+        
+        best_k = max(k_votes.iteritems(), key=operator.itemgetter(1))[0]
+        return best_k
+        
+    def get_var_seg(self, u_begin, u_end, best_seg):
+        for doc_i in range(self.data.n_docs):
+            doc_i_len = self.data.doc_len(doc_i)
+            #Accounting for documents with different lengths
+            if u_begin > doc_i_len-1:
+                continue
+            
+            best_k = self.get_best_k(doc_i, u_begin, u_end, best_seg)
+            u_k_cluster = None
+            for u_cluster in best_seg:
+                if u_cluster.k == best_k:
+                    u_k_cluster = u_cluster
+                    break
+                
+            if u_k_cluster is None:
+                    u_k_cluster = SentenceCluster(u_begin, u_end, [doc_i], self.data, best_k)
+                    best_seg.append(u_k_cluster)
+            else:
+                u_k_cluster.add_sents(u_begin, u_end, doc_i)
+        return best_seg
+                
     def segment_u(self, u_begin, u_end):
         '''
         Estimates, for all documents, the best segmentation
@@ -428,6 +519,43 @@ class TopicTrackingVIModel(object):
                 best_seg_ll = segmentation_ll
                 best_seg_clusters = best_seg
         return best_seg_ll, best_seg_clusters
+    
+    def segment_u_fast_no_vi(self, u_begin, u_end):
+        '''
+        Estimates, for all documents, the best segmentation
+        from u_end to u_begin (column index in the DP matrix).
+        Implements a faster version that does not explore all self.doc_combs_list.
+        The heuristic considers adding (or not) the current segmentation point of an
+        individual documents. The corresponding sentences are added to the option
+        that yields the highest likelihood. In each step we go to the next document
+        and we stop until all of them are covered.
+        :param u_end: sentence index
+        :param u_begin: language model index
+        '''
+        if u_begin == 0:#The first column corresponds to having all sentences from all docs in a single segment (there is only one language model)
+            u_cluster = SentenceCluster(u_begin, u_end, list(range(self.data.n_docs)), self.data, 0)
+            segmentation_ll = self.segment_ll(u_cluster.get_word_counts())
+            return segmentation_ll, [u_cluster]
+        
+        best_seg = self.best_segmentation[u_begin-1]
+        final_seg_ll = None
+        for doc_i in range(self.data.n_docs):
+            seg_fit_prev = copy.deepcopy(best_seg)
+            self.fit_sentences(u_begin, u_end, [doc_i], seg_fit_prev) #Note that this changes seg_fit_prev
+            seg_fit_prev_ll = self.segmentation_ll(seg_fit_prev) #Case where we did not open a "new" segment
+            
+            seg_new_seg = copy.deepcopy(best_seg)
+            self.new_seg_point(u_begin, u_end, [doc_i], seg_new_seg) #Note that this changes seg_new_seg
+            seg_new_ll = self.segmentation_ll(seg_new_seg) #Case where we opened a "new" segment
+            
+            if seg_fit_prev_ll > seg_new_ll:
+                best_seg = seg_fit_prev
+                final_seg_ll = seg_fit_prev_ll
+            else:
+                best_seg = seg_new_seg
+                final_seg_ll = seg_new_ll
+                
+        return final_seg_ll, best_seg
     
     def segment_u_fast(self, u_begin, u_end):
         '''
@@ -488,79 +616,6 @@ class TopicTrackingVIModel(object):
                 final_seg_ll = seg_new_skip_ll
                 
         return final_seg_ll, best_seg
-    
-    def get_best_k(self, doc_i, u_begin, u_end, u_clusters):
-        wi_list = self.data.d_u_wi_indexes[doc_i][u_begin:u_end+1]
-        wi_list = list(chain(*wi_list))
-        best_qz_sum = 0.0
-        best_k = -1
-        '''
-        if len(u_clusters) == 0:
-            last_cluster_i = 0
-        else:
-            last_cluster_i = self.get_last_cluster(doc_i, u_clusters)
-        for k in range(last_cluster_i, self.max_topics): #last_cluster_i was here before
-            qz_sum = np.sum(self.qz[k][wi_list])
-            if qz_sum > best_qz_sum:
-                best_qz_sum = qz_sum
-                best_k = k
-        '''
-        possible_clusters = self.get_valid_insert_clusters(doc_i, u_clusters)
-        for k in possible_clusters:
-            qz_sum = np.sum(self.qz[k][wi_list])
-            if qz_sum > best_qz_sum:
-                best_qz_sum = qz_sum
-                best_k = k
-                
-        if best_k == -1:
-            possible_clusters = self.get_valid_insert_clusters(doc_i, u_clusters)
-            print()
-            
-        return best_k
-    
-    def get_best_k_voting(self, doc_i, u_begin, u_end, u_clusters):
-        wi_list = self.data.d_u_wi_indexes[doc_i][u_begin:u_end+1]
-        wi_list = list(chain(*wi_list))
-        
-        possible_clusters = self.get_valid_insert_clusters(doc_i, u_clusters)
-        k_votes = {key: 0 for key in possible_clusters}
-        for wi in wi_list:
-            best_cluster = -1
-            best_qz = -1
-            for k in possible_clusters:
-                qz = self.qz[k][wi][self.data.W_I_words[wi]]
-                if qz > best_qz:
-                    best_cluster = k
-                    best_qz = qz
-            k_votes[best_cluster] += 1
-        
-        best_k = max(k_votes.iteritems(), key=operator.itemgetter(1))[0]
-                
-        if best_k == -1:
-            print("WARNING: inavlid best_k")
-            
-        return best_k
-        
-    def get_var_seg(self, u_begin, u_end, best_seg):
-        for doc_i in range(self.data.n_docs):
-            doc_i_len = self.data.doc_len(doc_i)
-            #Accounting for documents with different lengths
-            if u_begin > doc_i_len-1:
-                continue
-            
-            best_k = self.get_best_k(doc_i, u_begin, u_end, best_seg)
-            u_k_cluster = None
-            for u_cluster in best_seg:
-                if u_cluster.k == best_k:
-                    u_k_cluster = u_cluster
-                    break
-                
-            if u_k_cluster is None:
-                    u_k_cluster = SentenceCluster(u_begin, u_end, [doc_i], self.data, best_k)
-                    best_seg.append(u_k_cluster)
-            else:
-                u_k_cluster.add_sents(u_begin, u_end, doc_i)
-        return best_seg
     
     def segment_u_fast_v2(self, u_begin, u_end):
         '''
@@ -627,6 +682,12 @@ class TopicTrackingVIModel(object):
             return total_ll, [u_cluster] #TODO: maybe I think break based on qz
         '''
         
+        if u_begin == 0:
+            best_k = self.get_best_k_voting_u0(u_end)
+            u_cluster = SentenceCluster(u_begin, u_end, list(range(self.data.n_docs)), self.data, best_k)
+            total_ll = self.segmentation_ll([u_cluster])
+            return total_ll, [u_cluster]
+            
         best_seg = copy.deepcopy(self.best_segmentation[u_begin-1])
         for doc_i in range(self.data.n_docs):
             doc_i_len = self.data.doc_len(doc_i)
@@ -1035,17 +1096,17 @@ def incremental_eval(doc_synth, beta):
     );
     toyplot.pdf.render(canvas, "incremental_eval_results.pdf")
 
-use_seed = False
-seed = 24
+use_seed = True
+seed = 31
 if use_seed:
     np.random.seed(seed)
     
-W = 300
-beta = np.array([0.1]*W)
-n_docs = 3
+W = 10
+beta = np.array([0.08]*W)
+n_docs = 2
 doc_len = 20
-pi = 0.08
-sent_len = 8
+pi = 0.2
+sent_len = 6
 #doc_synth = CVBSynDoc(beta, pi, sent_len, doc_len, n_docs)
 n_seg = 3
 doc_synth = CVBSynDoc2(beta, pi, sent_len, n_seg, n_docs)
@@ -1055,5 +1116,5 @@ data = Data(doc_synth)
 #incremental_eval(doc_synth, beta)
 #single_vs_md_eval(doc_synth, beta, md_all_combs=False , md_fast=True, print_flag=True)
 #single_vs_md_eval(doc_synth, beta, md_all_combs=False , md_fast=True, print_flag=True)
-iters = 20
+iters = 100
 md_eval(data, beta, n_seg, iters)
