@@ -12,9 +12,12 @@ from debug import log_tools
 from tqdm import trange
 import time
 
+np.set_printoptions(threshold=np.inf, linewidth=200)
+np.set_printoptions(formatter={'float': '{: 0.3f}'.format})
+
 class MultiDocVISeg(AbstractSegmentor):
     
-    def __init__(self, beta, data, max_topics=None, n_iters=3, log_dir="./logs/"):
+    def __init__(self, beta, data, max_topics=None, n_iters=3, log_dir="../logs/"):
         super(MultiDocVISeg, self).__init__(beta, data)
         self.max_topics = self.data.max_doc_len if max_topics is None else max_topics
         self.seg_func = self.segment_u_vi_v3
@@ -225,7 +228,7 @@ class MultiDocVISeg(AbstractSegmentor):
                     if qz > best_qz:
                         best_cluster = k
                         best_qz = qz
-            k_votes[best_cluster] += 1
+                k_votes[best_cluster] += 1
         
         best_k = max(k_votes.iteritems(), key=operator.itemgetter(1))[0]
         return best_k

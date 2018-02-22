@@ -252,7 +252,7 @@ def vi_only_test():
     
 def dp_vs_vi():
     use_seed = True
-    seed = 31
+    seed = 33
     if use_seed:
         np.random.seed(seed)
         
@@ -267,7 +267,7 @@ def dp_vs_vi():
     data = Data(doc_synth)
     
     iters = 20
-    vi_model = vi_seg.MultiDocVISeg(beta, data, max_topics=n_seg, n_iters=iters, log_dir="/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/logs")
+    vi_model = vi_seg.MultiDocVISeg(beta, data, max_topics=n_seg, n_iters=iters, log_dir="../logs/")
     dp_model = dp_seg.MultiDocDPSeg(beta, data, seg_type=dp_seg.SEG_FAST)
     md_eval(doc_synth, [dp_model, vi_model], ["DP", "VI"])
     

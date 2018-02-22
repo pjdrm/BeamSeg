@@ -187,6 +187,7 @@ class Data(object):
     individual word counts for each document. 
     '''
     def __init__(self, docs):
+        self.doc_synth = docs
         self.docs_rho_gs = [doc.rho for doc in docs.get_single_docs()]
         self.docs_index = docs.docs_index
         self.W = docs.W
