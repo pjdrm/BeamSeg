@@ -36,4 +36,3 @@ def wd_evaluator(estimated_rho, doc):
         return wd_results
     else:
         return [wd(estimated_rho, doc.rho)]
-            
