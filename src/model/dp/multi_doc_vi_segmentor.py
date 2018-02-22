@@ -3,7 +3,7 @@ Created on Feb 22, 2018
 
 @author: pjdrm
 '''
-from model.dp.segmentor import AbstractSegmentor, SentenceCluster, Data
+from model.dp.segmentor import AbstractSegmentor, SentenceCluster
 import numpy as np
 from itertools import chain
 import operator
@@ -11,8 +11,6 @@ import copy
 from debug import log_tools
 from tqdm import trange
 import time
-from dataset.synthetic_doc_cvb import CVBSynDoc2
-import eval.eval_tools as eval_tools
 
 class MultiDocVISeg(AbstractSegmentor):
     

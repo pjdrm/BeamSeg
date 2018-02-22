@@ -3,12 +3,10 @@ Created on Feb 22, 2018
 
 @author: pjdrm
 '''
-from model.dp.segmentor import AbstractSegmentor, SentenceCluster, Data
+from model.dp.segmentor import AbstractSegmentor, SentenceCluster
 from itertools import chain, combinations
 import copy
 import numpy as np
-from dataset.synthetic_doc_cvb import CVBSynDoc2
-import eval.eval_tools as eval_tools
 
 SEG_FAST = "fast"
 SEG_ALL_COMBS = "all_combs"
