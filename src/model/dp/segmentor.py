@@ -167,7 +167,7 @@ class AbstractSegmentor(object):
     
     def dp_segmentation_step(self):
         for u_end in range(self.data.max_doc_len):
-            #if u_end == 17:
+            #if u_end == 8:
             #    print()
             best_seg_ll = -np.inf
             best_seg_clusters = None
@@ -250,12 +250,12 @@ class SentenceCluster(object):
             seg_len = u_end_true-u_begin+1
             self.u_list += list(range(u_begin, u_end_true+1))
             self.doc_list += [doc_i]*seg_len
+            self.word_counts += np.sum(self.data.doc_word_counts(doc_i)[u_begin:u_end_true+1], axis=0)
         
         self.wi_list = []
         for doc_i, u in zip(self.doc_list, self.u_list):
             d_u_words = self.data.d_u_wi_indexes[doc_i][u]
             self.wi_list += d_u_words
-            self.word_counts += np.sum(self.data.doc_word_counts(doc_i)[u_begin:u_end_true+1], axis=0)
     
     def has_word(self, wi):
         return wi in self.wi_list

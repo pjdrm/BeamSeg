@@ -17,12 +17,14 @@ np.set_printoptions(formatter={'float': '{: 0.3f}'.format})
 
 class MultiDocVISeg(AbstractSegmentor):
     
-    def __init__(self, beta, data, max_topics=None, n_iters=3, log_dir="../logs/"):
+    def __init__(self, beta, data, max_topics=None, n_iters=3, log_dir="../logs/", log_flag=True):
         super(MultiDocVISeg, self).__init__(beta, data)
         self.max_topics = self.data.max_doc_len if max_topics is None else max_topics
         self.seg_func = self.segment_u_vi_v3
         self.n_iters = n_iters
         self.log_dir = log_dir
+        self.log_flag = log_flag
+        self.vote_slack = 0.03
         #List of matrices (one for each topic). Lines are words in the document
         #collection and columns the vocabulary indexes.
         #The entries contains the value of the corresponding variational parameter.
@@ -207,11 +209,22 @@ class MultiDocVISeg(AbstractSegmentor):
                     best_cluster = k
                     best_qz = qz
             k_votes[best_cluster] += 1
-        
+            
+            '''
+            wi_qz = {key: 0 for key in possible_clusters}
+            for k in possible_clusters:
+                qz = self.qz[k][wi][self.data.W_I_words[wi]]
+                wi_qz[k] = qz
+            sorted_wi_qz = sorted(wi_qz.items(), key=lambda x: x[1], reverse=True)
+            k_votes[sorted_wi_qz[0][0]] += 1
+            if len(possible_clusters) >= 2 and abs(sorted_wi_qz[0][1]-sorted_wi_qz[1][1]) <= self.vote_slack:
+                k_votes[sorted_wi_qz[1][0]] += 1
+            '''
+                
         best_k = max(k_votes.iteritems(), key=operator.itemgetter(1))[0]
                 
         if best_k == -1:
-            print("WARNING: inavlid best_k")
+            print("WARNING: invalid best_k")
             
         return best_k
     
@@ -273,7 +286,6 @@ class MultiDocVISeg(AbstractSegmentor):
                 k_cluster = SentenceCluster(u_begin, u_end, list(range(self.data.n_docs)), self.data, k)
                 total_ll += self.segmentation_ll([k_cluster])
             return total_ll, [u_cluster] #TODO: maybe I think break based on qz
-      
       
         best_seg = copy.deepcopy(self.best_segmentation[u_begin-1])
         total_ll = 0.0
@@ -346,8 +358,6 @@ class MultiDocVISeg(AbstractSegmentor):
                 u_k_cluster.add_sents(u_begin, u_end, doc_i)
             
         total_ll = self.segmentation_ll(best_seg)
-        
-        #best_seg = self.get_var_seg(u_begin, u_end, best_seg)
         return total_ll, best_seg
     
     def segment_docs(self): #TODO: check if the segmentation changes and use that as criteria for stopping
@@ -369,16 +379,17 @@ class MultiDocVISeg(AbstractSegmentor):
         for i in t:
             start = time.time()
             self.dp_segmentation_step()
-            for doc_i in range(self.data.n_docs):
-                doc_i_log = segmentation_log_files[doc_i]
-                seg_log_str = "\nGS: "+str(self.data.docs_rho_gs[doc_i].tolist())+\
-                              "\nVI: "+str(self.get_segmentation(doc_i, self.best_segmentation[-1]))
-                doc_i_log.info(seg_log_str)
-                wi_list = self.data.d_u_wi_indexes[doc_i]
-                wi_list = list(chain(*wi_list))
-                for k in range(self.max_topics):
-                    vi_log_str = "\n"+str(self.qz[k][wi_list])
-                    vi_log_files[doc_i][k].info(vi_log_str)
+            if self.log_flag:
+                for doc_i in range(self.data.n_docs):
+                    doc_i_log = segmentation_log_files[doc_i]
+                    seg_log_str = "\nGS: "+str(self.data.docs_rho_gs[doc_i].tolist())+\
+                                  "\nVI: "+str(self.get_segmentation(doc_i, self.best_segmentation[-1]))
+                    doc_i_log.info(seg_log_str)
+                    wi_list = self.data.d_u_wi_indexes[doc_i]
+                    wi_list = list(chain(*wi_list))
+                    for k in range(self.max_topics):
+                        vi_log_str = "\n"+str(self.qz[k][wi_list])
+                        vi_log_files[doc_i][k].info(vi_log_str)
             end = time.time()
             dp_step_time = (end - start)
             
