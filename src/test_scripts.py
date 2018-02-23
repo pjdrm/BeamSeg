@@ -3,7 +3,7 @@ Created on Feb 22, 2018
 
 @author: pjdrm
 '''
-from dataset.synthetic_doc_cvb import CVBSynDoc2
+from dataset.synthetic_doc_cvb import CVBSynDoc2, CVBSynSkipTopics
 import time
 from model.dp.segmentor import Data
 import model.dp.multi_doc_dp_segmentor as dp_seg
@@ -232,16 +232,15 @@ def dp_only_test():
     
 def vi_only_test():
     use_seed = True
-    seed = 31
+    seed = 26
     if use_seed:
         np.random.seed(seed)
         
-    W = 10
+    W = 12
     beta = np.array([0.08]*W)
     n_docs = 2
-    doc_len = 20
     pi = 0.2
-    sent_len = 6
+    sent_len = 12
     n_seg = 3
     doc_synth = CVBSynDoc2(beta, pi, sent_len, n_seg, n_docs)
     data = Data(doc_synth)
@@ -251,25 +250,47 @@ def vi_only_test():
     md_eval(doc_synth, [vi_model], ["VI"])
     
 def dp_vs_vi():
-    use_seed = False
-    seed = 41
+    use_seed = True
+    seed = 66
     if use_seed:
         np.random.seed(seed)
         
-    W = 200
+    W = 10
     beta = np.array([0.08]*W)
-    n_docs = 4
-    doc_len = 20
-    pi = 0.15
+    n_docs = 8
+    pi = 0.2
     sent_len = 6
-    n_seg = 5
-    doc_synth = CVBSynDoc2(beta, pi, sent_len, n_seg, n_docs)
+    n_segs = 3
+    doc_synth = CVBSynDoc2(beta, pi, sent_len, n_segs, n_docs)
     data = Data(doc_synth)
     
     iters = 20
-    vi_model = vi_seg.MultiDocVISeg(beta, data, max_topics=n_seg, n_iters=iters, log_dir="../logs/", log_flag=True)
+    vi_model = vi_seg.MultiDocVISeg(beta, data, max_topics=n_segs, n_iters=iters, log_dir="../logs/", log_flag=True)
     dp_model = dp_seg.MultiDocDPSeg(beta, data, seg_type=dp_seg.SEG_FAST)
     md_eval(doc_synth, [dp_model, vi_model], ["DP", "VI"])
     
-dp_vs_vi()
-
+def skip_topics_test():
+    use_seed = False
+    seed = 66
+    if use_seed:
+        np.random.seed(seed)
+        
+    W = 10
+    beta = np.array([0.08]*W)
+    n_docs = 4
+    pi = 0.2
+    sent_len = 6
+    n_segs = 5
+    n_topics = 6
+    
+    skip_topics_syn = CVBSynSkipTopics(beta, pi, sent_len, n_segs, n_docs, n_topics)
+    data = Data(skip_topics_syn)
+    
+    iters = 20
+    vi_model = vi_seg.MultiDocVISeg(beta, data, max_topics=n_segs, n_iters=iters, log_dir="../logs/", log_flag=True)
+    dp_model = dp_seg.MultiDocDPSeg(beta, data, seg_type=dp_seg.SEG_FAST)
+    md_eval(skip_topics_syn, [dp_model, vi_model], ["DP", "VI"])
+    
+#dp_vs_vi()
+#vi_only_test()
+skip_topics_test()

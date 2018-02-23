@@ -115,8 +115,8 @@ class MultiDocVISeg(AbstractSegmentor):
         :param k: topic/language model/segment index
         :param u_clusters: list of sentence clusters representing a segmentation of all documents
         '''
-        words_update = self.qz_words_minus_wi_gibbs(rho, doc_i, u, wi, k, u_clusters)
-        #words_update = self.qz_words_minus_wi_seg_flip(doc_i, u, wi, k, u_clusters)
+        #words_update = self.qz_words_minus_wi_gibbs(rho, doc_i, u, wi, k, u_clusters)
+        words_update = self.qz_words_minus_wi_seg_flip(doc_i, u, wi, k, u_clusters)
         E_counts_f2 = self.qz[k][words_update]
         Var_counts_f2 = E_counts_f2*(1.0-E_counts_f2)
         C_beta_E_counts_f2_sum = self.C_beta+np.sum(E_counts_f2)

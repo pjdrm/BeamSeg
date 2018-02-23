@@ -155,3 +155,81 @@ class CVBSynDoc3(object):
             doc_begin = doc_end
             doc_l.append(doc)
         return doc_l
+    
+class CVBSynSkipTopics(object):
+    '''
+    This version forces all documents to have the same number of segments
+    '''
+    def __init__(self, beta, pi, sent_len, n_segs, n_docs, n_topics):
+        self.isMD = False if n_docs == 1 else True
+        self.n_docs = n_docs
+        self.W = len(beta)
+        self.rho = []
+        self.docs_index = []
+        n_sents = 0
+        self.doc_topic_seq = []
+        for doc_i in range(n_docs):
+            doc_i_topic_seq = []
+            possible_topics = list(range(n_topics))
+            for i in range(n_segs):
+                possible_topics_l = len(possible_topics)
+                draw = np.random.multinomial(1, [1.0/possible_topics_l]*possible_topics_l)
+                topic_index = np.nonzero(draw)[0][0] #w is a vocabulary index
+                topic = possible_topics.pop(topic_index)
+                doc_i_topic_seq.append(topic)
+            self.doc_topic_seq.append(doc_i_topic_seq)
+                
+            for seg in range(n_segs):
+                while not np.random.binomial(1, pi):
+                    n_sents += 1
+                    self.rho.append(0)
+                n_sents += 1
+                self.rho.append(1)
+            self.docs_index.append(n_sents)
+        self.rho[-1] = 0
+        self.rho = np.array(self.rho)
+        self.K = n_topics
+        self.phi = np.array([np.random.dirichlet(beta) for i in range(self.K)])
+        
+        self.W_I_words = []
+        doc_i = 0
+        self.d_u_wi_indexes = [[] for i in range(self.n_docs)]
+        self.U_W_counts = np.zeros((n_sents, self.W), dtype=int32)
+        i = 0
+        wi = 0
+        for u in range(len(self.rho)):
+            wi_list = []
+            for word in range(sent_len):
+                k = self.doc_topic_seq[doc_i][i]
+                word_counts = np.random.multinomial(1, self.phi[k])
+                w = np.nonzero(word_counts)[0][0] #w is a vocabulary index
+                wi_list.append(wi)
+                wi += 1
+                self.W_I_words.append(w)
+                self.U_W_counts[u] += word_counts
+            
+            self.d_u_wi_indexes[doc_i].append(wi_list)    
+            if self.rho[u] == 1:
+                i += 1
+                
+            if u+1 in self.docs_index:
+                i = 0
+                doc_i += 1
+                
+        self.W_I_words = np.array(self.W_I_words)
+                
+    def get_single_docs(self):
+        doc_l = []
+        doc_begin = 0
+        for doc_end in self.docs_index:
+            doc = copy.deepcopy(self)
+            doc.n_sents = doc_end - doc_begin
+            doc.n_docs = 1
+            doc.docs_index = [doc.n_sents]
+            doc.rho = doc.rho[doc_begin:doc_end]
+            doc.rho[-1] = 0
+            doc.U_W_counts = doc.U_W_counts[doc_begin:doc_end, :]
+            doc.isMD = False
+            doc_begin = doc_end
+            doc_l.append(doc)
+        return doc_l
