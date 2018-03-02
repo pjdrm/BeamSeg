@@ -92,7 +92,7 @@ class MultiDocDPSeg(AbstractSegmentor):
         :param u_begin: language model index
         '''
         if u_begin == 0:#The first column corresponds to having all sentences from all docs in a single segment (there is only one language model)
-            u_cluster = SentenceCluster(u_begin, u_end, list(range(self.data.n_docs)), self.data)
+            u_cluster = SentenceCluster(u_begin, u_end, list(range(self.data.n_docs)), self.data, 0)
             segmentation_ll = self.segmentation_ll([u_cluster])
             return segmentation_ll, [u_cluster]
            

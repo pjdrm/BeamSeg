@@ -15,12 +15,32 @@ import time
 np.set_printoptions(threshold=np.inf, linewidth=200)
 np.set_printoptions(formatter={'float': '{: 0.3f}'.format})
 
+DP_VI_SEG = "dp_vi"
+VI_SEG = "vi_seg"
+QZ_LL = "segment_u_vi_qz_ll"
+QZ_VOTING = "segment_u_vi_voting"
+SEG_VI = "vi_segmentation_step"
+
 class MultiDocVISeg(AbstractSegmentor):
     
-    def __init__(self, beta, data, max_topics=None, n_iters=3, log_dir="../logs/", log_flag=True):
+    def __init__(self, beta, data, max_topics=None, n_iters=3, seg_config=None, log_dir="../logs/", log_flag=True):
         super(MultiDocVISeg, self).__init__(beta, data)
         self.max_topics = self.data.max_doc_len if max_topics is None else max_topics
-        self.seg_func = self.segment_u_vi_v3
+        if seg_config is None:
+            self.seg_func = self.segment_u_vi_v2
+            self.segmentation_step = self.dp_segmentation_step
+        else:
+            seg_type = seg_config["type"]
+            if seg_type == DP_VI_SEG:
+                seg_func = seg_config["seg_func"]
+                self.segmentation_step = self.dp_segmentation_step
+                if seg_func == QZ_LL:
+                    self.seg_func = self.segment_u_vi_qz_ll
+                elif seg_func == QZ_VOTING:
+                    self.seg_func = self.segment_u_vi_voting
+            elif seg_type == VI_SEG:
+                self.segmentation_step = self.vi_segmentation_step
+            
         self.n_iters = n_iters
         self.log_dir = log_dir
         self.log_flag = log_flag
@@ -115,8 +135,8 @@ class MultiDocVISeg(AbstractSegmentor):
         :param k: topic/language model/segment index
         :param u_clusters: list of sentence clusters representing a segmentation of all documents
         '''
-        #words_update = self.qz_words_minus_wi_gibbs(rho, doc_i, u, wi, k, u_clusters)
-        words_update = self.qz_words_minus_wi_seg_flip(doc_i, u, wi, k, u_clusters)
+        words_update = self.qz_words_minus_wi_gibbs(rho, doc_i, u, wi, k, u_clusters)
+        #words_update = self.qz_words_minus_wi_seg_flip(doc_i, u, wi, k, u_clusters)
         E_counts_f2 = self.qz[k][words_update]
         Var_counts_f2 = E_counts_f2*(1.0-E_counts_f2)
         C_beta_E_counts_f2_sum = self.C_beta+np.sum(E_counts_f2)
@@ -152,7 +172,7 @@ class MultiDocVISeg(AbstractSegmentor):
         :param u_clusters: list of sentence clusters representing the current segmentation state 
         '''
         norm_const = np.zeros(self.data.total_words)
-        doc_i_rho = [self.get_segmentation(doc_i, self.best_segmentation[-1]) for doc_i in range(self.data.n_docs)]
+        doc_i_rho = [self.get_segmentation(doc_i) for doc_i in range(self.data.n_docs)]
         for k in range(self.max_topics):
             for doc_i in range(self.data.n_docs):
                 for ui, u in enumerate(self.data.d_u_wi_indexes[doc_i]):
@@ -170,8 +190,18 @@ class MultiDocVISeg(AbstractSegmentor):
         '''
         segmentation_ll = 0.0
         for u_cluster in u_clusters:
-            #qz_counts = np.sum(self.qz[u_cluster.k][u_cluster.wi_list], axis=0)
-            qz_counts = u_cluster.get_word_counts() #Version that does not use qz weight at all
+            word_counts = u_cluster.get_word_counts()
+            segmentation_ll += self.segment_ll(word_counts)
+        return segmentation_ll
+    
+    def segmentation_ll_qz(self, u_clusters):
+        '''
+        Returns the log likelihood of the segmentation of all documents.
+        :param u_clusters: list of SentenceCluster corresponding to the best segmentation up to u-1
+        '''
+        segmentation_ll = 0.0
+        for u_cluster in u_clusters:
+            qz_counts = np.sum(self.qz[u_cluster.k][u_cluster.wi_list], axis=0)
             segmentation_ll += self.segment_ll(qz_counts)
         return segmentation_ll
     
@@ -194,7 +224,7 @@ class MultiDocVISeg(AbstractSegmentor):
             
         return best_k
     
-    def get_best_k_voting(self, doc_i, u_begin, u_end, u_clusters):
+    def get_k_votes_sorted(self, doc_i, u_begin, u_end, u_clusters):
         wi_list = self.data.d_u_wi_indexes[doc_i][u_begin:u_end+1]
         wi_list = list(chain(*wi_list))
         
@@ -220,9 +250,14 @@ class MultiDocVISeg(AbstractSegmentor):
             if len(possible_clusters) >= 2 and abs(sorted_wi_qz[0][1]-sorted_wi_qz[1][1]) <= self.vote_slack:
                 k_votes[sorted_wi_qz[1][0]] += 1
             '''
+        k_votes = sorted(k_votes.items(), key=operator.itemgetter(1), reverse=True)
+        return k_votes
+        
+    def get_best_k_voting(self, doc_i, u_begin, u_end, u_clusters):
+        k_votes = self.get_k_votes_sorted(doc_i, u_begin, u_end, u_clusters)
+        return k_votes[0][0]
                 
         best_k = max(k_votes.iteritems(), key=operator.itemgetter(1))[0]
-                
         if best_k == -1:
             print("WARNING: invalid best_k")
             
@@ -253,7 +288,7 @@ class MultiDocVISeg(AbstractSegmentor):
             if u_begin > doc_i_len-1:
                 continue
             
-            best_k = self.get_best_k(doc_i, u_begin, u_end, best_seg)
+            best_k = self.get_best_k_voting(doc_i, u_begin, u_end, best_seg)
             u_k_cluster = None
             for u_cluster in best_seg:
                 if u_cluster.k == best_k:
@@ -267,75 +302,14 @@ class MultiDocVISeg(AbstractSegmentor):
                 u_k_cluster.add_sents(u_begin, u_end, doc_i)
         return best_seg
     
-    def segment_u_vi_v2(self, u_begin, u_end):
+    def segment_u_vi_voting(self, u_begin, u_end):
         '''
-        Estimates, for all documents, the best segmentation
-        from u_end to u_begin (column index in the DP matrix).
-        Implements a faster version that does not explore all self.doc_combs_list.
-        The heuristic considers adding (or not) the current segmentation point of an
-        individual documents. The corresponding sentences are added to the option
-        that yields the highest likelihood. In each step we go to the next document
-        and we stop until all of them are covered.
+        The variational parameters of each in the segments (u_begin, u_end)
+        vote for a topic. The segment is added to most voted topic.
+        The segmentation likelihood is fully based on the real word counts.
         :param u_end: sentence index
         :param u_begin: language model index
         '''
-        if u_begin == 0: #The first column corresponds to having all sentences from all docs in a single segment (there is only one language model)
-            u_cluster = SentenceCluster(u_begin, u_end, list(range(self.data.n_docs)), self.data, 0)
-            total_ll = 0.0
-            for k in range(self.max_topics):
-                k_cluster = SentenceCluster(u_begin, u_end, list(range(self.data.n_docs)), self.data, k)
-                total_ll += self.segmentation_ll([k_cluster])
-            return total_ll, [u_cluster] #TODO: maybe I think break based on qz
-      
-        best_seg = copy.deepcopy(self.best_segmentation[u_begin-1])
-        total_ll = 0.0
-        for k in range(self.max_topics):
-            u_k_cluster = None
-            for u_cluster in best_seg:
-                if u_cluster.k == k:
-                    u_k_cluster = copy.deepcopy(u_cluster)
-                    break
-                
-            for doc_i in range(self.data.n_docs):
-                doc_i_len = self.data.doc_len(doc_i)
-                #Accounting for documents with different lengths
-                if u_begin > doc_i_len-1:
-                    continue
-                
-                if u_k_cluster is None:
-                    u_k_cluster = SentenceCluster(u_begin, u_end, [doc_i], self.data, k)
-                else:
-                    u_k_cluster.add_sents(u_begin, u_end, doc_i)
-                
-            total_ll += self.segmentation_ll([u_k_cluster])
-        
-        best_seg = self.get_var_seg(u_begin, u_end, best_seg)
-        return total_ll, best_seg
-    
-    def segment_u_vi_v3(self, u_begin, u_end):
-        '''
-        
-        :param u_end: sentence index
-        :param u_begin: language model index
-        '''
-        #Seems that doing this for u_begin==0 is bad. Imagine, because of initialization, we end up with a single segment on k=0.
-        #The VI updates for k=0 will have all words from other segments, which will lower the confidence in k=0. Other topics will
-        #have better updates since we flip the rho value and discard many words that are bad. Thus, the weights will prefer other 
-        #topics (different from k=0). In the code bellow I was always forcing k=0, probably thats why its not working.
-        '''
-        if u_begin == 0: #The first column corresponds to having all sentences from all docs in a single segment (there is only one language model)
-            u_cluster = SentenceCluster(u_begin, u_end, list(range(self.data.n_docs)), self.data, 0)
-            total_ll = 0.0
-            k0_cluster = SentenceCluster(u_begin, u_end, list(range(self.data.n_docs)), self.data, 0)
-            total_ll += self.segmentation_ll([k0_cluster])
-            return total_ll, [u_cluster] #TODO: maybe I think break based on qz
-        '''
-        
-        if u_begin == 0:
-            best_k = self.get_best_k_voting_u0(u_end)
-            u_cluster = SentenceCluster(u_begin, u_end, list(range(self.data.n_docs)), self.data, best_k)
-            total_ll = self.segmentation_ll([u_cluster])
-            return total_ll, [u_cluster]
             
         best_seg = copy.deepcopy(self.best_segmentation[u_begin-1])
         for doc_i in range(self.data.n_docs):
@@ -360,6 +334,76 @@ class MultiDocVISeg(AbstractSegmentor):
         total_ll = self.segmentation_ll(best_seg)
         return total_ll, best_seg
     
+    def segment_u_vi_qz_ll(self, u_begin, u_end):
+        '''
+        When computing the likelihood of the segmentation,
+        uses the real counts for previous segmentation (u_begin-1)
+        and qz weighted counts for the segment (u_begin, u_end).
+        All qz weights is distributed for all topics.
+        :param u_end: sentence index
+        :param u_begin: language model index
+        '''
+        best_seg = copy.deepcopy(self.best_segmentation[u_begin-1])
+        total_ll = 0.0
+        for k in range(self.max_topics):
+            word_counts = np.zeros(self.data.W)
+            for u_cluster in best_seg:
+                if u_cluster.k == k:
+                    word_counts += u_cluster.get_word_counts()
+                    break
+            
+            for doc_i in range(self.data.n_docs):
+                doc_i_len = self.data.doc_len(doc_i)
+                #Accounting for documents with different lengths
+                if u_begin > doc_i_len-1:
+                    continue
+            
+                wi_list = self.data.d_u_wi_indexes[doc_i][u_begin:u_end+1]
+                wi_list = list(chain(*wi_list))
+                word_counts += np.sum(self.qz[k][wi_list], axis=0)
+            total_ll += self.segment_ll(word_counts)
+            
+        best_seg = self.get_var_seg(u_begin, u_end, best_seg)
+        return total_ll, best_seg
+    
+    def vi_segmentation_step(self):
+        '''
+        Looks at each sentence individually and adds it to the
+        u_cluster with the highest segmentation log likelihood.
+        In each step only two u_clusters are considered based
+        the highest values of qz.
+        '''
+        final_u_clusters = []
+        for doc_i in range(self.data.n_docs):
+            for u in range(self.data.doc_len(doc_i)):
+                k_votes_sorted = self.get_k_votes_sorted(doc_i, u, u, final_u_clusters)
+                best_ks = [k_votes_sorted[0][0]]
+                if len(k_votes_sorted) > 1:
+                    best_ks.append(k_votes_sorted[1][0])
+                
+                best_seg_ll = -np.inf
+                best_u_clusters = None
+                for k in best_ks:
+                    current_u_clusters = copy.deepcopy(final_u_clusters)
+                    u_k_cluster = None
+                    for u_cluster in current_u_clusters:
+                        if u_cluster.k == k:
+                            u_k_cluster = u_cluster
+                            break
+                        
+                    if u_k_cluster is None:
+                        u_k_cluster = SentenceCluster(u, u, [doc_i], self.data, k)
+                        current_u_clusters.append(u_k_cluster)
+                    else:
+                        u_k_cluster.add_sents(u, u, doc_i)
+                        
+                    seg_ll = self.segmentation_ll(current_u_clusters)
+                    if seg_ll > best_seg_ll:
+                        best_seg_ll = seg_ll
+                        best_u_clusters = current_u_clusters
+                final_u_clusters = best_u_clusters
+        self.best_segmentation[-1] = final_u_clusters
+        
     def segment_docs(self): #TODO: check if the segmentation changes and use that as criteria for stopping
         '''
         Segments the full collection of documents. Alternates between using a Dynamic Programming
@@ -377,13 +421,16 @@ class MultiDocVISeg(AbstractSegmentor):
             
         t = trange(self.n_iters, desc='', leave=True)
         for i in t:
+            if i == 3:
+                a = 0
             start = time.time()
-            self.dp_segmentation_step()
+            self.segmentation_step()
             if self.log_flag:
                 for doc_i in range(self.data.n_docs):
                     doc_i_log = segmentation_log_files[doc_i]
                     seg_log_str = "\nGS: "+str(self.data.docs_rho_gs[doc_i].tolist())+\
-                                  "\nVI: "+str(self.get_segmentation(doc_i, self.best_segmentation[-1]))
+                                  "\nVI: "+str(self.get_segmentation(doc_i))+\
+                                  "\n K: "+self.print_seg_with_topics(doc_i, self.best_segmentation[-1])
                     doc_i_log.info(seg_log_str)
                     wi_list = self.data.d_u_wi_indexes[doc_i]
                     wi_list = list(chain(*wi_list))

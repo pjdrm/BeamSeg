@@ -35,7 +35,7 @@ class CVBSynDoc(object):
                 k += 1
             if u+1 in self.docs_index:
                 k = 0
-
+                
     def get_single_docs(self):
         doc_l = []
         doc_begin = 0
@@ -160,7 +160,7 @@ class CVBSynSkipTopics(object):
     '''
     This version forces all documents to have the same number of segments
     '''
-    def __init__(self, beta, pi, sent_len, n_segs, n_docs, n_topics):
+    def __init__(self, beta, pi, sent_len, n_segs, n_docs, n_topics, log_dir="../logs/"):
         self.isMD = False if n_docs == 1 else True
         self.n_docs = n_docs
         self.W = len(beta)
@@ -177,6 +177,7 @@ class CVBSynSkipTopics(object):
                 topic_index = np.nonzero(draw)[0][0] #w is a vocabulary index
                 topic = possible_topics.pop(topic_index)
                 doc_i_topic_seq.append(topic)
+            doc_i_topic_seq = sorted(doc_i_topic_seq)
             self.doc_topic_seq.append(doc_i_topic_seq)
                 
             for seg in range(n_segs):
@@ -217,15 +218,24 @@ class CVBSynSkipTopics(object):
                 doc_i += 1
                 
         self.W_I_words = np.array(self.W_I_words)
+        
+        with open(log_dir+"synthetic_doc_stats.txt", "w+") as f:
+            for topic_seq in self.doc_topic_seq:
+                f.write(str(topic_seq)+"\n")
+                
+            f.write("\n")
+            for phi_k in self.phi:
+                f.write(str(phi_k)+"\n")
                 
     def get_single_docs(self):
         doc_l = []
         doc_begin = 0
-        for doc_end in self.docs_index:
+        for doc_i, doc_end in enumerate(self.docs_index):
             doc = copy.deepcopy(self)
             doc.n_sents = doc_end - doc_begin
             doc.n_docs = 1
             doc.docs_index = [doc.n_sents]
+            doc.d_u_wi_indexes = [self.d_u_wi_indexes[doc_i]]
             doc.rho = doc.rho[doc_begin:doc_end]
             doc.rho[-1] = 0
             doc.U_W_counts = doc.U_W_counts[doc_begin:doc_end, :]

@@ -23,6 +23,21 @@ class AbstractSegmentor(object):
             seg = self.get_segmentation(doc_i, u_clusters)
             print("Doc %d: %s" % (doc_i, str(seg)))
             
+    def print_seg_with_topics(self, doc_i, u_clusters):
+        rho = []
+        segments_dict = {}
+        for u_cluster in u_clusters:
+            if u_cluster.has_doc(doc_i):
+                segments_dict[u_cluster.k] = u_cluster.get_segment(doc_i)
+        sorted_segments_dict = sorted(segments_dict.items(), key=lambda x: x[1][0])
+        for seg in sorted_segments_dict:
+            u_begin = seg[1][0]
+            u_end = seg[1][1]
+            k = seg[0]
+            for u in range(u_begin, u_end+1):
+                rho.append(k)
+        return str(rho)
+            
     def get_cluster_order(self, doc_i, u_clusters):
         cluster_k_list = []
         for u_cluster in u_clusters:
@@ -37,13 +52,14 @@ class AbstractSegmentor(object):
             ret_list.append(cluster_k[0])
         return ret_list
     
-    def get_segmentation(self, doc_i, u_clusters):
+    def get_segmentation(self, doc_i):
         '''
         Returns the final segmentation for a document.
         This is done by backtracking the best segmentations
         in a bottom-up fashion.
         :param doc_i: document index
         '''
+        u_clusters = self.best_segmentation[-1]
         hyp_seg = []
         cluster_order = self.get_cluster_order(doc_i, u_clusters)
         for u_cluster_k in cluster_order:
@@ -66,7 +82,7 @@ class AbstractSegmentor(object):
         '''
         all_segs = []
         for doc_i in range(self.data.n_docs):
-            all_segs += self.get_segmentation(doc_i, self.best_segmentation[-1])
+            all_segs += self.get_segmentation(doc_i)
         return all_segs
             
     def get_last_cluster(self, doc_i, u_clusters):
@@ -167,15 +183,19 @@ class AbstractSegmentor(object):
     
     def dp_segmentation_step(self):
         for u_end in range(self.data.max_doc_len):
-            #if u_end == 8:
-            #    print()
+            if u_end == 18:
+                a = 0
             best_seg_ll = -np.inf
             best_seg_clusters = None
+            best_u_begin = -1
             for u_begin in range(u_end+1):
+                if u_begin == 7:
+                    a = 0
                 seg_ll, seg_clusters = self.seg_func(u_begin, u_end)
                 if seg_ll > best_seg_ll:
                     best_seg_ll = seg_ll
                     best_seg_clusters = seg_clusters
+                    best_u_begin = u_begin
             self.best_segmentation[u_end] = best_seg_clusters
             #self.print_seg(best_seg_clusters)
         #print("==========================")
@@ -257,6 +277,9 @@ class SentenceCluster(object):
             d_u_words = self.data.d_u_wi_indexes[doc_i][u]
             self.wi_list += d_u_words
     
+    def set_k(self, k):
+        self.k = k
+        
     def has_word(self, wi):
         return wi in self.wi_list
         
@@ -281,6 +304,9 @@ class SentenceCluster(object):
             d_u_words = self.data.d_u_wi_indexes[doc_i][u]
             self.wi_list += d_u_words
             
+    def get_docs(self):
+        return set(self.doc_list)
+        
     def get_word_counts(self):
         return self.word_counts
         
