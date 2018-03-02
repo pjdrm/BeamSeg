@@ -272,8 +272,8 @@ def dp_vs_vi():
     md_eval(doc_synth, [dp_model, vi_model], ["DP", "VI"])
     
 def skip_topics_test():
-    use_seed = False
-    seed = 71#67
+    use_seed = True
+    seed = 73#67
     if use_seed:
         np.random.seed(seed)
         
