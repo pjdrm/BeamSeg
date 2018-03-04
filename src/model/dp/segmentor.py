@@ -6,16 +6,20 @@ Created on Feb 22, 2018
 import numpy as np
 import copy
 from scipy.special import gammaln
+import os
 
 class AbstractSegmentor(object):
 
-    def __init__(self, beta, data):
+    def __init__(self, beta, data, log_dir="../logs/"):
+        self.log_dir = log_dir
         self.beta = beta
         self.C_beta = np.sum(self.beta)
         self.W = data.W
         self.data = data
         self.best_segmentation = [[] for i in range(self.data.max_doc_len)]
         self.seg_ll_C = gammaln(self.beta.sum())-gammaln(self.beta).sum()
+        
+        os.remove(self.log_dir+"dp_tracker.txt") if os.path.exists(self.log_dir+"dp_tracker.txt") else None
 
     def print_seg(self, u_clusters):
         print("==========================")
@@ -182,23 +186,26 @@ class AbstractSegmentor(object):
         return seg_ll
     
     def dp_segmentation_step(self):
-        for u_end in range(self.data.max_doc_len):
-            if u_end == 18:
-                a = 0
-            best_seg_ll = -np.inf
-            best_seg_clusters = None
-            best_u_begin = -1
-            for u_begin in range(u_end+1):
-                if u_begin == 7:
+        with open(self.log_dir+"dp_tracker.txt", "a+") as f:
+            f.write("Best line tracking:\n")
+            for u_end in range(self.data.max_doc_len):
+                if u_end == 18:
                     a = 0
-                seg_ll, seg_clusters = self.seg_func(u_begin, u_end)
-                if seg_ll > best_seg_ll:
-                    best_seg_ll = seg_ll
-                    best_seg_clusters = seg_clusters
-                    best_u_begin = u_begin
-            self.best_segmentation[u_end] = best_seg_clusters
-            #self.print_seg(best_seg_clusters)
-        #print("==========================")
+                best_seg_ll = -np.inf
+                best_seg_clusters = None
+                best_u_begin = -1
+                for u_begin in range(u_end+1):
+                    if u_begin == 7:
+                        a = 0
+                    seg_ll, seg_clusters = self.seg_func(u_begin, u_end)
+                    if seg_ll > best_seg_ll:
+                        best_seg_ll = seg_ll
+                        best_seg_clusters = seg_clusters
+                        best_u_begin = u_begin
+                f.write("(%d,%d)\n"%(best_u_begin, u_end))
+                self.best_segmentation[u_end] = best_seg_clusters
+                #self.print_seg(best_seg_clusters)
+            #print("==========================")
         
 class Data(object):
     '''

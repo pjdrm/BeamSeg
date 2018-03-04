@@ -12,8 +12,8 @@ import model.dp.single_doc_segmentor as sd_seg
 import model.dp.multi_doc_greedy_segmentor as greedy_seg
 import copy
 import numpy as np
-import toyplot
-import toyplot.pdf
+#import toyplot
+#import toyplot.pdf
 from eval.eval_tools import wd_evaluator
 
 def md_eval(doc_synth, models, models_desc):
@@ -292,10 +292,14 @@ def skip_topics_test():
     sd_model = sd_seg.SingleDocDPSeg(beta, single_docs, data)
     
     vi_dp_config = {"type": vi_seg.DP_VI_SEG, "seg_func": vi_seg.QZ_VOTING}
+    vi_dp_qz_ll_config = {"type": vi_seg.DP_VI_SEG, "seg_func": vi_seg.QZ_LL}
     vi_config = {"type":vi_seg.VI_SEG}
     
     vi_dp_qz_voting_model = vi_seg.MultiDocVISeg(beta, data, max_topics=n_topics,\
                                                    n_iters=40, seg_config=vi_dp_config,\
+                                                   log_dir="../logs/", log_flag=True)
+    vi_dp_qz_ll_model = vi_seg.MultiDocVISeg(beta, data, max_topics=n_topics,\
+                                                   n_iters=40, seg_config=vi_dp_qz_ll_config,\
                                                    log_dir="../logs/", log_flag=True)
     vi_model = vi_seg.MultiDocVISeg(beta, data, max_topics=n_topics,\
                                                         n_iters=40, seg_config=vi_config,\

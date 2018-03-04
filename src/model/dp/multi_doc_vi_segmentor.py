@@ -24,7 +24,7 @@ SEG_VI = "vi_segmentation_step"
 class MultiDocVISeg(AbstractSegmentor):
     
     def __init__(self, beta, data, max_topics=None, n_iters=3, seg_config=None, log_dir="../logs/", log_flag=True):
-        super(MultiDocVISeg, self).__init__(beta, data)
+        super(MultiDocVISeg, self).__init__(beta, data, log_dir=log_dir)
         self.max_topics = self.data.max_doc_len if max_topics is None else max_topics
         if seg_config is None:
             self.seg_func = self.segment_u_vi_v2
@@ -42,7 +42,6 @@ class MultiDocVISeg(AbstractSegmentor):
                 self.segmentation_step = self.vi_segmentation_step
             
         self.n_iters = n_iters
-        self.log_dir = log_dir
         self.log_flag = log_flag
         self.vote_slack = 0.03
         #List of matrices (one for each topic). Lines are words in the document
@@ -310,7 +309,6 @@ class MultiDocVISeg(AbstractSegmentor):
         :param u_end: sentence index
         :param u_begin: language model index
         '''
-            
         best_seg = copy.deepcopy(self.best_segmentation[u_begin-1])
         for doc_i in range(self.data.n_docs):
             doc_i_len = self.data.doc_len(doc_i)
@@ -347,21 +345,31 @@ class MultiDocVISeg(AbstractSegmentor):
         total_ll = 0.0
         for k in range(self.max_topics):
             word_counts = np.zeros(self.data.W)
+            u_k_cluster = None
             for u_cluster in best_seg:
                 if u_cluster.k == k:
                     word_counts += u_cluster.get_word_counts()
+                    u_k_cluster = copy.deepcopy(u_cluster)
                     break
             
+            qz_counts = np.zeros(self.data.W)
             for doc_i in range(self.data.n_docs):
                 doc_i_len = self.data.doc_len(doc_i)
                 #Accounting for documents with different lengths
                 if u_begin > doc_i_len-1:
                     continue
             
+                if u_k_cluster is None:
+                    u_k_cluster = SentenceCluster(u_begin, u_end, [doc_i], self.data, k)
+                else:
+                    u_k_cluster.add_sents(u_begin, u_end, doc_i)
+                
                 wi_list = self.data.d_u_wi_indexes[doc_i][u_begin:u_end+1]
                 wi_list = list(chain(*wi_list))
-                word_counts += np.sum(self.qz[k][wi_list], axis=0)
+                qz_counts += np.sum(self.qz[k][wi_list], axis=0)
+                word_counts += u_k_cluster.get_word_counts()
             total_ll += self.segment_ll(word_counts)
+            total_ll += self.segment_ll(qz_counts)
             
         best_seg = self.get_var_seg(u_begin, u_end, best_seg)
         return total_ll, best_seg
@@ -421,7 +429,7 @@ class MultiDocVISeg(AbstractSegmentor):
             
         t = trange(self.n_iters, desc='', leave=True)
         for i in t:
-            if i == 3:
+            if i == 23:
                 a = 0
             start = time.time()
             self.segmentation_step()
