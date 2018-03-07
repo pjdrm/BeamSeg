@@ -12,8 +12,8 @@ import model.dp.single_doc_segmentor as sd_seg
 import model.dp.multi_doc_greedy_segmentor as greedy_seg
 import copy
 import numpy as np
-#import toyplot
-#import toyplot.pdf
+import toyplot
+import toyplot.pdf
 from eval.eval_tools import wd_evaluator
 
 def md_eval(doc_synth, models, models_desc):
@@ -31,7 +31,7 @@ def md_eval(doc_synth, models, models_desc):
     md_segs = [[] for i in range(len(models))]
     for i, model in enumerate(models):
         for doc_i in range(model.data.n_docs):
-            md_segs[i].append(model.get_segmentation(doc_i))
+            md_segs[i].append(model.get_final_segmentation(doc_i))
             
     gs_segs = []
     for gs_doc in models[0].data.docs_rho_gs:
@@ -63,7 +63,7 @@ def single_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_fl
         data = Data(doc)
         dp_model = dp_seg.MultiDocDPSeg(beta, data)
         dp_model.segment_docs()
-        sd_segs.append(dp_model.get_segmentation(0))
+        sd_segs.append(dp_model.get_final_segmentation(0))
         single_doc_wd += wd_evaluator(dp_model.get_all_segmentations(), doc)
     end = time.time()
     sd_time = (end - start)
@@ -83,7 +83,7 @@ def single_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_fl
         
         md_segs = []
         for doc_i in range(dp_model.data.n_docs):
-            md_segs.append(dp_model.get_segmentation(doc_i))
+            md_segs.append(dp_model.get_final_segmentation(doc_i))
     
     if md_fast: 
         md_fast_segs = []
@@ -95,7 +95,7 @@ def single_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_fl
         multi_fast_doc_wd = wd_evaluator(dp_model.get_all_segmentations(), doc_synth)
         time_wd_results.append(("MF", md_fast_time, ['%.3f' % wd for wd in multi_fast_doc_wd]))
         for doc_i in range(dp_model.data.n_docs):
-            md_fast_segs.append(dp_model.get_segmentation(doc_i))
+            md_fast_segs.append(dp_model.get_final_segmentation(doc_i))
             
     if print_flag:
         gs_segs = []
@@ -273,14 +273,14 @@ def dp_vs_vi():
     
 def skip_topics_test():
     use_seed = True
-    seed = 73#67
+    seed = 82#73
     if use_seed:
         np.random.seed(seed)
         
-    W = 100
-    beta = np.array([0.08]*W)
+    W = 10#100
+    beta = np.array([0.3]*W)
     n_docs = 3
-    pi = 0.2
+    pi = 0.25
     sent_len = 6
     n_segs = 3
     n_topics = 5
@@ -292,11 +292,15 @@ def skip_topics_test():
     sd_model = sd_seg.SingleDocDPSeg(beta, single_docs, data)
     
     vi_dp_config = {"type": vi_seg.DP_VI_SEG, "seg_func": vi_seg.QZ_VOTING}
+    vi_dp_config_v2 = {"type": vi_seg.DP_VI_SEG, "seg_func": vi_seg.QZ_VOTING_V2}
     vi_dp_qz_ll_config = {"type": vi_seg.DP_VI_SEG, "seg_func": vi_seg.QZ_LL}
     vi_config = {"type":vi_seg.VI_SEG}
     
     vi_dp_qz_voting_model = vi_seg.MultiDocVISeg(beta, data, max_topics=n_topics,\
-                                                   n_iters=40, seg_config=vi_dp_config,\
+                                                   n_iters=20, seg_config=vi_dp_config,\
+                                                   log_dir="../logs/", log_flag=True)
+    vi_dp_qz_voting_model_v2 = vi_seg.MultiDocVISeg(beta, data, max_topics=n_topics,\
+                                                   n_iters=20, seg_config=vi_dp_config_v2,\
                                                    log_dir="../logs/", log_flag=True)
     vi_dp_qz_ll_model = vi_seg.MultiDocVISeg(beta, data, max_topics=n_topics,\
                                                    n_iters=40, seg_config=vi_dp_qz_ll_config,\
@@ -305,9 +309,9 @@ def skip_topics_test():
                                                         n_iters=40, seg_config=vi_config,\
                                                         log_dir="../logs/", log_flag=True)
     greedy_model = greedy_seg.MultiDocGreedySeg(beta, data, max_topics=n_topics)
-    dp_model = dp_seg.MultiDocDPSeg(beta, data, seg_type=dp_seg.SEG_FAST)
-    #md_eval(skip_topics_syn, [sd_model, dp_model, greedy_model, vi_dp_qz_voting_model, vi_model], ["SD:", "MDP", "GR:", "KVI", "VI:"])
-    md_eval(skip_topics_syn, [sd_model, greedy_model, vi_dp_qz_voting_model], ["SD ", "GR ", "KVI"])
+    dp_model = dp_seg.MultiDocDPSeg(beta, data, max_topics=n_topics, seg_type=dp_seg.SEG_SKIP_K)
+    #md_eval(skip_topics_syn, [sd_model, greedy_model, vi_dp_qz_voting_model, vi_dp_qz_voting_model_v2, dp_model], ["SD ", "GR ", "KVI", "KV2", "MDP"])
+    md_eval(skip_topics_syn, [dp_model], ["MDP"])
     
 #dp_vs_vi()
 #vi_only_test()

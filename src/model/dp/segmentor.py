@@ -10,21 +10,23 @@ import os
 
 class AbstractSegmentor(object):
 
-    def __init__(self, beta, data, log_dir="../logs/"):
+    def __init__(self, beta, data, max_topics=None, log_dir="../logs/", desc="Abs_seg"):
+        self.data = data
+        self.max_topics = self.data.max_doc_len if max_topics is None else max_topics
+        self.desc = desc
         self.log_dir = log_dir
         self.beta = beta
         self.C_beta = np.sum(self.beta)
         self.W = data.W
-        self.data = data
         self.best_segmentation = [[] for i in range(self.data.max_doc_len)]
         self.seg_ll_C = gammaln(self.beta.sum())-gammaln(self.beta).sum()
         
-        os.remove(self.log_dir+"dp_tracker.txt") if os.path.exists(self.log_dir+"dp_tracker.txt") else None
+        os.remove(self.log_dir+"dp_tracker_"+self.desc+".txt") if os.path.exists(self.log_dir+"dp_tracker_"+self.desc+".txt") else None
 
     def print_seg(self, u_clusters):
         print("==========================")
         for doc_i in range(self.data.n_docs):
-            seg = self.get_segmentation(doc_i, u_clusters)
+            seg = self.get_final_segmentation(doc_i, u_clusters)
             print("Doc %d: %s" % (doc_i, str(seg)))
             
     def print_seg_with_topics(self, doc_i, u_clusters):
@@ -56,7 +58,7 @@ class AbstractSegmentor(object):
             ret_list.append(cluster_k[0])
         return ret_list
     
-    def get_segmentation(self, doc_i):
+    def get_final_segmentation(self, doc_i):
         '''
         Returns the final segmentation for a document.
         This is done by backtracking the best segmentations
@@ -64,6 +66,16 @@ class AbstractSegmentor(object):
         :param doc_i: document index
         '''
         u_clusters = self.best_segmentation[-1]
+        hyp_seg = self.get_segmentation(doc_i, u_clusters)
+        return hyp_seg
+    
+    def get_segmentation(self, doc_i, u_clusters):
+        '''
+        Returns the final segmentation for a document.
+        This is done by backtracking the best segmentations
+        in a bottom-up fashion.
+        :param doc_i: document index
+        '''
         hyp_seg = []
         cluster_order = self.get_cluster_order(doc_i, u_clusters)
         for u_cluster_k in cluster_order:
@@ -86,7 +98,7 @@ class AbstractSegmentor(object):
         '''
         all_segs = []
         for doc_i in range(self.data.n_docs):
-            all_segs += self.get_segmentation(doc_i)
+            all_segs += self.get_final_segmentation(doc_i)
         return all_segs
             
     def get_last_cluster(self, doc_i, u_clusters):
@@ -166,6 +178,12 @@ class AbstractSegmentor(object):
             words += self.data.d_u_wi_indexes[doc_i][u]
         return words
     
+    def get_k_cluster(self, k, u_clusters):
+        for u_cluster in u_clusters:
+            if u_cluster.k == k:
+                return u_cluster
+        return None
+    
     def get_next_cluster(self, k, doc_i, u_clusters):
         for k_next in range(k+1, self.max_topics):
             for u_cluster in u_clusters:
@@ -186,23 +204,29 @@ class AbstractSegmentor(object):
         return seg_ll
     
     def dp_segmentation_step(self):
-        with open(self.log_dir+"dp_tracker.txt", "a+") as f:
-            f.write("Best line tracking:\n")
+        with open(self.log_dir+"dp_tracker_"+self.desc+".txt", "a+") as f:
+            f.write("DP tracking:\n")
             for u_end in range(self.data.max_doc_len):
-                if u_end == 18:
+                f.write("Tracking line %d\n"%(u_end))
+                if u_end == 6:
                     a = 0
                 best_seg_ll = -np.inf
                 best_seg_clusters = None
                 best_u_begin = -1
                 for u_begin in range(u_end+1):
-                    if u_begin == 7:
+                    if u_begin == 4:
                         a = 0
                     seg_ll, seg_clusters = self.seg_func(u_begin, u_end)
                     if seg_ll > best_seg_ll:
                         best_seg_ll = seg_ll
                         best_seg_clusters = seg_clusters
                         best_u_begin = u_begin
-                f.write("(%d,%d)\n"%(best_u_begin, u_end))
+                    f.write("(%d,%d)\tll: %.3f\n"%(u_begin, u_end, seg_ll))
+                    for doc_i in range(self.data.n_docs):
+                        f.write(str(self.get_segmentation(doc_i, seg_clusters))+" "
+                                +str(self.print_seg_with_topics(doc_i, seg_clusters))+"\n")
+                    f.write("\n")
+                f.write("============\n")
                 self.best_segmentation[u_end] = best_seg_clusters
                 #self.print_seg(best_seg_clusters)
             #print("==========================")
@@ -301,15 +325,50 @@ class SentenceCluster(object):
         if u_end > doc_i_len-1:
             u_end = doc_i_len-1
             
+        '''
         seg = list(range(u_begin, u_end+1))
         seg_len =  u_end-u_begin+1
         self.u_list += seg
         self.doc_list += [doc_i]*seg_len
+        '''
+        
+        new_u_list = []
+        new_doc_list = []
+        added_seg = False
+        for doc_j, u in zip(self.doc_list, self.u_list):
+            new_u_list.append(u)
+            new_doc_list.append(doc_j)
+            if doc_j == doc_i and u+1 == u_begin:
+                added_seg = True
+                for new_u in range(u_begin, u_end+1):
+                    new_u_list.append(new_u)
+                    new_doc_list.append(doc_i)
+                    
+        seg = list(range(u_begin, u_end+1))
+        if not added_seg:
+            seg_len =  u_end-u_begin+1
+            new_u_list += seg
+            new_doc_list += [doc_i]*seg_len
+            
+        self.u_list = new_u_list
+        self.doc_list = new_doc_list
+            
         self.word_counts += np.sum(self.data.doc_word_counts(doc_i)[u_begin:u_end+1], axis=0)
         
         for u in seg:
             d_u_words = self.data.d_u_wi_indexes[doc_i][u]
             self.wi_list += d_u_words
+            
+    def remove_doc(self, doc_i, doc_i_word_counts):
+        self.word_counts -= doc_i_word_counts
+        new_u_list = []
+        new_doc_list = []
+        for doc_j, u in zip(self.doc_list, self.u_list):
+            if doc_i != doc_j:
+                new_u_list.append(u)
+                new_doc_list.append(doc_j)
+        self.u_list = new_u_list
+        self.doc_list = new_doc_list
             
     def get_docs(self):
         return set(self.doc_list)

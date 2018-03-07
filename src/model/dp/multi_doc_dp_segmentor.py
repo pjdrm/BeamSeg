@@ -10,17 +10,20 @@ import numpy as np
 
 SEG_FAST = "fast"
 SEG_ALL_COMBS = "all_combs"
+SEG_SKIP_K = "seg_skip_k"
 
 class MultiDocDPSeg(AbstractSegmentor):
     
-    def __init__(self, beta, data, seg_type=None):
-        super(MultiDocDPSeg, self).__init__(beta, data)
-        
+    def __init__(self, beta, data, max_topics=None, seg_type=None, desc="MD_DP_seg"):
+        super(MultiDocDPSeg, self).__init__(beta, data, max_topics=max_topics, desc=desc)
+
         if seg_type is None or seg_type == SEG_ALL_COMBS:
             self.seg_func = self.segment_u
             self.doc_combs_list = self.init_doc_combs()#All n possible combinations (up to the number of documents). Its a list of pairs where the first element is the combination and second the remaining docs
         elif seg_type == SEG_FAST:
             self.seg_func = self.segment_u_fast
+        elif seg_type == SEG_SKIP_K:
+            self.seg_func = self.segment_u_skip_topics_v2
         else:
             raise Exception("ERROR: unknown seg_type")
         
@@ -80,8 +83,8 @@ class MultiDocDPSeg(AbstractSegmentor):
         '''
         segmentation_ll = 0.0
         for u_cluster in u_clusters:
-            qz_counts = u_cluster.get_word_counts() #Version that does not use qz weight at all
-            segmentation_ll += self.segment_ll(qz_counts)
+            word_counts = u_cluster.get_word_counts()
+            segmentation_ll += self.segment_ll(word_counts)
         return segmentation_ll
     
     def segment_u(self, u_begin, u_end):
@@ -145,6 +148,92 @@ class MultiDocDPSeg(AbstractSegmentor):
                 final_seg_ll = seg_new_ll
                 
         return final_seg_ll, best_seg
+    
+    def segment_u_skip_topics(self, u_begin, u_end):
+        '''
+        :param u_end: sentence index
+        :param u_begin: language model index
+        '''
+        final_clusters = self.best_segmentation[u_begin-1]
+        for doc_i in range(self.data.n_docs):
+            doc_i_len = self.data.doc_len(doc_i)
+            #Accounting for documents with different lengths
+            if u_begin > doc_i_len-1:
+                continue
+            best_seg_ll = -np.inf
+            best_clusters = None
+            possible_clusters = self.get_valid_insert_clusters(doc_i, final_clusters)
+            for k in possible_clusters:
+                best_seg = copy.deepcopy(final_clusters)
+                u_k_cluster = None
+                for u_cluster in best_seg:
+                    if u_cluster.k == k:
+                        u_k_cluster = u_cluster
+                        break
+                    
+                if u_k_cluster is None:
+                    u_k_cluster = SentenceCluster(u_begin, u_end, [doc_i], self.data, k)
+                    best_seg.append(u_k_cluster)
+                else:
+                    u_k_cluster.add_sents(u_begin, u_end, doc_i)
+                    
+                seg_ll = self.segmentation_ll(best_seg)
+                if seg_ll > best_seg_ll:
+                    best_seg_ll = seg_ll
+                    best_clusters = best_seg
+            final_clusters = best_clusters
+            
+        return best_seg_ll, best_clusters
+    
+    def segment_u_skip_topics_v2(self, u_begin, u_end):
+        '''
+        :param u_end: sentence index
+        :param u_begin: language model index
+        '''
+        final_clusters = self.best_segmentation[u_begin-1]
+        for doc_i in range(self.data.n_docs):
+            doc_i_len = self.data.doc_len(doc_i)
+            #Accounting for documents with different lengths
+            if u_begin > doc_i_len-1:
+                continue
+            best_seg_ll = -np.inf
+            best_clusters = None
+            possible_clusters = self.get_valid_insert_clusters(doc_i, final_clusters)
+            for k_target in range(self.max_topics):
+                best_seg = copy.deepcopy(final_clusters)
+                u_k_target_cluster = self.get_k_cluster(k_target, best_seg)
+                if u_k_target_cluster is not None:
+                    u_k_target_cluster.add_sents(u_begin, u_end, doc_i)
+                    if k_target not in possible_clusters:
+                        u_begin_k_target, u_end_k_target = u_k_target_cluster.get_segment(doc_i)
+                        for k in range(self.max_topics):
+                            if k == k_target:
+                                continue
+                            
+                            u_k_cluster = self.get_k_cluster(k, best_seg)
+                            if u_k_cluster is None:
+                                continue
+                            
+                            if u_k_cluster.has_doc(doc_i):
+                                u_begin_di, u_end_di = u_k_cluster.get_segment(doc_i)
+                                if u_begin_di > u_begin_k_target:
+                                    doc_i_word_counts = np.sum(self.data.doc_word_counts(doc_i)[u_begin_di:u_end_di+1], axis=0)
+                                    u_k_cluster.remove_doc(doc_i, doc_i_word_counts)
+                                    if len(u_k_cluster.doc_list) == 0:
+                                        best_seg.remove(u_k_cluster)
+                                    u_k_target_cluster.add_sents(u_begin_di, u_end_di, doc_i)
+                else:
+                    u_k_cluster = SentenceCluster(u_begin, u_end, [doc_i], self.data, k_target)
+                    best_seg.append(u_k_cluster)
+                    
+                seg_ll = self.segmentation_ll(best_seg)
+                if seg_ll > best_seg_ll:
+                    best_seg_ll = seg_ll
+                    best_clusters = best_seg
+                    
+            final_clusters = best_clusters
+            
+        return best_seg_ll, final_clusters
     
     def segment_docs(self):
         self.dp_segmentation_step()
