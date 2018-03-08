@@ -272,14 +272,14 @@ def dp_vs_vi():
     md_eval(doc_synth, [dp_model, vi_model], ["DP", "VI"])
     
 def skip_topics_test():
-    use_seed = True
-    seed = 82#73
+    use_seed = False
+    seed = 84#101
     if use_seed:
         np.random.seed(seed)
         
     W = 10#100
     beta = np.array([0.3]*W)
-    n_docs = 3
+    n_docs = 5
     pi = 0.25
     sent_len = 6
     n_segs = 3
@@ -311,7 +311,7 @@ def skip_topics_test():
     greedy_model = greedy_seg.MultiDocGreedySeg(beta, data, max_topics=n_topics)
     dp_model = dp_seg.MultiDocDPSeg(beta, data, max_topics=n_topics, seg_type=dp_seg.SEG_SKIP_K)
     #md_eval(skip_topics_syn, [sd_model, greedy_model, vi_dp_qz_voting_model, vi_dp_qz_voting_model_v2, dp_model], ["SD ", "GR ", "KVI", "KV2", "MDP"])
-    md_eval(skip_topics_syn, [dp_model], ["MDP"])
+    md_eval(skip_topics_syn, [sd_model, dp_model, vi_dp_qz_voting_model], ["SD ", "MDP", "QVI"])
     
 #dp_vs_vi()
 #vi_only_test()

@@ -7,6 +7,7 @@ import numpy as np
 import copy
 from scipy.special import gammaln
 import os
+import collections
 
 class AbstractSegmentor(object):
 
@@ -30,6 +31,9 @@ class AbstractSegmentor(object):
             print("Doc %d: %s" % (doc_i, str(seg)))
             
     def print_seg_with_topics(self, doc_i, u_clusters):
+        if isinstance(u_clusters[0], collections.Iterable):
+            u_clusters = u_clusters[0]
+            
         rho = []
         segments_dict = {}
         for u_cluster in u_clusters:
@@ -76,6 +80,9 @@ class AbstractSegmentor(object):
         in a bottom-up fashion.
         :param doc_i: document index
         '''
+        if isinstance(u_clusters[0], collections.Iterable):
+            u_clusters = u_clusters[0]
+            
         hyp_seg = []
         cluster_order = self.get_cluster_order(doc_i, u_clusters)
         for u_cluster_k in cluster_order:
@@ -208,7 +215,7 @@ class AbstractSegmentor(object):
             f.write("DP tracking:\n")
             for u_end in range(self.data.max_doc_len):
                 f.write("Tracking line %d\n"%(u_end))
-                if u_end == 6:
+                if u_end == 14:
                     a = 0
                 best_seg_ll = -np.inf
                 best_seg_clusters = None

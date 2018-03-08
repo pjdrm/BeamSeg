@@ -39,7 +39,7 @@ class MultiDocVISeg(AbstractSegmentor):
                 elif seg_func == QZ_VOTING:
                     self.seg_func = self.segment_u_vi_voting
                 elif seg_func == QZ_VOTING_V2:
-                    self.seg_func = self.segment_u_vi_voting
+                    self.seg_func = self.segment_u_vi_voting_v2
             elif seg_type == VI_SEG:
                 self.segmentation_step = self.vi_segmentation_step
             
@@ -294,26 +294,26 @@ class MultiDocVISeg(AbstractSegmentor):
         best_k = max(k_votes.iteritems(), key=operator.itemgetter(1))[0]
         return best_k
         
-    def get_var_seg(self, u_begin, u_end, best_seg):
+    def get_var_seg(self, u_begin, u_end, u_clusters):
         for doc_i in range(self.data.n_docs):
             doc_i_len = self.data.doc_len(doc_i)
             #Accounting for documents with different lengths
             if u_begin > doc_i_len-1:
                 continue
             
-            best_k = self.get_best_k_voting(doc_i, u_begin, u_end, best_seg)
+            best_k = self.get_best_k_voting(doc_i, u_begin, u_end, u_clusters)
             u_k_cluster = None
-            for u_cluster in best_seg:
+            for u_cluster in u_clusters:
                 if u_cluster.k == best_k:
                     u_k_cluster = u_cluster
                     break
                 
             if u_k_cluster is None:
                     u_k_cluster = SentenceCluster(u_begin, u_end, [doc_i], self.data, best_k)
-                    best_seg.append(u_k_cluster)
+                    u_clusters.append(u_k_cluster)
             else:
                 u_k_cluster.add_sents(u_begin, u_end, doc_i)
-        return best_seg
+        return u_clusters
     
     def segment_u_vi_voting(self, u_begin, u_end):
         '''
@@ -323,30 +323,30 @@ class MultiDocVISeg(AbstractSegmentor):
         :param u_end: sentence index
         :param u_begin: language model index
         '''
-        best_seg = copy.deepcopy(self.best_segmentation[u_begin-1])
+        u_clusters = copy.deepcopy(self.best_segmentation[u_begin-1])
         for doc_i in range(self.data.n_docs):
             doc_i_len = self.data.doc_len(doc_i)
             #Accounting for documents with different lengths
             if u_begin > doc_i_len-1:
                 continue
             
-            best_k = self.get_best_k_voting(doc_i, u_begin, u_end, best_seg)
+            best_k = self.get_best_k_voting(doc_i, u_begin, u_end, u_clusters)
             u_k_cluster = None
-            for u_cluster in best_seg:
+            for u_cluster in u_clusters:
                 if u_cluster.k == best_k:
                     u_k_cluster = u_cluster
                     break
                 
             if u_k_cluster is None:
                 u_k_cluster = SentenceCluster(u_begin, u_end, [doc_i], self.data, best_k)
-                best_seg.append(u_k_cluster)
+                u_clusters.append(u_k_cluster)
             else:
                 u_k_cluster.add_sents(u_begin, u_end, doc_i)
             
-        total_ll = self.segmentation_ll(best_seg)
-        return total_ll, best_seg
+        total_ll = self.segmentation_ll(u_clusters)
+        return total_ll, u_clusters
     
-    def segment_u_vi_votingv2(self, u_begin, u_end):
+    def segment_u_vi_voting_v2(self, u_begin, u_end):
         '''
         :param u_end: sentence index
         :param u_begin: language model index
@@ -365,23 +365,23 @@ class MultiDocVISeg(AbstractSegmentor):
                 possible_clusters.append(k_votes_sorted[1][0])
                 
             for k in possible_clusters:
-                best_seg = copy.deepcopy(final_clusters)
+                u_clusters = copy.deepcopy(final_clusters)
                 u_k_cluster = None
-                for u_cluster in best_seg:
+                for u_cluster in u_clusters:
                     if u_cluster.k == k:
                         u_k_cluster = u_cluster
                         break
                     
                 if u_k_cluster is None:
                     u_k_cluster = SentenceCluster(u_begin, u_end, [doc_i], self.data, k)
-                    best_seg.append(u_k_cluster)
+                    u_clusters.append(u_k_cluster)
                 else:
                     u_k_cluster.add_sents(u_begin, u_end, doc_i)
                     
-                seg_ll = self.segmentation_ll(best_seg)
+                seg_ll = self.segmentation_ll(u_clusters)
                 if seg_ll > best_seg_ll:
                     best_seg_ll = seg_ll
-                    best_clusters = best_seg
+                    best_clusters = u_clusters
             final_clusters = best_clusters
             
         return best_seg_ll, best_clusters
@@ -395,11 +395,11 @@ class MultiDocVISeg(AbstractSegmentor):
         :param u_end: sentence index
         :param u_begin: language model index
         '''
-        best_seg = copy.deepcopy(self.best_segmentation[u_begin-1])
+        u_clusters = copy.deepcopy(self.best_segmentation[u_begin-1])
         total_ll = 0.0
         for k in range(self.max_topics):
             word_counts = np.zeros(self.data.W)
-            for u_cluster in best_seg:
+            for u_cluster in u_clusters:
                 if u_cluster.k == k:
                     word_counts += u_cluster.get_word_counts()
                     break
@@ -415,9 +415,9 @@ class MultiDocVISeg(AbstractSegmentor):
                 word_counts += np.sum(self.qz[k][wi_list], axis=0)
             total_ll += self.segment_ll(word_counts)
             
-        best_seg = self.get_var_seg(u_begin, u_end, best_seg)
-        total_ll += self.segmentation_ll(best_seg)
-        return total_ll, best_seg
+        u_clusters = self.get_var_seg(u_begin, u_end, u_clusters)
+        total_ll += self.segmentation_ll(u_clusters)
+        return total_ll, u_clusters
     
     def vi_segmentation_step(self):
         '''
