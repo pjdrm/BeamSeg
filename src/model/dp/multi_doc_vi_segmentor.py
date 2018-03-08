@@ -80,6 +80,8 @@ class MultiDocVISeg(AbstractSegmentor):
         else:
             if rho[u] == 0:
                 u_begin, u_end = wi_u_cluster.get_segment(doc_i)
+                if u_begin is None:
+                    self.get_wi_segment(wi, u_clusters)
                 words = []
                 for u in range(u_begin, u_end+1):
                     u_wi_indexes = self.data.d_u_wi_indexes[doc_i][u]
@@ -229,7 +231,7 @@ class MultiDocVISeg(AbstractSegmentor):
         wi_list = self.data.d_u_wi_indexes[doc_i][u_begin:u_end+1]
         wi_list = list(chain(*wi_list))
         
-        possible_clusters = self.get_valid_insert_clusters(doc_i, u_clusters)
+        possible_clusters = range(self.max_topics)
         k_votes = {key: 0 for key in possible_clusters}
         for wi in wi_list:
             best_cluster = -1
@@ -331,17 +333,8 @@ class MultiDocVISeg(AbstractSegmentor):
                 continue
             
             best_k = self.get_best_k_voting(doc_i, u_begin, u_end, u_clusters)
-            u_k_cluster = None
-            for u_cluster in u_clusters:
-                if u_cluster.k == best_k:
-                    u_k_cluster = u_cluster
-                    break
-                
-            if u_k_cluster is None:
-                u_k_cluster = SentenceCluster(u_begin, u_end, [doc_i], self.data, best_k)
-                u_clusters.append(u_k_cluster)
-            else:
-                u_k_cluster.add_sents(u_begin, u_end, doc_i)
+            possible_clusters = self.get_valid_insert_clusters(doc_i, u_clusters)
+            u_clusters = self.assign_target_k(u_begin, u_end, doc_i, best_k, possible_clusters, u_clusters)
             
         total_ll = self.segmentation_ll(u_clusters)
         return total_ll, u_clusters

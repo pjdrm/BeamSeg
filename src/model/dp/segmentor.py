@@ -198,6 +198,33 @@ class AbstractSegmentor(object):
                     return u_cluster
         return None
     
+    def assign_target_k(self, u_begin, u_end, doc_i, k_target, possible_clusters, u_clusters):
+        u_k_target_cluster = self.get_k_cluster(k_target, u_clusters)
+        if u_k_target_cluster is not None:
+            u_k_target_cluster.add_sents(u_begin, u_end, doc_i)
+            if k_target not in possible_clusters:
+                u_begin_k_target, u_end_k_target = u_k_target_cluster.get_segment(doc_i)
+                for k in range(self.max_topics):
+                    if k == k_target:
+                        continue
+                    
+                    u_k_cluster = self.get_k_cluster(k, u_clusters)
+                    if u_k_cluster is None:
+                        continue
+                    
+                    if u_k_cluster.has_doc(doc_i):
+                        u_begin_di, u_end_di = u_k_cluster.get_segment(doc_i)
+                        if u_begin_di > u_begin_k_target:
+                            doc_i_word_counts = np.sum(self.data.doc_word_counts(doc_i)[u_begin_di:u_end_di+1], axis=0)
+                            u_k_cluster.remove_doc(doc_i, doc_i_word_counts)
+                            if len(u_k_cluster.doc_list) == 0:
+                                u_clusters.remove(u_k_cluster)
+                            u_k_target_cluster.add_sents(u_begin_di, u_end_di, doc_i)
+        else:
+            u_k_cluster = SentenceCluster(u_begin, u_end, [doc_i], self.data, k_target)
+            u_clusters.append(u_k_cluster)
+        return u_clusters
+    
     def segment_ll(self, word_counts):
         '''
         Returns the likelihood if we considering all sentences (word_counts)
@@ -368,6 +395,9 @@ class SentenceCluster(object):
             
     def remove_doc(self, doc_i, doc_i_word_counts):
         self.word_counts -= doc_i_word_counts
+        for doc_w_i in self.get_doc_words(doc_i):
+            self.wi_list.remove(doc_w_i)
+            
         new_u_list = []
         new_doc_list = []
         for doc_j, u in zip(self.doc_list, self.u_list):

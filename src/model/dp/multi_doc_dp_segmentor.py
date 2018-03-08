@@ -17,7 +17,7 @@ class MultiDocDPSeg(AbstractSegmentor):
     
     def __init__(self, beta, data, max_topics=None, seg_type=None, desc="MD_DP_seg"):
         super(MultiDocDPSeg, self).__init__(beta, data, max_topics=max_topics, desc=desc)
-        self.max_cache = 17
+        self.max_cache = 20
         if seg_type is None or seg_type == SEG_ALL_COMBS:
             self.seg_func = self.segment_u
             self.doc_combs_list = self.init_doc_combs()#All n possible combinations (up to the number of documents). Its a list of pairs where the first element is the combination and second the remaining docs
@@ -150,33 +150,6 @@ class MultiDocDPSeg(AbstractSegmentor):
                 
         return final_seg_ll, best_seg
     
-    def assign_target_k(self, u_begin, u_end, doc_i, k_target, possible_clusters, u_clusters):
-        u_k_target_cluster = self.get_k_cluster(k_target, u_clusters)
-        if u_k_target_cluster is not None:
-            u_k_target_cluster.add_sents(u_begin, u_end, doc_i)
-            if k_target not in possible_clusters:
-                u_begin_k_target, u_end_k_target = u_k_target_cluster.get_segment(doc_i)
-                for k in range(self.max_topics):
-                    if k == k_target:
-                        continue
-                    
-                    u_k_cluster = self.get_k_cluster(k, u_clusters)
-                    if u_k_cluster is None:
-                        continue
-                    
-                    if u_k_cluster.has_doc(doc_i):
-                        u_begin_di, u_end_di = u_k_cluster.get_segment(doc_i)
-                        if u_begin_di > u_begin_k_target:
-                            doc_i_word_counts = np.sum(self.data.doc_word_counts(doc_i)[u_begin_di:u_end_di+1], axis=0)
-                            u_k_cluster.remove_doc(doc_i, doc_i_word_counts)
-                            if len(u_k_cluster.doc_list) == 0:
-                                u_clusters.remove(u_k_cluster)
-                            u_k_target_cluster.add_sents(u_begin_di, u_end_di, doc_i)
-        else:
-            u_k_cluster = SentenceCluster(u_begin, u_end, [doc_i], self.data, k_target)
-            u_clusters.append(u_k_cluster)
-        return u_clusters
-                    
     def segment_u_skip_topics(self, u_begin, u_end):
         '''
         :param u_end: sentence index
