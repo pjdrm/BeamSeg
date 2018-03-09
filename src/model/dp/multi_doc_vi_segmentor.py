@@ -26,14 +26,15 @@ class MultiDocVISeg(AbstractSegmentor):
     
     def __init__(self, beta, data, max_topics=None, n_iters=3, seg_config=None, log_dir="../logs/", log_flag=True):
         super(MultiDocVISeg, self).__init__(beta, data, max_topics=max_topics, log_dir=log_dir, desc="VI_seg")
+        self.max_row_cache = 10
         if seg_config is None:
             self.seg_func = self.segment_u_vi_v2
-            self.segmentation_step = self.dp_segmentation_step
+            self.segmentation_step = self.dp_segmentation_step_cache
         else:
             seg_type = seg_config["type"]
             if seg_type == DP_VI_SEG:
                 seg_func = seg_config["seg_func"]
-                self.segmentation_step = self.dp_segmentation_step
+                self.segmentation_step = self.dp_segmentation_step_cache
                 if seg_func == QZ_LL:
                     self.seg_func = self.segment_u_vi_qz_ll
                 elif seg_func == QZ_VOTING:
@@ -227,7 +228,7 @@ class MultiDocVISeg(AbstractSegmentor):
             
         return best_k
     
-    def get_k_votes_sorted(self, doc_i, u_begin, u_end, u_clusters):
+    def get_k_votes_sorted(self, doc_i, u_begin, u_end):
         wi_list = self.data.d_u_wi_indexes[doc_i][u_begin:u_end+1]
         wi_list = list(chain(*wi_list))
         
@@ -268,15 +269,9 @@ class MultiDocVISeg(AbstractSegmentor):
         k_votes = sorted(k_votes.items(), key=operator.itemgetter(1), reverse=True)
         return k_votes
         
-    def get_best_k_voting(self, doc_i, u_begin, u_end, u_clusters):
-        k_votes = self.get_k_votes_sorted(doc_i, u_begin, u_end, u_clusters)
+    def get_best_k_voting(self, doc_i, u_begin, u_end):
+        k_votes = self.get_k_votes_sorted(doc_i, u_begin, u_end)
         return k_votes[0][0]
-                
-        best_k = max(k_votes.iteritems(), key=operator.itemgetter(1))[0]
-        if best_k == -1:
-            print("WARNING: invalid best_k")
-            
-        return best_k
     
     def get_best_k_voting_u0(self, u_end):
         k_votes = {key: 0 for key in range(self.max_topics)}
@@ -317,7 +312,12 @@ class MultiDocVISeg(AbstractSegmentor):
                 u_k_cluster.add_sents(u_begin, u_end, doc_i)
         return u_clusters
     
-    def segment_u_vi_voting(self, u_begin, u_end):
+    def get_final_segmentation(self, doc_i):
+        u_clusters = self.best_segmentation[-1][0][1]
+        hyp_seg = self.get_segmentation(doc_i, u_clusters)
+        return hyp_seg
+    
+    def segment_u_vi_voting(self, u_begin, u_end, prev_u_clusters):
         '''
         The variational parameters of each in the segments (u_begin, u_end)
         vote for a topic. The segment is added to most voted topic.
@@ -325,14 +325,14 @@ class MultiDocVISeg(AbstractSegmentor):
         :param u_end: sentence index
         :param u_begin: language model index
         '''
-        u_clusters = copy.deepcopy(self.best_segmentation[u_begin-1])
+        u_clusters = copy.deepcopy(prev_u_clusters)
         for doc_i in range(self.data.n_docs):
             doc_i_len = self.data.doc_len(doc_i)
             #Accounting for documents with different lengths
             if u_begin > doc_i_len-1:
                 continue
             
-            best_k = self.get_best_k_voting(doc_i, u_begin, u_end, u_clusters)
+            best_k = self.get_best_k_voting(doc_i, u_begin, u_end)
             possible_clusters = self.get_valid_insert_clusters(doc_i, u_clusters)
             u_clusters = self.assign_target_k(u_begin, u_end, doc_i, best_k, possible_clusters, u_clusters)
             
@@ -450,6 +450,44 @@ class MultiDocVISeg(AbstractSegmentor):
                 final_u_clusters = best_u_clusters
         self.best_segmentation[-1] = final_u_clusters
         
+    def dp_segmentation_step_cache(self):
+        with open(self.log_dir+"dp_tracker_"+self.desc+".txt", "a+") as f:
+            f.write("DP tracking:\n")
+            for u_end in range(self.data.max_doc_len):
+                f.write("Tracking line %d\n"%(u_end))
+                if u_end == 14:
+                    a = 0
+                best_u_begin = -1
+                cached_segs = []
+                for u_begin in range(u_end+1):
+                    if u_begin == 4:
+                        a = 0
+                        
+                    if u_begin == 0:
+                        best_seg = [(-np.inf, [])]
+                    else:
+                        best_seg = self.best_segmentation[u_begin-1]
+                        
+                    for prev_seg_ll, prev_u_cluster in best_seg:
+                        seg_ll, seg_clusters = self.seg_func(u_begin, u_end, prev_u_cluster)
+                        if len(cached_segs) < self.max_row_cache:
+                            cached_segs.append((seg_ll, seg_clusters))
+                            cached_segs = sorted(cached_segs, key=operator.itemgetter(0), reverse=True)
+                            
+                        elif seg_ll > cached_segs[-1][0]:
+                            cached_segs[-1] = (seg_ll, seg_clusters)
+                            cached_segs = sorted(cached_segs, key=operator.itemgetter(0), reverse=True)
+                    
+                    f.write("(%d,%d)\tll: %.3f\n"%(u_begin, u_end, cached_segs[0][0]))
+                    for doc_i in range(self.data.n_docs):
+                        f.write(str(self.get_segmentation(doc_i, cached_segs[0][1]))+" "
+                                +str(self.print_seg_with_topics(doc_i, cached_segs[0][1]))+"\n")
+                    f.write("\n")
+                f.write("============\n")
+                self.best_segmentation[u_end] = cached_segs
+                #self.print_seg(best_seg_clusters)
+            #print("==========================")
+        
     def segment_docs(self): #TODO: check if the segmentation changes and use that as criteria for stopping
         '''
         Segments the full collection of documents. Alternates between using a Dynamic Programming
@@ -475,8 +513,8 @@ class MultiDocVISeg(AbstractSegmentor):
                 for doc_i in range(self.data.n_docs):
                     doc_i_log = segmentation_log_files[doc_i]
                     seg_log_str = "\nGS: "+str(self.data.docs_rho_gs[doc_i].tolist())+\
-                                  "\nVI: "+str(self.get_final_segmentation(doc_i))+\
-                                  "\n K: "+self.print_seg_with_topics(doc_i, self.best_segmentation[-1])
+                                  "\nVI: "+str(self.get_segmentation(doc_i, self.best_segmentation[-1][0][1]))+\
+                                  "\n K: "+self.print_seg_with_topics(doc_i, self.best_segmentation[-1][0][1])
                     doc_i_log.info(seg_log_str)
                     wi_list = self.data.d_u_wi_indexes[doc_i]
                     wi_list = list(chain(*wi_list))
@@ -486,7 +524,7 @@ class MultiDocVISeg(AbstractSegmentor):
             end = time.time()
             dp_step_time = (end - start)
             
-            best_segmentation = self.best_segmentation[-1]
+            best_segmentation = self.best_segmentation[-1][0][1]
             start = time.time()
             self.variational_step(best_segmentation)
             end = time.time()

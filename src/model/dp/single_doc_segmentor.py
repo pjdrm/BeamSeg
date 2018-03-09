@@ -19,6 +19,7 @@ class SingleDocDPSeg():
         for doc in self.single_docs:
             data = Data(doc)
             dp_model = dp_seg.MultiDocDPSeg(self.beta, data, desc="SD_seg")
+            dp_model.max_row_cache = 1
             dp_model.segment_docs()
             self.sd_segs.append(dp_model.get_final_segmentation(0))
     

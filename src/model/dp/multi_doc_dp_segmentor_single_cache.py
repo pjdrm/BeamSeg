@@ -8,7 +8,6 @@ from itertools import chain, combinations
 import copy
 import numpy as np
 import operator
-from tqdm import trange
 
 SEG_FAST = "fast"
 SEG_ALL_COMBS = "all_combs"
@@ -18,8 +17,7 @@ class MultiDocDPSeg(AbstractSegmentor):
     
     def __init__(self, beta, data, max_topics=None, seg_type=None, desc="MD_DP_seg"):
         super(MultiDocDPSeg, self).__init__(beta, data, max_topics=max_topics, desc=desc)
-        self.max_cache = 10
-        self.max_row_cache = 10
+        self.max_cache = 20
         if seg_type is None or seg_type == SEG_ALL_COMBS:
             self.seg_func = self.segment_u
             self.doc_combs_list = self.init_doc_combs()#All n possible combinations (up to the number of documents). Its a list of pairs where the first element is the combination and second the remaining docs
@@ -38,11 +36,6 @@ class MultiDocDPSeg(AbstractSegmentor):
             other_docs = all_docs - set(doc_comb)
             doc_combs_list.append([doc_comb, other_docs])
         return doc_combs_list
-    
-    def get_final_segmentation(self, doc_i):
-        u_clusters = self.best_segmentation[-1][0][1]
-        hyp_seg = self.get_segmentation(doc_i, u_clusters)
-        return hyp_seg
     
     def fit_sentences(self, u_begin, u_end, docs, u_clusters):
         '''
@@ -95,7 +88,7 @@ class MultiDocDPSeg(AbstractSegmentor):
             segmentation_ll += self.segment_ll(word_counts)
         return segmentation_ll
     
-    def segment_u(self, u_begin, u_end, prev_u_clusters):
+    def segment_u(self, u_begin, u_end):
         '''
         Estimates, for all documents, the best segmentation
         from u_end to u_begin (column index in the DP matrix).
@@ -105,12 +98,12 @@ class MultiDocDPSeg(AbstractSegmentor):
         if u_begin == 0:#The first column corresponds to having all sentences from all docs in a single segment (there is only one language model)
             u_cluster = SentenceCluster(u_begin, u_end, list(range(self.data.n_docs)), self.data, 0)
             segmentation_ll = self.segmentation_ll([u_cluster])
-            return [(segmentation_ll, [u_cluster])]
+            return segmentation_ll, [u_cluster]
            
         best_seg_ll = -np.inf
         best_seg_clusters = None
         for doc_comb, other_docs in self.doc_combs_list:
-            best_seg = copy.deepcopy(prev_u_clusters[1])
+            best_seg = copy.deepcopy(self.best_segmentation[u_begin-1])
             self.fit_sentences(u_begin, u_end, other_docs, best_seg) #Note that this changes u_clusters
             self.new_seg_point(u_begin, u_end, doc_comb, best_seg) #Note that this changes u_clusters
             #if self.valid_segmentation(u_clusters):
@@ -118,7 +111,7 @@ class MultiDocDPSeg(AbstractSegmentor):
             if segmentation_ll >= best_seg_ll:
                 best_seg_ll = segmentation_ll
                 best_seg_clusters = best_seg
-        return [(best_seg_ll, best_seg_clusters)]
+        return best_seg_ll, best_seg_clusters
     
     def segment_u_fast(self, u_begin, u_end):
         '''
@@ -157,7 +150,7 @@ class MultiDocDPSeg(AbstractSegmentor):
                 
         return final_seg_ll, best_seg
     
-    def segment_u_skip_topics(self, u_begin, u_end, prev_u_clusters):
+    def segment_u_skip_topics(self, u_begin, u_end):
         '''
         :param u_end: sentence index
         :param u_begin: language model index
@@ -185,10 +178,10 @@ class MultiDocDPSeg(AbstractSegmentor):
                         best_seg_ll = seg_ll
                         best_clusters = u_clusters
                 best_seg = best_clusters
-            return [(best_seg_ll, best_seg)]
+            return best_seg_ll, [best_seg]
                         
         else:
-            final_u_clusters = [prev_u_clusters]
+            final_u_clusters = self.best_segmentation[u_begin-1]
             for doc_i in range(self.data.n_docs):
                 doc_i_len = self.data.doc_len(doc_i)
                 #Accounting for documents with different lengths
@@ -196,7 +189,7 @@ class MultiDocDPSeg(AbstractSegmentor):
                     continue
                 
                 current_best_u_clusters = []
-                for u_cluster_ll, u_cluster in final_u_clusters:
+                for u_cluster in final_u_clusters:
                     possible_clusters = self.get_valid_insert_clusters(doc_i, u_cluster)
                     seg_results = []
                     for k_target in range(self.max_topics):
@@ -209,61 +202,17 @@ class MultiDocDPSeg(AbstractSegmentor):
                             
                     seg_results = sorted(seg_results, key=operator.itemgetter(0), reverse=True)
                     best_seg_ll = seg_results[0][0]
-                    current_best_u_clusters.append(seg_results[0])
+                    current_best_u_clusters.append(seg_results[0][1])
                     for seg_result in seg_results[1:]:
                         if seg_result[0] == best_seg_ll:
                             continue
                         elif abs(seg_result[0]-best_seg_ll) <= 1.5:
-                            current_best_u_clusters.append(seg_result)
+                            current_best_u_clusters.append(seg_result[1])
                         else:
                             break
                 final_u_clusters = current_best_u_clusters[:self.max_cache]
             
-        return final_u_clusters
+        return best_seg_ll, final_u_clusters
     
-    def dp_segmentation_step_cache(self):
-        t = trange(self.data.max_doc_len, desc='', leave=True)
-        prev_u_end = -1
-        with open(self.log_dir+"dp_tracker_"+self.desc+".txt", "a+") as f:
-            f.write("DP tracking:\n")
-            for u_end in t:
-                f.write("Tracking line %d\n"%(u_end))
-                if u_end == 14:
-                    a = 0
-                best_u_begin = -1
-                cached_segs = []
-                for u_begin in range(u_end+1):
-                    t.set_description("(%d, %d)" % (u_end, u_begin))
-                    if u_begin == 4:
-                        a = 0
-                        
-                    if u_begin == 0:
-                        best_seg = [(-np.inf, [])]
-                    else:
-                        best_seg = self.best_segmentation[u_begin-1]
-                        
-                    for best_seg_i in best_seg:
-                        seg_results = self.seg_func(u_begin, u_end, best_seg_i)
-                        for seg_result in seg_results:
-                            seg_ll = seg_result[0]
-                            seg_clusters = seg_result[1]
-                            if len(cached_segs) < self.max_row_cache:
-                                cached_segs.append((seg_ll, seg_clusters))
-                                cached_segs = sorted(cached_segs, key=operator.itemgetter(0), reverse=True)
-                                
-                            elif seg_ll > cached_segs[-1][0]:
-                                cached_segs[-1] = (seg_ll, seg_clusters)
-                                cached_segs = sorted(cached_segs, key=operator.itemgetter(0), reverse=True)
-                    
-                    f.write("(%d,%d)\tll: %.3f\n"%(u_begin, u_end, cached_segs[0][0]))
-                    for doc_i in range(self.data.n_docs):
-                        f.write(str(self.get_segmentation(doc_i, cached_segs[0][1]))+" "
-                                +str(self.print_seg_with_topics(doc_i, cached_segs[0][1]))+"\n")
-                    f.write("\n")
-                f.write("============\n")
-                self.best_segmentation[u_end] = cached_segs
-                #self.print_seg(best_seg_clusters)
-            #print("==========================")
-            
     def segment_docs(self):
-        self.dp_segmentation_step_cache()
+        self.dp_segmentation_step()

@@ -7,6 +7,7 @@ from dataset.synthetic_doc_cvb import CVBSynDoc2, CVBSynSkipTopics
 import time
 from model.dp.segmentor import Data
 import model.dp.multi_doc_dp_segmentor as dp_seg
+import model.dp.multi_doc_dp_segmentor_single_cache as dp_seg_sc
 import model.dp.multi_doc_vi_segmentor as vi_seg
 import model.dp.single_doc_segmentor as sd_seg
 import model.dp.multi_doc_greedy_segmentor as greedy_seg
@@ -61,7 +62,7 @@ def single_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_fl
     sd_segs = []
     for doc in single_docs:
         data = Data(doc)
-        dp_model = dp_seg.MultiDocDPSeg(beta, data)
+        dp_model = sd_seg.SingleDocDPSeg(beta, single_docs, data)
         dp_model.segment_docs()
         sd_segs.append(dp_model.get_final_segmentation(0))
         single_doc_wd += wd_evaluator(dp_model.get_all_segmentations(), doc)
@@ -128,6 +129,7 @@ def merge_docs(target_docs):
     merged_doc = target_docs_copy[0]
     all_rho = []
     all_docs_index = []
+    all_d_u_wi_indexes = []
     all_U_W_counts = None
     carry_index = 0
     for doc_synth in target_docs:
@@ -140,6 +142,7 @@ def merge_docs(target_docs):
             all_U_W_counts = doc_synth.U_W_counts
         else:
             all_U_W_counts = np.vstack((all_U_W_counts, doc_synth.U_W_counts))
+        all_d_u_wi_indexes.append(doc_synth.d_u_wi_indexes[0])
             
     all_rho[-1] = 0
     
@@ -147,6 +150,7 @@ def merge_docs(target_docs):
     merged_doc.rho = np.array(all_rho)
     merged_doc.docs_index = all_docs_index
     merged_doc.U_W_counts = all_U_W_counts
+    merged_doc.d_u_wi_indexes = all_d_u_wi_indexes
     merged_doc.isMD = True
     
     return merged_doc
@@ -272,15 +276,15 @@ def dp_vs_vi():
     md_eval(doc_synth, [dp_model, vi_model], ["DP", "VI"])
     
 def skip_topics_test():
-    use_seed = False
-    seed = 203#84
+    use_seed = True
+    seed = 217#84
     if use_seed:
         np.random.seed(seed)
         
-    W = 300#100
+    W = 10#100
     beta = np.array([0.3]*W)
     n_docs = 5
-    pi = 0.25
+    pi = 0.2
     sent_len = 6
     n_segs = 3
     n_topics = 5
@@ -310,9 +314,52 @@ def skip_topics_test():
                                                         log_dir="../logs/", log_flag=True)
     greedy_model = greedy_seg.MultiDocGreedySeg(beta, data, max_topics=n_topics)
     dp_model = dp_seg.MultiDocDPSeg(beta, data, max_topics=n_topics, seg_type=dp_seg.SEG_SKIP_K)
-    #md_eval(skip_topics_syn, [sd_model, greedy_model, vi_dp_qz_voting_model, vi_dp_qz_voting_model_v2, dp_model], ["SD ", "GR ", "KVI", "KV2", "MDP"])
-    md_eval(skip_topics_syn, [sd_model, dp_model, vi_dp_qz_voting_model], ["SD ", "MDP", "QZV"])
+    dp_model_sc = dp_seg_sc.MultiDocDPSeg(beta, data, max_topics=n_topics, seg_type=dp_seg.SEG_SKIP_K)
+    md_eval(skip_topics_syn, [sd_model, dp_model], ["SD ", "MDP"])
+    
+def skip_topics_incremental_test():
+    use_seed = True
+    seed = 217#84
+    if use_seed:
+        np.random.seed(seed)
+        
+    W = 10#100
+    beta = np.array([0.3]*W)
+    n_docs = 3
+    pi = 0.2
+    sent_len = 6
+    n_segs = 3
+    n_topics = 5
+    
+    skip_topics_syn = CVBSynSkipTopics(beta, pi, sent_len, n_segs, n_docs, n_topics)
+    single_docs = skip_topics_syn.get_single_docs()
+    results_dict = dict([(key, []) for key in range(n_docs)])
+    
+    sd_model = sd_seg.SingleDocDPSeg(beta, single_docs, Data(skip_topics_syn))
+    sd_model.segment_docs()
+    sd_wd_results = wd_evaluator(sd_model.get_all_segmentations(), skip_topics_syn)
+        
+        
+    for i in range(1, skip_topics_syn.n_docs+1):
+        target_docs = single_docs[:i]
+        merged_doc_synth = merge_docs(target_docs)
+        data = Data(merged_doc_synth)
+        dp_model = dp_seg.MultiDocDPSeg(beta, data, max_topics=n_topics, seg_type=dp_seg.SEG_SKIP_K)
+        dp_model.segment_docs()
+        wd_results = wd_evaluator(dp_model.get_all_segmentations(), merged_doc_synth)
+        for doc_i, wd_result in enumerate(wd_results):
+            results_dict[doc_i].append(wd_result)
+            
+    print("\nSD baseline:\n")
+    for doc_i, wd in enumerate(sd_wd_results):
+        print("doc_%d %f" % (doc_i, wd))
+        
+    print("\nMDP incremental:\n")
+    for doc_i in range(n_docs):
+        print("doc_%d %s" % (doc_i, str(results_dict[doc_i])))
+        
     
 #dp_vs_vi()
 #vi_only_test()
 skip_topics_test()
+#skip_topics_incremental_test()
