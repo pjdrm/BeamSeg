@@ -18,7 +18,7 @@ class MultiDocDPSeg(AbstractSegmentor):
     
     def __init__(self, beta, data, max_topics=None, seg_type=None, desc="MD_DP_seg"):
         super(MultiDocDPSeg, self).__init__(beta, data, max_topics=max_topics, desc=desc)
-        self.max_cache = 10
+        self.max_cache = 5
         self.max_row_cache = 10
         if seg_type is None or seg_type == SEG_ALL_COMBS:
             self.seg_func = self.segment_u
@@ -196,6 +196,7 @@ class MultiDocDPSeg(AbstractSegmentor):
                     continue
                 
                 current_best_u_clusters = []
+                '''
                 for u_cluster_ll, u_cluster in final_u_clusters:
                     possible_clusters = self.get_valid_insert_clusters(doc_i, u_cluster)
                     seg_results = []
@@ -206,7 +207,7 @@ class MultiDocDPSeg(AbstractSegmentor):
                             
                         seg_ll = self.segmentation_ll(best_seg)
                         seg_results.append((seg_ll, best_seg))
-                            
+                        
                     seg_results = sorted(seg_results, key=operator.itemgetter(0), reverse=True)
                     best_seg_ll = seg_results[0][0]
                     current_best_u_clusters.append(seg_results[0])
@@ -218,6 +219,33 @@ class MultiDocDPSeg(AbstractSegmentor):
                         else:
                             break
                 final_u_clusters = current_best_u_clusters[:self.max_cache]
+                '''
+                for u_cluster_ll, u_cluster in final_u_clusters:
+                    possible_clusters = self.get_valid_insert_clusters(doc_i, u_cluster)
+                    for k_target in range(self.max_topics):
+                        best_seg = copy.deepcopy(u_cluster)
+                        best_seg = self.assign_target_k(u_begin,u_end, doc_i,\
+                                                        k_target, possible_clusters, best_seg)
+                            
+                        seg_ll = self.segmentation_ll(best_seg)
+                        current_best_u_clusters.append((seg_ll, best_seg))
+                        
+                current_best_u_clusters = sorted(current_best_u_clusters, key=operator.itemgetter(0), reverse=True)
+                cached_segs = []
+                for seg_result in current_best_u_clusters:
+                    seg_ll = seg_result[0]
+                    seg_clusters = seg_result[1]
+                    
+                    is_cached = self.is_cached_seg(seg_ll, cached_segs)
+                    if not is_cached:
+                        if len(cached_segs) < self.max_cache:
+                            cached_segs.append((seg_ll, seg_clusters))
+                            cached_segs = sorted(cached_segs, key=operator.itemgetter(0), reverse=True)
+                            
+                        elif seg_ll > cached_segs[-1][0]:
+                            cached_segs[-1] = (seg_ll, seg_clusters)
+                            cached_segs = sorted(cached_segs, key=operator.itemgetter(0), reverse=True)
+                final_u_clusters = cached_segs
             
         return final_u_clusters
     
@@ -228,7 +256,7 @@ class MultiDocDPSeg(AbstractSegmentor):
             f.write("DP tracking:\n")
             for u_end in t:
                 f.write("Tracking line %d\n"%(u_end))
-                if u_end == 14:
+                if u_end == 9:
                     a = 0
                 best_u_begin = -1
                 cached_segs = []
@@ -247,13 +275,16 @@ class MultiDocDPSeg(AbstractSegmentor):
                         for seg_result in seg_results:
                             seg_ll = seg_result[0]
                             seg_clusters = seg_result[1]
-                            if len(cached_segs) < self.max_row_cache:
-                                cached_segs.append((seg_ll, seg_clusters))
-                                cached_segs = sorted(cached_segs, key=operator.itemgetter(0), reverse=True)
-                                
-                            elif seg_ll > cached_segs[-1][0]:
-                                cached_segs[-1] = (seg_ll, seg_clusters)
-                                cached_segs = sorted(cached_segs, key=operator.itemgetter(0), reverse=True)
+                            
+                            is_cached = self.is_cached_seg(seg_ll, cached_segs)
+                            if not is_cached:
+                                if len(cached_segs) < self.max_row_cache:
+                                    cached_segs.append((seg_ll, seg_clusters))
+                                    cached_segs = sorted(cached_segs, key=operator.itemgetter(0), reverse=True)
+                                    
+                                elif seg_ll > cached_segs[-1][0]:
+                                    cached_segs[-1] = (seg_ll, seg_clusters)
+                                    cached_segs = sorted(cached_segs, key=operator.itemgetter(0), reverse=True)
                     
                     f.write("(%d,%d)\tll: %.3f\n"%(u_begin, u_end, cached_segs[0][0]))
                     for doc_i in range(self.data.n_docs):

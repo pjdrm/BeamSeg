@@ -225,6 +225,17 @@ class AbstractSegmentor(object):
             u_clusters.append(u_k_cluster)
         return u_clusters
     
+    def is_cached_seg(self, seg_ll, cached_segs):
+        is_cached = False
+        for cached_seg_ll, cached_u_clusters in cached_segs:
+            if cached_seg_ll == seg_ll:
+                is_cached = True
+                break
+            if cached_seg_ll < seg_ll:
+                is_cached = False
+                break
+        return is_cached
+    
     def segment_ll(self, word_counts):
         '''
         Returns the likelihood if we considering all sentences (word_counts)

@@ -13,8 +13,8 @@ import model.dp.single_doc_segmentor as sd_seg
 import model.dp.multi_doc_greedy_segmentor as greedy_seg
 import copy
 import numpy as np
-import toyplot
-import toyplot.pdf
+#import toyplot
+#import toyplot.pdf
 from eval.eval_tools import wd_evaluator
 
 def md_eval(doc_synth, models, models_desc):
@@ -277,17 +277,17 @@ def dp_vs_vi():
     
 def skip_topics_test():
     use_seed = True
-    seed = 217#84
+    seed = 232#84
     if use_seed:
         np.random.seed(seed)
         
     W = 10#100
     beta = np.array([0.3]*W)
-    n_docs = 5
-    pi = 0.2
+    n_docs = 3
+    pi = 0.25
     sent_len = 6
-    n_segs = 3
-    n_topics = 5
+    n_segs = 5
+    n_topics = 7
     
     skip_topics_syn = CVBSynSkipTopics(beta, pi, sent_len, n_segs, n_docs, n_topics)
     data = Data(skip_topics_syn)
@@ -315,18 +315,18 @@ def skip_topics_test():
     greedy_model = greedy_seg.MultiDocGreedySeg(beta, data, max_topics=n_topics)
     dp_model = dp_seg.MultiDocDPSeg(beta, data, max_topics=n_topics, seg_type=dp_seg.SEG_SKIP_K)
     dp_model_sc = dp_seg_sc.MultiDocDPSeg(beta, data, max_topics=n_topics, seg_type=dp_seg.SEG_SKIP_K)
-    md_eval(skip_topics_syn, [sd_model, dp_model], ["SD ", "MDP"])
+    md_eval(skip_topics_syn, [sd_model, greedy_model], ["SD ", "GMD"])
     
 def skip_topics_incremental_test():
     use_seed = True
-    seed = 217#84
+    seed = 229#84
     if use_seed:
         np.random.seed(seed)
         
-    W = 10#100
+    W = 100#100
     beta = np.array([0.3]*W)
-    n_docs = 3
-    pi = 0.2
+    n_docs = 8
+    pi = 0.25
     sent_len = 6
     n_segs = 3
     n_topics = 5
@@ -344,9 +344,9 @@ def skip_topics_incremental_test():
         target_docs = single_docs[:i]
         merged_doc_synth = merge_docs(target_docs)
         data = Data(merged_doc_synth)
-        dp_model = dp_seg.MultiDocDPSeg(beta, data, max_topics=n_topics, seg_type=dp_seg.SEG_SKIP_K)
-        dp_model.segment_docs()
-        wd_results = wd_evaluator(dp_model.get_all_segmentations(), merged_doc_synth)
+        greedy_model = greedy_seg.MultiDocGreedySeg(beta, data, max_topics=n_topics)
+        greedy_model.segment_docs()
+        wd_results = wd_evaluator(greedy_model.get_all_segmentations(), merged_doc_synth)
         for doc_i, wd_result in enumerate(wd_results):
             results_dict[doc_i].append(wd_result)
             
@@ -354,7 +354,7 @@ def skip_topics_incremental_test():
     for doc_i, wd in enumerate(sd_wd_results):
         print("doc_%d %f" % (doc_i, wd))
         
-    print("\nMDP incremental:\n")
+    print("\nGMD incremental:\n")
     for doc_i in range(n_docs):
         print("doc_%d %s" % (doc_i, str(results_dict[doc_i])))
         
