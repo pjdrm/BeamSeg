@@ -11,10 +11,11 @@ from tqdm import trange
 
 class MultiDocGreedySeg(AbstractSegmentor):
     
-    def __init__(self, beta, data, max_topics=None):
+    def __init__(self, beta, data, max_topics=None, seg_dur=None):
         super(MultiDocGreedySeg, self).__init__(beta, data, desc="greedy")
         self.max_topics = self.data.max_doc_len if max_topics is None else max_topics
-        self.max_cache = 100
+        self.prior_seg = 1.0/np.array([4]*self.data.n_docs) if seg_dur is None else 1.0/[seg_dur]
+        self.max_cache = 50
         
     def get_final_segmentation(self, doc_i):
         u_clusters = self.best_segmentation[-1][0][1]
@@ -31,7 +32,7 @@ class MultiDocGreedySeg(AbstractSegmentor):
             t = trange(self.data.max_doc_len, desc='', leave=True)
             cached_segs = [(-np.inf, [])]
             for u in t:
-                if u == 3:
+                if u == 14:
                     a = 0
                 for doc_i in range(self.data.n_docs):
                     t.set_description("(%d, %d)" % (u, doc_i))
@@ -39,7 +40,11 @@ class MultiDocGreedySeg(AbstractSegmentor):
                         continue
                     
                     doc_i_segs = []
+                    b = 0
                     for cached_seg_ll, cached_u_clusters in cached_segs:
+                        if b == 403:
+                            a = 0
+                        b += 1
                         possible_clusters = self.get_valid_insert_clusters(doc_i, cached_u_clusters)
                         for k in range(self.max_topics):
                             current_u_clusters = copy.deepcopy(cached_u_clusters)
@@ -66,11 +71,15 @@ class MultiDocGreedySeg(AbstractSegmentor):
                         seg_clusters = seg_result[1]
                         
                         if u > 1:
-                            rho_seg = self.get_segmentation(doc_i, seg_clusters)
-                            rho_gs = list(self.data.docs_rho_gs[doc_i][:u+1])
-                            rho_seg[-1] = 1
-                            rho_gs[-1] = 1
-                            if str(rho_seg) == str(rho_gs):
+                            n_correct_segs = 0
+                            for doc_j in range(0, doc_i+1):
+                                rho_seg = self.get_segmentation(doc_j, seg_clusters)
+                                rho_gs = list(self.data.docs_rho_gs[doc_j][:u+1])
+                                rho_seg[-1] = 1
+                                rho_gs[-1] = 1
+                                if str(rho_seg) == str(rho_gs):
+                                    n_correct_segs += 1
+                            if n_correct_segs == doc_i+1: 
                                 is_correct_seg = True
                                 found_correct_seg = True
                             else:
@@ -106,6 +115,7 @@ class MultiDocGreedySeg(AbstractSegmentor):
                 f.write("===============\n")
         cached_segs = sorted(cached_segs, key=operator.itemgetter(0), reverse=True)
         self.best_segmentation[-1] = cached_segs
+        print("\nBest found ll: %f\nGS seg_ll: %f\n" % (cached_segs[0][0], self.segmentation_ll(self.data.get_rho_u_clusters())))
         
     def segmentation_ll(self, u_clusters):
         '''

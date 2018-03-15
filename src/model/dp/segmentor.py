@@ -321,6 +321,35 @@ class Data(object):
         '''
         return self.docs_word_counts[doc_i]
     
+    def get_rho_u_clusters(self):
+        gs_u_clusters = []
+        doc_i = 0
+        i = 0
+        doc_u = 0
+        for u in range(len(self.doc_synth.rho)):
+            k = self.doc_synth.doc_topic_seq[doc_i][i]
+            u_k_cluster = None
+            for u_cluster in gs_u_clusters:
+                if u_cluster.k == k:
+                    u_k_cluster = u_cluster
+                    break
+            if u_k_cluster is None:
+                u_k_cluster = SentenceCluster(doc_u, doc_u, [doc_i], self, k)
+                gs_u_clusters.append(u_k_cluster)
+            else:
+                u_k_cluster.add_sents(doc_u, doc_u, doc_i)
+                
+            if self.doc_synth.rho[u] == 1:
+                i += 1
+                
+            if u+1 in self.docs_index:
+                i = 0
+                doc_i += 1
+                doc_u = 0
+            else:
+                doc_u += 1
+        return gs_u_clusters
+    
 class SentenceCluster(object):
     '''
     Class to keep track of a set of sentences (possibly from different documents)
@@ -380,6 +409,7 @@ class SentenceCluster(object):
         new_u_list = []
         new_doc_list = []
         added_seg = False
+        added_seg_middle = False
         for doc_j, u in zip(self.doc_list, self.u_list):
             new_u_list.append(u)
             new_doc_list.append(doc_j)
@@ -388,6 +418,15 @@ class SentenceCluster(object):
                 for new_u in range(u_begin, u_end+1):
                     new_u_list.append(new_u)
                     new_doc_list.append(doc_i)
+            elif doc_j == doc_i and u > u_begin\
+                 and not added_seg_middle and not added_seg:
+                new_u_list.pop()
+                added_seg = True
+                added_seg_middle = True
+                for new_u in range(u_begin, u_end+1):
+                    new_u_list.append(new_u)
+                    new_doc_list.append(doc_i)
+                new_u_list.append(u)
                     
         seg = list(range(u_begin, u_end+1))
         if not added_seg:

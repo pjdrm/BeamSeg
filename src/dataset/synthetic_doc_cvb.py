@@ -163,8 +163,10 @@ class CVBSynSkipTopics(object):
     def __init__(self, beta, pi, sent_len, n_segs, n_docs, n_topics, log_dir="../logs/"):
         self.isMD = False if n_docs == 1 else True
         self.n_docs = n_docs
+        self.sent_len = sent_len
         self.W = len(beta)
         self.rho = []
+        self.rho_u_clsuters = []
         self.docs_index = []
         n_sents = 0
         self.doc_topic_seq = []

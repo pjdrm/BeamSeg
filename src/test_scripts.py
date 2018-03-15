@@ -13,8 +13,8 @@ import model.dp.single_doc_segmentor as sd_seg
 import model.dp.multi_doc_greedy_segmentor as greedy_seg
 import copy
 import numpy as np
-#import toyplot
-#import toyplot.pdf
+import toyplot
+import toyplot.pdf
 from eval.eval_tools import wd_evaluator
 
 def md_eval(doc_synth, models, models_desc):
@@ -277,11 +277,11 @@ def dp_vs_vi():
     
 def skip_topics_test():
     use_seed = True
-    seed = 232#84
+    seed = 232
     if use_seed:
         np.random.seed(seed)
         
-    W = 10#100
+    W = 10
     beta = np.array([0.3]*W)
     n_docs = 3
     pi = 0.25
@@ -325,7 +325,7 @@ def skip_topics_incremental_test():
         
     W = 100#100
     beta = np.array([0.3]*W)
-    n_docs = 8
+    n_docs = 15
     pi = 0.25
     sent_len = 6
     n_segs = 3
