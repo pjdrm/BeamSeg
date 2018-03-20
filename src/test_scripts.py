@@ -277,17 +277,18 @@ def dp_vs_vi():
     
 def skip_topics_test():
     use_seed = True
-    seed = 232
+    seed = 34
+    
     if use_seed:
         np.random.seed(seed)
         
     W = 10
     beta = np.array([0.3]*W)
     n_docs = 3
-    pi = 0.25
+    pi = 0.25 
     sent_len = 6
-    n_segs = 5
-    n_topics = 7
+    n_segs = 3
+    n_topics = 5
     
     skip_topics_syn = CVBSynSkipTopics(beta, pi, sent_len, n_segs, n_docs, n_topics)
     data = Data(skip_topics_syn)
@@ -300,22 +301,45 @@ def skip_topics_test():
     vi_dp_qz_ll_config = {"type": vi_seg.DP_VI_SEG, "seg_func": vi_seg.QZ_LL}
     vi_config = {"type":vi_seg.VI_SEG}
     
-    vi_dp_qz_voting_model = vi_seg.MultiDocVISeg(beta, data, max_topics=n_topics,\
-                                                   n_iters=20, seg_config=vi_dp_config,\
-                                                   log_dir="../logs/", log_flag=True)
-    vi_dp_qz_voting_model_v2 = vi_seg.MultiDocVISeg(beta, data, max_topics=n_topics,\
-                                                   n_iters=20, seg_config=vi_dp_config_v2,\
-                                                   log_dir="../logs/", log_flag=True)
+    vi_dp_qz_voting_model = vi_seg.MultiDocVISeg(beta,\
+                                                 data,\
+                                                 max_topics=n_topics,\
+                                                 n_iters=20,\
+                                                 seg_config=vi_dp_config,\
+                                                 log_dir="../logs/",\
+                                                 log_flag=True)
+    
+    vi_dp_qz_voting_model_v2 = vi_seg.MultiDocVISeg(beta,\
+                                                    data,\
+                                                    max_topics=n_topics,\
+                                                    n_iters=20,\
+                                                    seg_config=vi_dp_config_v2,\
+                                                    log_dir="../logs/",\
+                                                    log_flag=True)
+    
     vi_dp_qz_ll_model = vi_seg.MultiDocVISeg(beta, data, max_topics=n_topics,\
-                                                   n_iters=40, seg_config=vi_dp_qz_ll_config,\
-                                                   log_dir="../logs/", log_flag=True)
-    vi_model = vi_seg.MultiDocVISeg(beta, data, max_topics=n_topics,\
-                                                        n_iters=40, seg_config=vi_config,\
-                                                        log_dir="../logs/", log_flag=True)
-    greedy_model = greedy_seg.MultiDocGreedySeg(beta, data, max_topics=n_topics)
+                                             seg_dur=1.0/pi,\
+                                             std=3.0,\
+                                             use_prior=True,
+                                             n_iters=20,\
+                                             seg_config=vi_dp_qz_ll_config,\
+                                             log_dir="../logs/", log_flag=True)
+    
+    vi_model = vi_seg.MultiDocVISeg(beta,\
+                                    data,\
+                                    max_topics=n_topics,\
+                                    n_iters=40,\
+                                    seg_config=vi_config,\
+                                    log_dir="../logs/",\
+                                    log_flag=True)
+    
+    greedy_model_no_prior = greedy_seg.MultiDocGreedySeg(beta, data, max_topics=n_topics, seg_dur=1.0/pi, std=2.0, use_prior=False)
+    greedy_model_std1 = greedy_seg.MultiDocGreedySeg(beta, data, max_topics=n_topics, seg_dur=1.0/pi, std=1.5, use_prior=True)
+    greedy_model_std2 = greedy_seg.MultiDocGreedySeg(beta, data, max_topics=n_topics, seg_dur=1.0/pi, std=2.0, use_prior=True)
+    greedy_model_std3 = greedy_seg.MultiDocGreedySeg(beta, data, max_topics=n_topics, seg_dur=1.0/pi, std=3.0, use_prior=True)
     dp_model = dp_seg.MultiDocDPSeg(beta, data, max_topics=n_topics, seg_type=dp_seg.SEG_SKIP_K)
     dp_model_sc = dp_seg_sc.MultiDocDPSeg(beta, data, max_topics=n_topics, seg_type=dp_seg.SEG_SKIP_K)
-    md_eval(skip_topics_syn, [sd_model, greedy_model], ["SD ", "GMD"])
+    md_eval(skip_topics_syn, [vi_dp_qz_ll_model], ["QZ "])
     
 def skip_topics_incremental_test():
     use_seed = True
@@ -328,8 +352,8 @@ def skip_topics_incremental_test():
     n_docs = 15
     pi = 0.25
     sent_len = 6
-    n_segs = 3
-    n_topics = 5
+    n_segs = 5
+    n_topics = 7
     
     skip_topics_syn = CVBSynSkipTopics(beta, pi, sent_len, n_segs, n_docs, n_topics)
     single_docs = skip_topics_syn.get_single_docs()
@@ -344,7 +368,7 @@ def skip_topics_incremental_test():
         target_docs = single_docs[:i]
         merged_doc_synth = merge_docs(target_docs)
         data = Data(merged_doc_synth)
-        greedy_model = greedy_seg.MultiDocGreedySeg(beta, data, max_topics=n_topics)
+        greedy_model = greedy_seg.MultiDocGreedySeg(beta, data, max_topics=n_topics, seg_dur=1.0/pi)
         greedy_model.segment_docs()
         wd_results = wd_evaluator(greedy_model.get_all_segmentations(), merged_doc_synth)
         for doc_i, wd_result in enumerate(wd_results):

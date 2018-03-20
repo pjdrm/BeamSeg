@@ -3,7 +3,7 @@ Created on Mar 2, 2018
 
 @author: pjdrm
 '''
-from model.dp.segmentor import AbstractSegmentor, SentenceCluster
+from model.dp.segmentor import AbstractSegmentor
 import numpy as np
 import copy
 import operator
@@ -11,10 +11,14 @@ from tqdm import trange
 
 class MultiDocGreedySeg(AbstractSegmentor):
     
-    def __init__(self, beta, data, max_topics=None, seg_dur=None):
-        super(MultiDocGreedySeg, self).__init__(beta, data, desc="greedy")
+    def __init__(self, beta, data, max_topics=None, seg_dur=10.0, std=3.0, use_prior=True):
+        super(MultiDocGreedySeg, self).__init__(beta,\
+                                                data,\
+                                                seg_dur=seg_dur,\
+                                                std=std,\
+                                                use_prior=use_prior,\
+                                                desc="greedy")
         self.max_topics = self.data.max_doc_len if max_topics is None else max_topics
-        self.prior_seg = 1.0/np.array([4]*self.data.n_docs) if seg_dur is None else 1.0/[seg_dur]
         self.max_cache = 50
         
     def get_final_segmentation(self, doc_i):
@@ -50,6 +54,8 @@ class MultiDocGreedySeg(AbstractSegmentor):
                             current_u_clusters = copy.deepcopy(cached_u_clusters)
                             current_u_clusters = self.assign_target_k(u, u, doc_i, k, possible_clusters, current_u_clusters)
                             seg_ll = self.segmentation_ll(current_u_clusters)
+                            if self.use_prior:
+                                seg_ll += self.segmentation_log_prior(current_u_clusters)
                             doc_i_segs.append((seg_ll, current_u_clusters))
                             
                     doc_i_segs = sorted(doc_i_segs, key=operator.itemgetter(0), reverse=True)
@@ -117,16 +123,5 @@ class MultiDocGreedySeg(AbstractSegmentor):
         self.best_segmentation[-1] = cached_segs
         print("\nBest found ll: %f\nGS seg_ll: %f\n" % (cached_segs[0][0], self.segmentation_ll(self.data.get_rho_u_clusters())))
         
-    def segmentation_ll(self, u_clusters):
-        '''
-        Returns the log likelihood of the segmentation of all documents.
-        :param u_clusters: list of SentenceCluster corresponding to the best segmentation up to u-1
-        '''
-        segmentation_ll = 0.0
-        for u_cluster in u_clusters:
-            word_counts = u_cluster.get_word_counts()
-            segmentation_ll += self.segment_ll(word_counts)
-        return segmentation_ll
-    
     def segment_docs(self):
         self.greedy_segmentation_step()

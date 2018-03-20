@@ -8,11 +8,22 @@ import copy
 from scipy.special import gammaln
 import os
 import collections
+from scipy.stats import norm
 
 class AbstractSegmentor(object):
 
-    def __init__(self, beta, data, max_topics=None, log_dir="../logs/", desc="Abs_seg"):
+    def __init__(self, beta,\
+                       data,\
+                       max_topics=None,\
+                       seg_dur=10.0,\
+                       std=3.0,\
+                       use_prior=True,\
+                       log_dir="../logs/",\
+                       desc="Abs_seg"):
         self.data = data
+        self.seg_dur = seg_dur
+        self.std = std
+        self.use_prior = use_prior
         self.max_topics = self.data.max_doc_len if max_topics is None else max_topics
         self.desc = desc
         self.log_dir = log_dir
@@ -236,6 +247,26 @@ class AbstractSegmentor(object):
                 break
         return is_cached
     
+    def segment_log_prior(self, seg_size):
+        seg_prob = norm(self.seg_dur, self.std).pdf(seg_size)
+        return np.log(seg_prob)
+        
+    def segmentation_log_prior(self, u_clusters):
+        log_prior = 0.0
+        for doc_i in range(self.data.n_docs):
+            doc_i_segmentation = self.get_segmentation(doc_i, u_clusters)
+            if len(doc_i_segmentation) == 0:
+                continue
+            doc_i_segmentation[-1] = 1
+            seg_size = 0
+            for u in doc_i_segmentation:
+                if u == 1:
+                    log_prior += self.segment_log_prior(seg_size)
+                    seg_size = 0
+                else:
+                    seg_size += 1
+        return log_prior
+    
     def segment_ll(self, word_counts):
         '''
         Returns the likelihood if we considering all sentences (word_counts)
@@ -247,6 +278,21 @@ class AbstractSegmentor(object):
         f2 = gammaln((word_counts+self.beta).sum())
         seg_ll = self.seg_ll_C+f1-f2
         return seg_ll
+    
+    def segmentation_ll(self, u_clusters):
+        '''
+        Returns the log likelihood of the segmentation of all documents.
+        :param u_clusters: list of SentenceCluster corresponding to the best segmentation up to u-1
+        '''
+        segmentation_ll = 0.0
+        for u_cluster in u_clusters:
+            word_counts = u_cluster.get_word_counts()
+            segmentation_ll += self.segment_ll(word_counts)
+            
+        if self.use_prior:
+            segmentation_ll += self.segmentation_log_prior(u_clusters)
+                                
+        return segmentation_ll
     
     def dp_segmentation_step(self):
         with open(self.log_dir+"dp_tracker_"+self.desc+".txt", "a+") as f:

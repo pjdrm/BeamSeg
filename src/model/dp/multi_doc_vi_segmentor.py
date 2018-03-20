@@ -24,8 +24,23 @@ SEG_VI = "vi_segmentation_step"
 
 class MultiDocVISeg(AbstractSegmentor):
     
-    def __init__(self, beta, data, max_topics=None, n_iters=3, seg_config=None, log_dir="../logs/", log_flag=True):
-        super(MultiDocVISeg, self).__init__(beta, data, max_topics=max_topics, log_dir=log_dir, desc="VI_seg")
+    def __init__(self, beta,\
+                       data,\
+                       max_topics=None,\
+                       seg_dur=10.0,\
+                       std=3.0,\
+                       use_prior=True,\
+                       n_iters=3,\
+                       seg_config=None,\
+                       log_dir="../logs/",\
+                       log_flag=True):
+        super(MultiDocVISeg, self).__init__(beta,\
+                                            data,\
+                                            max_topics=max_topics,\
+                                            seg_dur=seg_dur, std=std,\
+                                            use_prior=use_prior,\
+                                            log_dir=log_dir,\
+                                            desc="VI_seg")
         self.max_row_cache = 10
         if seg_config is None:
             self.seg_func = self.segment_u_vi_v2
@@ -187,17 +202,6 @@ class MultiDocVISeg(AbstractSegmentor):
         for k in range(self.max_topics):
             self.qz[k] = self.qz[k]/np.array([norm_const]).T
             
-    def segmentation_ll(self, u_clusters):
-        '''
-        Returns the log likelihood of the segmentation of all documents.
-        :param u_clusters: list of SentenceCluster corresponding to the best segmentation up to u-1
-        '''
-        segmentation_ll = 0.0
-        for u_cluster in u_clusters:
-            word_counts = u_cluster.get_word_counts()
-            segmentation_ll += self.segment_ll(word_counts)
-        return segmentation_ll
-    
     def segmentation_ll_qz(self, u_clusters):
         '''
         Returns the log likelihood of the segmentation of all documents.
@@ -298,7 +302,7 @@ class MultiDocVISeg(AbstractSegmentor):
             if u_begin > doc_i_len-1:
                 continue
             
-            best_k = self.get_best_k_voting(doc_i, u_begin, u_end, u_clusters)
+            best_k = self.get_best_k_voting(doc_i, u_begin, u_end)
             u_k_cluster = None
             for u_cluster in u_clusters:
                 if u_cluster.k == best_k:
@@ -379,7 +383,7 @@ class MultiDocVISeg(AbstractSegmentor):
             
         return best_seg_ll, best_clusters
     
-    def segment_u_vi_qz_ll(self, u_begin, u_end):
+    def segment_u_vi_qz_ll(self, u_begin, u_end, prev_u_clusters):
         '''
         When computing the likelihood of the segmentation,
         uses the real counts for previous segmentation (u_begin-1)
@@ -388,7 +392,7 @@ class MultiDocVISeg(AbstractSegmentor):
         :param u_end: sentence index
         :param u_begin: language model index
         '''
-        u_clusters = copy.deepcopy(self.best_segmentation[u_begin-1])
+        u_clusters = copy.deepcopy(prev_u_clusters)
         total_ll = 0.0
         for k in range(self.max_topics):
             word_counts = np.zeros(self.data.W)
@@ -409,7 +413,9 @@ class MultiDocVISeg(AbstractSegmentor):
             total_ll += self.segment_ll(word_counts)
             
         u_clusters = self.get_var_seg(u_begin, u_end, u_clusters)
-        total_ll += self.segmentation_ll(u_clusters)
+        if self.use_prior:
+            total_ll += self.segmentation_log_prior(u_clusters)
+        #total_ll += self.segmentation_ll(u_clusters)
         return total_ll, u_clusters
     
     def vi_segmentation_step(self):
