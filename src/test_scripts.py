@@ -277,7 +277,7 @@ def dp_vs_vi():
     
 def skip_topics_test():
     use_seed = True
-    seed = 42#35
+    seed = 47#45
     
     if use_seed:
         np.random.seed(seed)
@@ -339,8 +339,8 @@ def skip_topics_test():
     greedy_model_std3 = greedy_seg.MultiDocGreedySeg(beta, data, max_topics=n_topics, seg_dur=1.0/pi, std=3.0, use_prior=True)
     dp_model = dp_seg.MultiDocDPSeg(beta, data, max_topics=n_topics, seg_type=dp_seg.SEG_SKIP_K)
     dp_model_sc = dp_seg_sc.MultiDocDPSeg(beta, data, max_topics=n_topics, seg_type=dp_seg.SEG_SKIP_K)
-    md_eval(skip_topics_syn, [greedy_model_std3, vi_dp_qz_ll_model], ["GS3", "QZ "])
-    #md_eval(skip_topics_syn, [vi_dp_qz_ll_model], ["QZ "])
+    md_eval(skip_topics_syn, [vi_dp_qz_ll_model], ["QZ "])
+    #md_eval(skip_topics_syn, [sd_model, greedy_model_std3, vi_dp_qz_ll_model], ["SD ", "GS3", "QZ "])
     
 def skip_topics_incremental_test():
     use_seed = True

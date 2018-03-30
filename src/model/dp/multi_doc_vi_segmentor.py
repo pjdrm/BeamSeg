@@ -309,7 +309,7 @@ class MultiDocVISeg(AbstractSegmentor):
     
     def get_var_seg_greedy(self, u_begin, u_end, prev_u_clusters):
         best_u_clusters = prev_u_clusters
-        for doc_i in range(self.data.n_docs):
+        for doc_i in range(self.data.n_docs-1):
             doc_i_len = self.data.doc_len(doc_i)
             #Accounting for documents with different lengths
             if u_begin > doc_i_len-1:
@@ -317,8 +317,8 @@ class MultiDocVISeg(AbstractSegmentor):
             
             best_seg_ll = -np.inf
             best_u_k_clusters = None
-            k_votes = self.get_k_votes_sorted(doc_i, u_begin, u_end)[:2]
-            for k, n_votes in k_votes:
+            #k_votes = self.get_k_votes_sorted(doc_i, u_begin, u_end)[:2]
+            for k in range(self.max_topics):
                 u_clusters = copy.deepcopy(best_u_clusters)
                 possible_clusters = self.get_valid_insert_clusters(doc_i, u_clusters)
                 u_clusters = self.assign_target_k(u_begin, u_end, doc_i, k, possible_clusters, u_clusters)
@@ -327,8 +327,18 @@ class MultiDocVISeg(AbstractSegmentor):
                     best_seg_ll = seg_ll
                     best_u_k_clusters = u_clusters
             best_u_clusters = best_u_k_clusters
-                
-        return best_seg_ll, best_u_clusters
+             
+        doc_i = self.data.n_docs-1
+        seg_hyps = []
+        for k in range(self.max_topics):
+            u_clusters = copy.deepcopy(best_u_clusters)
+            possible_clusters = self.get_valid_insert_clusters(doc_i, u_clusters)
+            u_clusters = self.assign_target_k(u_begin, u_end, doc_i, k, possible_clusters, u_clusters)
+            seg_ll = self.segmentation_ll(u_clusters)
+            seg_hyps.append((seg_ll,u_clusters))
+        
+        seg_hyps = sorted(seg_hyps, key=operator.itemgetter(0), reverse=True)
+        return seg_hyps
     
     def get_final_segmentation(self, doc_i):
         u_clusters = self.best_segmentation[-1][0][1]
@@ -406,11 +416,11 @@ class MultiDocVISeg(AbstractSegmentor):
         :param u_end: sentence index
         :param u_begin: language model index
         '''
-        u_clusters = copy.deepcopy(prev_u_clusters)
+        u_clusters_hyps = copy.deepcopy(prev_u_clusters)
         total_ll = 0.0
         for k in range(self.max_topics):
             word_counts = np.zeros(self.data.W)
-            for u_cluster in u_clusters:
+            for u_cluster in u_clusters_hyps:
                 if u_cluster.k == k:
                     word_counts += u_cluster.get_word_counts()
                     break
@@ -426,11 +436,10 @@ class MultiDocVISeg(AbstractSegmentor):
                 word_counts += np.sum(self.qz[k][wi_list], axis=0)
             total_ll += self.segment_ll(word_counts)
             
-        greedy_seg_ll, u_clusters = self.get_var_seg_greedy(u_begin, u_end, u_clusters)
+        u_clusters_hyps = self.get_var_seg_greedy(u_begin, u_end, u_clusters_hyps)
         if self.use_prior:
-            total_ll += self.segmentation_log_prior(u_clusters)
-        #total_ll += self.segmentation_ll(u_clusters)
-        return total_ll, u_clusters
+            total_ll += self.segmentation_log_prior(u_clusters_hyps[0][1])
+        return total_ll, u_clusters_hyps
     
     def vi_segmentation_step(self):
         '''
@@ -473,7 +482,7 @@ class MultiDocVISeg(AbstractSegmentor):
     def segment_last_line(self, u_begin, u_end, best_seg):
         best_u_clusters =  None
         best_seg_ll = -np.inf
-        for prev_u_clusters in best_seg:
+        for prev_seg_ll, prev_u_clusters in best_seg:
             u_clusters = copy.deepcopy(prev_u_clusters)
             seg_ll, u_clusters = self.get_var_seg_greedy(u_begin, u_end, u_clusters)
             if self.use_prior:
@@ -503,14 +512,12 @@ class MultiDocVISeg(AbstractSegmentor):
     def dp_segmentation_step_cache(self):
         with open(self.log_dir+"dp_tracker_"+self.desc+".txt", "a+") as f:
             f.write("DP tracking:\n")
-            for u_end in range(self.data.max_doc_len):
+            for u_end in range(self.data.max_doc_len-1):
                 f.write("Tracking line %d\n"%(u_end))
-                if u_end == 22:
-                    a = 0
-                best_u_begin = -1
                 cached_segs = []
+                best_seg_ll = -np.inf
                 for u_begin in range(u_end+1):
-                    if u_begin == 22:
+                    if u_end == 3 and u_begin == 3:
                         a = 0
                         
                     if u_begin == 0:
@@ -518,37 +525,72 @@ class MultiDocVISeg(AbstractSegmentor):
                     else:
                         best_seg = self.best_segmentation[u_begin-1]
                         
-                    if u_end == self.data.max_doc_len:
-                        cached_segs = self.segment_last_line(u_begin, u_end, best_seg)
-                    else:
-                        best_mat_entry_seg_ll = -np.inf
-                        bestg_clusters_mat_entry = None
-                        for prev_seg_ll, prev_u_cluster in best_seg:
-                            seg_ll, seg_clusters = self.seg_func(u_begin, u_end, prev_u_cluster)
-                            if seg_ll > best_mat_entry_seg_ll:
-                                best_mat_entry_seg_ll = seg_ll
-                                bestg_clusters_mat_entry = seg_clusters
-                            if self.is_cached_seg(seg_ll, cached_segs):
-                                continue
-                            if len(cached_segs) < self.max_row_cache:
-                                cached_segs.append((seg_ll, seg_clusters))
-                                cached_segs = sorted(cached_segs, key=operator.itemgetter(0), reverse=True)
-                                
-                            elif seg_ll > cached_segs[-1][0]:
-                                cached_segs[-1] = (seg_ll, seg_clusters)
-                                cached_segs = sorted(cached_segs, key=operator.itemgetter(0), reverse=True)
+                    best_mat_entry_seg_ll = -np.inf
+                    u_clusters_mat_entry = []
+                    for prev_seg_ll, prev_u_cluster in best_seg:
+                        seg_ll, seg_hyps = self.seg_func(u_begin, u_end, prev_u_cluster)
                         
-                        f.write("(%d,%d)\tll: %.3f\n"%(u_begin, u_end, best_mat_entry_seg_ll))
-                        for doc_i in range(self.data.n_docs):
-                            f.write(str(self.get_segmentation(doc_i, bestg_clusters_mat_entry))+" "
-                                    +str(self.print_seg_with_topics(doc_i, bestg_clusters_mat_entry))+"\n")
-                        f.write("\n")
-                if u_end > 1:
-                    self.check_if_lost_gs_seg(u_end, cached_segs)
+                        for seg_hyp in seg_hyps:
+                            if not self.is_cached_seg(seg_hyp[0], u_clusters_mat_entry):
+                                u_clusters_mat_entry.append(seg_hyp)
+                                u_clusters_mat_entry = sorted(u_clusters_mat_entry, key=operator.itemgetter(0), reverse=True)
+                                
+                        if seg_ll > best_mat_entry_seg_ll:
+                            best_mat_entry_seg_ll = seg_ll
+                            
+                    if best_mat_entry_seg_ll > best_seg_ll:
+                        best_seg_ll = best_mat_entry_seg_ll
+                        cached_segs = u_clusters_mat_entry[:self.max_row_cache]
+                            
+                    f.write("(%d,%d)\tll: %.3f\n"%(u_begin, u_end, best_mat_entry_seg_ll))
+                    for doc_i in range(self.data.n_docs):
+                        f.write(str(self.get_segmentation(doc_i, cached_segs[0][1]))+" "
+                                +str(self.print_seg_with_topics(doc_i, cached_segs[0][1]))+"\n")
+                    f.write("\n")
+                #if u_end > 1:
+                #    self.check_if_lost_gs_seg(u_end, cached_segs)
                 f.write("============\n")
                 self.best_segmentation[u_end] = cached_segs
-                #self.print_seg(best_seg_clusters)
-            #print("==========================")
+                
+            #Code to segment the last line
+            u_end = self.data.max_doc_len-1
+            best_seg_ll = -np.inf
+            best_u_clusters = None
+            for u_begin in range(u_end+1):
+                best_mat_entry_seg_ll = -np.inf
+                u_clusters_mat_entry = None
+                if u_begin == 0:
+                    best_seg = [(-np.inf, [])]
+                else:
+                    best_seg = self.best_segmentation[u_begin-1]
+                    
+                for prev_seg_ll, prev_u_clusters in best_seg:
+                    u_clusters = copy.deepcopy(prev_u_clusters)
+                    seg_hyps = self.get_var_seg_greedy(u_begin, u_end, u_clusters)
+                    seg_ll = seg_hyps[0][0]
+                    u_clusters = seg_hyps[0][1]
+                    
+                    if self.use_prior:
+                        seg_ll += self.segmentation_log_prior(u_clusters)
+                        
+                    if seg_ll > best_seg_ll:
+                        best_u_clusters = u_clusters
+                        best_seg_ll = seg_ll
+                        
+                    if seg_ll > best_mat_entry_seg_ll:
+                        u_clusters_mat_entry = u_clusters
+                        best_mat_entry_seg_ll = seg_ll
+                
+                f.write("(%d,%d)\tll: %.3f\n"%(u_begin, u_end, best_mat_entry_seg_ll))
+                for doc_i in range(self.data.n_docs):
+                    f.write(str(self.get_segmentation(doc_i, u_clusters_mat_entry))+" "
+                            +str(self.print_seg_with_topics(doc_i, u_clusters_mat_entry))+"\n")
+                f.write("\n")
+                
+            #self.check_if_lost_gs_seg(u_end, cached_segs)
+            f.write("============\n")
+            self.best_segmentation[u_end] = [(best_seg_ll, best_u_clusters)]
+            
         
     def segment_docs(self): #TODO: check if the segmentation changes and use that as criteria for stopping
         '''
