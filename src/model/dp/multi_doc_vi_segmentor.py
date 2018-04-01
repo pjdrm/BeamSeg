@@ -517,7 +517,7 @@ class MultiDocVISeg(AbstractSegmentor):
                 cached_segs = []
                 best_seg_ll = -np.inf
                 for u_begin in range(u_end+1):
-                    if u_end == 3 and u_begin == 3:
+                    if u_end == 10 and u_begin == 8:
                         a = 0
                         
                     if u_begin == 0:
@@ -544,8 +544,8 @@ class MultiDocVISeg(AbstractSegmentor):
                             
                     f.write("(%d,%d)\tll: %.3f\n"%(u_begin, u_end, best_mat_entry_seg_ll))
                     for doc_i in range(self.data.n_docs):
-                        f.write(str(self.get_segmentation(doc_i, cached_segs[0][1]))+" "
-                                +str(self.print_seg_with_topics(doc_i, cached_segs[0][1]))+"\n")
+                        f.write(str(self.get_segmentation(doc_i, u_clusters_mat_entry[0][1]))+" "
+                                +str(self.print_seg_with_topics(doc_i, u_clusters_mat_entry[0][1]))+"\n")
                     f.write("\n")
                 #if u_end > 1:
                 #    self.check_if_lost_gs_seg(u_end, cached_segs)

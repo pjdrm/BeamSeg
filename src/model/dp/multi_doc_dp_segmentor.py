@@ -81,7 +81,7 @@ class MultiDocDPSeg(AbstractSegmentor):
             if target_cluster is not None: #The language model corresponding to this cluster might already exists due to other documents having different segmentation at this stage
                 target_cluster.add_sents(u_begin, u_end, doc_i)
             else:
-                new_cluster = SentenceCluster(u_begin, u_end, [doc_i], self.data, u_clusters[cluster_i].k+n_skips+1)
+                new_cluster = SentenceCluster(u_begin, u_end, [doc_i], u_clusters[cluster_i].k+n_skips+1)
                 u_clusters.append(new_cluster)
     
     def segmentation_ll(self, u_clusters):
@@ -103,7 +103,7 @@ class MultiDocDPSeg(AbstractSegmentor):
         :param u_begin: language model index
         '''
         if u_begin == 0:#The first column corresponds to having all sentences from all docs in a single segment (there is only one language model)
-            u_cluster = SentenceCluster(u_begin, u_end, list(range(self.data.n_docs)), self.data, 0)
+            u_cluster = SentenceCluster(u_begin, u_end, list(range(self.data.n_docs)), 0)
             segmentation_ll = self.segmentation_ll([u_cluster])
             return [(segmentation_ll, [u_cluster])]
            

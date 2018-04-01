@@ -13,8 +13,8 @@ import model.dp.single_doc_segmentor as sd_seg
 import model.dp.multi_doc_greedy_segmentor as greedy_seg
 import copy
 import numpy as np
-import toyplot
-import toyplot.pdf
+#import toyplot
+#import toyplot.pdf
 from eval.eval_tools import wd_evaluator
 
 def md_eval(doc_synth, models, models_desc):
@@ -339,7 +339,7 @@ def skip_topics_test():
     greedy_model_std3 = greedy_seg.MultiDocGreedySeg(beta, data, max_topics=n_topics, seg_dur=1.0/pi, std=3.0, use_prior=True)
     dp_model = dp_seg.MultiDocDPSeg(beta, data, max_topics=n_topics, seg_type=dp_seg.SEG_SKIP_K)
     dp_model_sc = dp_seg_sc.MultiDocDPSeg(beta, data, max_topics=n_topics, seg_type=dp_seg.SEG_SKIP_K)
-    md_eval(skip_topics_syn, [vi_dp_qz_ll_model], ["QZ "])
+    md_eval(skip_topics_syn, [vi_dp_qz_ll_model], ["GS3"])
     #md_eval(skip_topics_syn, [sd_model, greedy_model_std3, vi_dp_qz_ll_model], ["SD ", "GS3", "QZ "])
     
 def skip_topics_incremental_test():

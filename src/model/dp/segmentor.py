@@ -10,6 +10,8 @@ import os
 import collections
 from scipy.stats import norm
 
+GL_DATA = None
+
 class AbstractSegmentor(object):
 
     def __init__(self, beta,\
@@ -20,6 +22,8 @@ class AbstractSegmentor(object):
                        use_prior=True,\
                        log_dir="../logs/",\
                        desc="Abs_seg"):
+        global GL_DATA
+        GL_DATA = data
         self.data = data
         self.seg_dur = seg_dur
         self.std = std
@@ -62,11 +66,9 @@ class AbstractSegmentor(object):
     def get_cluster_order(self, doc_i, u_clusters):
         cluster_k_list = []
         for u_cluster in u_clusters:
-            for u, doc_j in zip(u_cluster.u_list, u_cluster.doc_list):
-                if doc_j != doc_i:
-                    continue
-                cluster_k_list.append([u_cluster.k, u])
-                break
+            if u_cluster.has_doc(doc_i):
+                u_begin, u_end = u_cluster.get_segment(doc_i)
+                cluster_k_list.append([u_cluster.k, u_begin])
         cluster_k_list = sorted(cluster_k_list, key=lambda x: x[1])
         ret_list = []
         for cluster_k in cluster_k_list:
@@ -96,17 +98,13 @@ class AbstractSegmentor(object):
             
         hyp_seg = []
         cluster_order = self.get_cluster_order(doc_i, u_clusters)
-        for u_cluster_k in cluster_order:
-            for u_cluster in u_clusters:
-                if u_cluster.k != u_cluster_k:
-                    continue
-                found_doc = False
-                for doc_j in u_cluster.doc_list:
-                    if doc_j == doc_i:
-                        hyp_seg.append(0)
-                        found_doc = True
-                if found_doc:
-                    hyp_seg[-1] = 1
+        for k in cluster_order:
+            u_cluster = self.get_k_cluster(k, u_clusters)
+            u_begin, u_end = u_cluster.get_segment(doc_i)
+            seg_len = u_end-u_begin+1
+            doc_i_seg = list([0]*seg_len)
+            doc_i_seg[-1] = 1
+            hyp_seg += doc_i_seg
         return hyp_seg
     
     def get_all_segmentations(self):
@@ -129,14 +127,10 @@ class AbstractSegmentor(object):
         last_cluster = -1
         for cluster_i, u_cluster in enumerate(u_clusters):
             if u_cluster.has_doc(doc_i):
-                last_sent_u_cluster = -1
-                for u, doc_j in zip(u_cluster.u_list, u_cluster.doc_list):
-                    if doc_i != doc_j:
-                        continue
-                    last_sent_u_cluster = u
-                if last_sent_u_cluster > last_sent:
+                u_begin, u_end = u_cluster.get_segment(doc_i)
+                if u_end > last_sent:
                     last_cluster = cluster_i
-                    last_sent = last_sent_u_cluster
+                    last_sent = u_end
         if last_cluster == -1:
             last_cluster = 0
         return last_cluster
@@ -150,14 +144,10 @@ class AbstractSegmentor(object):
         for u_cluster in u_clusters:
             if u_cluster.has_doc(doc_i):
                 u_clusters_with_doc_i.append(u_cluster.k)
-                last_sent_u_cluster = -1
-                for u, doc_j in zip(u_cluster.u_list, u_cluster.doc_list):
-                    if doc_i != doc_j:
-                        continue
-                    last_sent_u_cluster = u
-                if last_sent_u_cluster > last_sent:
+                u_begin, u_end = u_cluster.get_segment(doc_i)
+                if u_end > last_sent:
                     last_cluster_i = u_cluster.k
-                    last_sent = last_sent_u_cluster
+                    last_sent = u_end
                     
         invalid_clusters = set(u_clusters_with_doc_i)
         if last_cluster_i != -1:
@@ -228,11 +218,11 @@ class AbstractSegmentor(object):
                         if u_begin_di > u_begin_k_target:
                             doc_i_word_counts = np.sum(self.data.doc_word_counts(doc_i)[u_begin_di:u_end_di+1], axis=0)
                             u_k_cluster.remove_doc(doc_i, doc_i_word_counts)
-                            if len(u_k_cluster.doc_list) == 0:
+                            if len(u_k_cluster.get_docs()) == 0:
                                 u_clusters.remove(u_k_cluster)
                             u_k_target_cluster.add_sents(u_begin_di, u_end_di, doc_i)
         else:
-            u_k_cluster = SentenceCluster(u_begin, u_end, [doc_i], self.data, k_target)
+            u_k_cluster = SentenceCluster(u_begin, u_end, [doc_i], k_target)
             u_clusters.append(u_k_cluster)
         return u_clusters
     
@@ -380,7 +370,7 @@ class Data(object):
                     u_k_cluster = u_cluster
                     break
             if u_k_cluster is None:
-                u_k_cluster = SentenceCluster(doc_u, doc_u, [doc_i], self, k)
+                u_k_cluster = SentenceCluster(doc_u, doc_u, [doc_i], k)
                 gs_u_clusters.append(u_k_cluster)
             else:
                 u_k_cluster.add_sents(doc_u, doc_u, doc_i)
@@ -401,15 +391,13 @@ class SentenceCluster(object):
     Class to keep track of a set of sentences (possibly from different documents)
     that belong to the same segment.
     '''
-    def __init__(self, u_begin, u_end, docs, data, k):
+    def __init__(self, u_begin, u_end, docs, k):
         self.k = k
-        self.data = data
-        self.u_list = []
-        self.doc_list = []
-        self.word_counts = np.zeros(self.data.W)
+        self.doc_segs_dict = {}
+        self.word_counts = np.zeros(GL_DATA.W)
         
         for doc_i in docs:
-            doc_i_len = self.data.doc_len(doc_i)
+            doc_i_len = GL_DATA.doc_len(doc_i)
             #Accounting for documents with different lengths
             if u_begin > doc_i_len-1:
                 continue
@@ -418,16 +406,23 @@ class SentenceCluster(object):
                 u_end_true = doc_i_len-1
             else:
                 u_end_true = u_end
-            seg_len = u_end_true-u_begin+1
-            self.u_list += list(range(u_begin, u_end_true+1))
-            self.doc_list += [doc_i]*seg_len
-            self.word_counts += np.sum(self.data.doc_word_counts(doc_i)[u_begin:u_end_true+1], axis=0)
+            self.doc_segs_dict[doc_i] = [u_begin, u_end_true]
+            self.word_counts += np.sum(GL_DATA.doc_word_counts(doc_i)[u_begin:u_end_true+1], axis=0)
         
         self.wi_list = []
-        for doc_i, u in zip(self.doc_list, self.u_list):
-            d_u_words = self.data.d_u_wi_indexes[doc_i][u]
-            self.wi_list += d_u_words
-    
+        for doc_i in docs:
+            doc_i_len = GL_DATA.doc_len(doc_i)
+            #Accounting for documents with different lengths
+            if u_begin > doc_i_len-1:
+                continue
+            if u_end > doc_i_len-1:
+                true_u_end = doc_i_len-1
+            else:
+                true_u_end = u_end
+            for u in range(u_begin, true_u_end+1):
+                d_u_words = GL_DATA.d_u_wi_indexes[doc_i][u]
+                self.wi_list += d_u_words
+                    
     def set_k(self, k):
         self.k = k
         
@@ -435,58 +430,31 @@ class SentenceCluster(object):
         return wi in self.wi_list
         
     def has_doc(self, doc_i):
-        return doc_i in self.doc_list
+        return doc_i in self.doc_segs_dict.keys()
     
     def add_sents(self, u_begin, u_end, doc_i):
-        doc_i_len = self.data.doc_len(doc_i)
+        doc_i_len = GL_DATA.doc_len(doc_i)
         #Accounting for documents with different lengths
         if u_begin > doc_i_len-1:
             return
         if u_end > doc_i_len-1:
             u_end = doc_i_len-1
             
-        '''
-        seg = list(range(u_begin, u_end+1))
-        seg_len =  u_end-u_begin+1
-        self.u_list += seg
-        self.doc_list += [doc_i]*seg_len
-        '''
-        
-        new_u_list = []
-        new_doc_list = []
-        added_seg = False
-        added_seg_middle = False
-        for doc_j, u in zip(self.doc_list, self.u_list):
-            new_u_list.append(u)
-            new_doc_list.append(doc_j)
-            if doc_j == doc_i and u+1 == u_begin:
-                added_seg = True
-                for new_u in range(u_begin, u_end+1):
-                    new_u_list.append(new_u)
-                    new_doc_list.append(doc_i)
-            elif doc_j == doc_i and u > u_begin\
-                 and not added_seg_middle and not added_seg:
-                new_u_list.pop()
-                added_seg = True
-                added_seg_middle = True
-                for new_u in range(u_begin, u_end+1):
-                    new_u_list.append(new_u)
-                    new_doc_list.append(doc_i)
-                new_u_list.append(u)
-                    
-        seg = list(range(u_begin, u_end+1))
-        if not added_seg:
-            seg_len =  u_end-u_begin+1
-            new_u_list += seg
-            new_doc_list += [doc_i]*seg_len
+        if self.has_doc(doc_i):
+            current_u_begin, current_u_end = self.get_segment(doc_i)
+            if u_begin < current_u_begin:
+                current_u_begin = u_begin
+            if u_end > current_u_end:
+                current_u_end = u_end
+            self.doc_segs_dict[doc_i] = [current_u_begin, current_u_end]
+        else:
+            self.doc_segs_dict[doc_i] = [u_begin, u_end]
             
-        self.u_list = new_u_list
-        self.doc_list = new_doc_list
-            
-        self.word_counts += np.sum(self.data.doc_word_counts(doc_i)[u_begin:u_end+1], axis=0)
+        seg = list(range(u_begin, u_end+1))
+        self.word_counts += np.sum(GL_DATA.doc_word_counts(doc_i)[u_begin:u_end+1], axis=0)
         
         for u in seg:
-            d_u_words = self.data.d_u_wi_indexes[doc_i][u]
+            d_u_words = GL_DATA.d_u_wi_indexes[doc_i][u]
             self.wi_list += d_u_words
             
     def remove_doc(self, doc_i, doc_i_word_counts):
@@ -494,17 +462,10 @@ class SentenceCluster(object):
         for doc_w_i in self.get_doc_words(doc_i):
             self.wi_list.remove(doc_w_i)
             
-        new_u_list = []
-        new_doc_list = []
-        for doc_j, u in zip(self.doc_list, self.u_list):
-            if doc_i != doc_j:
-                new_u_list.append(u)
-                new_doc_list.append(doc_j)
-        self.u_list = new_u_list
-        self.doc_list = new_doc_list
+        self.doc_segs_dict.pop(doc_i)
             
     def get_docs(self):
-        return set(self.doc_list)
+        return self.doc_segs_dict.keys()
         
     def get_word_counts(self):
         return self.word_counts
@@ -514,16 +475,18 @@ class SentenceCluster(object):
     
     def get_doc_words(self, doc_i):
         wi_list = []
-        for doc_j, u in zip(self.doc_list, self.u_list):
-            if doc_i == doc_j:
-                wi_list += self.data.d_u_wi_indexes[doc_i][u]
+        u_begin, u_end = self.get_segment(doc_i)
+        for u in range(u_begin, u_end+1):
+            wi_list += GL_DATA.d_u_wi_indexes[doc_i][u]
         return wi_list
     
     def get_words_minus_doc(self, doc_i):
         wi_list = []
-        for doc_j, u in zip(self.doc_list, self.u_list):
+        for doc_j in self.doc_segs_dict:
             if doc_j != doc_i:
-                wi_list += self.data.d_u_wi_indexes[doc_j][u]
+                u_begin, u_end = self.get_segment(doc_j)
+                for u in range(u_begin, u_end+1):
+                    wi_list += GL_DATA.d_u_wi_indexes[doc_j][u]
         return wi_list
     
     def get_segment(self, doc_i):
@@ -532,12 +495,7 @@ class SentenceCluster(object):
         document in this u_cluster 
         :param doc_i: index of the document
         '''
-        u_begin = None
-        u_end  = None
-        for doc_j, u in zip(self.doc_list, self.u_list): #TODO: make a more efficient version
-            if doc_i == doc_j: #TODO: assuming the sentences are always in order, confirm this
-                if u_begin is None:
-                    u_begin = u
-                u_end = u
-            
+        seg_bound = self.doc_segs_dict[doc_i]
+        u_begin = seg_bound[0]
+        u_end = seg_bound[1]
         return u_begin, u_end
