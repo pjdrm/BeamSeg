@@ -124,4 +124,5 @@ class MultiDocGreedySeg(AbstractSegmentor):
         print("\nBest found ll: %f\nGS seg_ll: %f\n" % (cached_segs[0][0], self.segmentation_ll(self.data.get_rho_u_clusters())))
         
     def segment_docs(self):
+        self.set_gl_data(self.data)
         self.greedy_segmentation_step()

@@ -41,7 +41,7 @@ class MultiDocVISeg(AbstractSegmentor):
                                             use_prior=use_prior,\
                                             log_dir=log_dir,\
                                             desc="VI_seg")
-        self.max_row_cache = 5
+        self.max_row_cache = 40
         if seg_config is None:
             self.seg_func = self.segment_u_vi_v2
             self.segmentation_step = self.dp_segmentation_step_cache
@@ -517,7 +517,7 @@ class MultiDocVISeg(AbstractSegmentor):
                 cached_segs = []
                 best_seg_ll = -np.inf
                 for u_begin in range(u_end+1):
-                    if u_end == 10 and u_begin == 8:
+                    if u_end == 3 and u_begin == 0:
                         a = 0
                         
                     if u_begin == 0:
@@ -538,9 +538,12 @@ class MultiDocVISeg(AbstractSegmentor):
                         if seg_ll > best_mat_entry_seg_ll:
                             best_mat_entry_seg_ll = seg_ll
                             
+                    '''
                     if best_mat_entry_seg_ll > best_seg_ll:
                         best_seg_ll = best_mat_entry_seg_ll
                         cached_segs = u_clusters_mat_entry[:self.max_row_cache]
+                    '''
+                    cached_segs += u_clusters_mat_entry
                             
                     f.write("(%d,%d)\tll: %.3f\n"%(u_begin, u_end, best_mat_entry_seg_ll))
                     for doc_i in range(self.data.n_docs):
@@ -549,6 +552,16 @@ class MultiDocVISeg(AbstractSegmentor):
                     f.write("\n")
                 #if u_end > 1:
                 #    self.check_if_lost_gs_seg(u_end, cached_segs)
+                cached_segs = sorted(cached_segs, key=operator.itemgetter(0), reverse=True)
+                cached_segs = cached_segs[:self.max_row_cache]
+                f.write("---cache---\n")
+                for cached_seg in cached_segs:
+                    f.write("ll: %.3f\n"%(cached_seg[0]))
+                    for doc_i in range(self.data.n_docs):
+                        f.write(str(self.get_segmentation(doc_i, cached_seg[1]))+" "
+                                +str(self.print_seg_with_topics(doc_i, cached_seg[1]))+"\n")
+                    f.write("\n")
+                f.write("-----------\n")
                 f.write("============\n")
                 self.best_segmentation[u_end] = cached_segs
                 
@@ -587,7 +600,7 @@ class MultiDocVISeg(AbstractSegmentor):
                             +str(self.print_seg_with_topics(doc_i, u_clusters_mat_entry))+"\n")
                 f.write("\n")
                 
-            #self.check_if_lost_gs_seg(u_end, cached_segs)
+            self.check_if_lost_gs_seg(u_end, cached_segs)
             f.write("============\n")
             self.best_segmentation[u_end] = [(best_seg_ll, best_u_clusters)]
             
@@ -599,6 +612,7 @@ class MultiDocVISeg(AbstractSegmentor):
         certainty about words belonging to a topic (segments/language model).
         :param n_iters: number of iterations to perform
         '''
+        self.set_gl_data(self.data)
         segmentation_log_files = [log_tools.log_init(self.log_dir+"segs_doc"+str(doc_i)+".txt") for doc_i in range(self.data.n_docs)]
         vi_log_files = []
         for doc_i in range(self.data.n_docs):
@@ -609,7 +623,7 @@ class MultiDocVISeg(AbstractSegmentor):
             
         t = trange(self.n_iters, desc='', leave=True)
         for i in t:
-            if i == 3:
+            if i == 2:
                 a = 0
             start = time.time()
             self.segmentation_step()

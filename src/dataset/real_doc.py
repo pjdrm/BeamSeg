@@ -9,6 +9,7 @@ from sklearn.feature_extraction.text import CountVectorizer
 from nltk.corpus import stopwords
 import nltk.stem
 import os
+import dataset.synthetic_doc as syn_doc
 
 #add_to_stop_words = ["object", "time", "zero"]
 #add_to_stop_words = ["object", "time", "want", "one", "velocity", "would"]
@@ -82,6 +83,8 @@ class Document(object):
         self.W = len(self.vocab)
         self.sents_len = np.sum(self.U_W_counts, axis = 1)
         self.U_I_words = np.zeros((self.n_sents, max(self.sents_len)), dtype=int32)
+        self.W_I_words = []
+        self.d_u_wi_indexes = []
         '''
         This part is not efficient, but I have figure out a way to use CountVectorizer
         and obtain the word sequence that I need for the U_I_words variable.
@@ -91,13 +94,27 @@ class Document(object):
         indicates which words were discarded.
         '''
         analyzer = vectorizer.build_analyzer()
+        word_count = 0
+        doc_i_u = []
         for u_index, u in enumerate(sents):
+            u_w_indexes = []
             u_I = analyzer(u)
             i = 0
             for w_ui in u_I:
                 if w_ui in self.vocab:
-                    self.U_I_words[u_index, i] = self.vocab[w_ui]
+                    u_w_indexes.append(word_count)
+                    word_count += 1
+                    vocab_index = self.vocab[w_ui]
+                    self.U_I_words[u_index, i] = vocab_index
+                    self.W_I_words.append(vocab_index)
                     i += 1
+                    
+            if len(u_w_indexes) > 0:
+                doc_i_u.append(u_w_indexes)
+            if u_index+1 in self.docs_index:
+                self.d_u_wi_indexes.append(doc_i_u)
+                doc_i_u = []
+        self.W_I_words = np.array(self.W_I_words)
                         
     def load_sw(self, doc_path, lemmatize, min_tf):
         sw_list = stopwords.words("english")
@@ -185,7 +202,33 @@ class Document(object):
         self.rho_eq_1 = np.append(np.nonzero(self.rho)[0], [self.n_sents-1])
         self.n_segs = len(self.rho_eq_1)
         self.sents_len = np.sum(self.U_W_counts, axis = 1)
-                
+        #TODO: update self.W_I_words and self.d_u_wi_indexes variables
+        '''
+        flat_u_list = []
+        for doc_i_u_list in self.d_u_wi_indexes:
+            for u in doc_i_u_list:
+                flat_u_list.append(u)
+        
+        u_to_del = []
+        wi_to_del = []
+        for u in self.ghost_lines:
+            for doc_i, doc_index in enumerate(self.docs_index):
+                if u < doc_index:
+                    break
+            u_to_del.append((doc_i, flat_u_list[u]))
+            for wi in flat_u_list[u]:
+                wi_to_del.append(wi)
+            
+        for doc_i, u_w_list in u_to_del:
+            self.d_u_wi_indexes[doc_i].remove(u_w_list)
+            
+        new_W_I_words = []
+        for i, wi in enumerate(self.W_I_words):
+            if i not in wi_to_del:
+                new_W_I_words.append(wi)
+        self.W_I_words = np.array(new_W_I_words)
+        '''
+        
 class MultiDocument(Document):
     def __init__(self, configs):
         self.doc_names = []
@@ -230,6 +273,10 @@ class MultiDocument(Document):
         for doc_index in self.docs_index:
             updated_doc_index.append(doc_index-c)
         self.docs_index = updated_doc_index
+        
+    def get_single_docs(self):
+        indv_docs = syn_doc.multi_doc_slicer(self)
+        return indv_docs
                         
 class ENLemmatizerCountVectorizer(CountVectorizer):
     def __init__(self, stopwords_list=None, max_features=None):

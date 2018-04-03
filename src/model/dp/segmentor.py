@@ -22,8 +22,7 @@ class AbstractSegmentor(object):
                        use_prior=True,\
                        log_dir="../logs/",\
                        desc="Abs_seg"):
-        global GL_DATA
-        GL_DATA = data
+        self.set_gl_data(data)
         self.data = data
         self.seg_dur = seg_dur
         self.std = std
@@ -39,6 +38,10 @@ class AbstractSegmentor(object):
         
         os.remove(self.log_dir+"dp_tracker_"+self.desc+".txt") if os.path.exists(self.log_dir+"dp_tracker_"+self.desc+".txt") else None
 
+    def set_gl_data(self, data):
+        global GL_DATA
+        GL_DATA = data
+        
     def print_seg(self, u_clusters):
         print("==========================")
         for doc_i in range(self.data.n_docs):
@@ -433,6 +436,7 @@ class SentenceCluster(object):
         return doc_i in self.doc_segs_dict.keys()
     
     def add_sents(self, u_begin, u_end, doc_i):
+        global GL_DATA
         doc_i_len = GL_DATA.doc_len(doc_i)
         #Accounting for documents with different lengths
         if u_begin > doc_i_len-1:

@@ -13,9 +13,11 @@ import model.dp.single_doc_segmentor as sd_seg
 import model.dp.multi_doc_greedy_segmentor as greedy_seg
 import copy
 import numpy as np
-#import toyplot
-#import toyplot.pdf
+import toyplot
+import toyplot.pdf
+import json
 from eval.eval_tools import wd_evaluator
+from dataset.real_doc import MultiDocument
 
 def md_eval(doc_synth, models, models_desc):
     seg_times = []
@@ -277,7 +279,7 @@ def dp_vs_vi():
     
 def skip_topics_test():
     use_seed = True
-    seed = 47#45
+    seed = 47#47
     
     if use_seed:
         np.random.seed(seed)
@@ -321,7 +323,7 @@ def skip_topics_test():
                                              seg_dur=1.0/pi,\
                                              std=3.0,\
                                              use_prior=True,
-                                             n_iters=10,\
+                                             n_iters=5,\
                                              seg_config=vi_dp_qz_ll_config,\
                                              log_dir="../logs/", log_flag=True)
     
@@ -339,7 +341,7 @@ def skip_topics_test():
     greedy_model_std3 = greedy_seg.MultiDocGreedySeg(beta, data, max_topics=n_topics, seg_dur=1.0/pi, std=3.0, use_prior=True)
     dp_model = dp_seg.MultiDocDPSeg(beta, data, max_topics=n_topics, seg_type=dp_seg.SEG_SKIP_K)
     dp_model_sc = dp_seg_sc.MultiDocDPSeg(beta, data, max_topics=n_topics, seg_type=dp_seg.SEG_SKIP_K)
-    md_eval(skip_topics_syn, [vi_dp_qz_ll_model], ["GS3"])
+    md_eval(skip_topics_syn, [vi_dp_qz_ll_model], ["QZ "])
     #md_eval(skip_topics_syn, [sd_model, greedy_model_std3, vi_dp_qz_ll_model], ["SD ", "GS3", "QZ "])
     
 def skip_topics_incremental_test():
@@ -383,8 +385,17 @@ def skip_topics_incremental_test():
     for doc_i in range(n_docs):
         print("doc_%d %s" % (doc_i, str(results_dict[doc_i])))
         
+def real_dataset_tests():
+    config_file = "/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/dataset/physics_test.json"
+    with open(config_file) as data_file:    
+        config = json.load(data_file)
+    doc_col = MultiDocument(config)
+    data = Data(doc_col)
+    beta = np.array([0.3]*doc_col.W)
+    pi = 0.1
+    greedy_model_std3 = greedy_seg.MultiDocGreedySeg(beta, data, max_topics=3, seg_dur=1.0/pi, std=3.0, use_prior=True)
+    greedy_model_std3.segment_docs()
+        
     
-#dp_vs_vi()
-#vi_only_test()
-skip_topics_test()
-#skip_topics_incremental_test()
+#skip_topics_test()
+real_dataset_tests()
