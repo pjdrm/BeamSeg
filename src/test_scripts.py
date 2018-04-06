@@ -340,7 +340,7 @@ def skip_topics_test():
     greedy_model_std1 = greedy_seg.MultiDocGreedySeg(beta, data, max_topics=n_topics, seg_dur=1.0/pi, std=1.5, use_prior=True)
     greedy_model_std2 = greedy_seg.MultiDocGreedySeg(beta, data, max_topics=n_topics, seg_dur=1.0/pi, std=2.0, use_prior=True)
     greedy_model_std3 = greedy_seg.MultiDocGreedySeg(beta, data, max_topics=n_topics, seg_dur=1.0/pi, std=3.0, use_prior=True)
-    mcmc_model_std3 = mcmc_seg.MultiDocMCMCSeg(beta, data, max_topics=n_topics, seg_dur=1.0/pi, std=3.0, use_prior=True)
+    mcmc_model_std3 = mcmc_seg.MultiDocMCMCSeg(beta, data, max_topics=n_topics, seg_dur=1.0/pi, std=3.0, use_prior=False)
     dp_model = dp_seg.MultiDocDPSeg(beta, data, max_topics=n_topics, seg_type=dp_seg.SEG_SKIP_K)
     dp_model_sc = dp_seg_sc.MultiDocDPSeg(beta, data, max_topics=n_topics, seg_type=dp_seg.SEG_SKIP_K)
     md_eval(skip_topics_syn, [mcmc_model_std3], ["MC "])
