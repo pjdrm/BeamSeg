@@ -26,7 +26,7 @@ class MultiDocGreedySeg(AbstractSegmentor):
         hyp_seg = self.get_segmentation(doc_i, u_clusters)
         return hyp_seg
     
-    def greedy_segmentation_step(self):
+    def mcmc_segmentation_step(self):
         '''
         Similar to vi_segmentation_step, but considers all
         valid u_clusters where a sentence can be inserted.
@@ -125,4 +125,4 @@ class MultiDocGreedySeg(AbstractSegmentor):
         
     def segment_docs(self):
         self.set_gl_data(self.data)
-        self.greedy_segmentation_step()
+        self.mcmc_segmentation_step()

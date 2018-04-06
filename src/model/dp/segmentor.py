@@ -202,6 +202,13 @@ class AbstractSegmentor(object):
                     return u_cluster
         return None
     
+    def get_u_segment(self, doc_i, u, u_clusters):
+        for u_cluster in u_clusters:
+            if u_cluster.has_doc(doc_i):
+                u_begin, u_end = u_cluster.get_segment(doc_i)
+                if u >= u_begin and u <= u_end:
+                    return u_cluster.k, u_begin, u_end
+    
     def assign_target_k(self, u_begin, u_end, doc_i, k_target, possible_clusters, u_clusters):
         u_k_target_cluster = self.get_k_cluster(k_target, u_clusters)
         if u_k_target_cluster is not None:
@@ -467,6 +474,20 @@ class SentenceCluster(object):
             self.wi_list.remove(doc_w_i)
             
         self.doc_segs_dict.pop(doc_i)
+        
+    def remove_seg(self, doc_i, u_begin, u):
+        current_seg = self.doc_segs_dict[doc_i]
+        if current_seg[0] == u_begin and current_seg[1] == u:
+            self.doc_segs_dict.pop(doc_i)
+        else:
+            self.doc_segs_dict[doc_i] = [u+1, current_seg[1]]
+            
+        self.word_counts -= np.sum(GL_DATA.doc_word_counts(doc_i)[u_begin:u+1], axis=0)
+        seg = list(range(u_begin, u+1))
+        for u in seg:
+            d_u_words = GL_DATA.d_u_wi_indexes[doc_i][u]
+            for doc_w_i in d_u_words:
+                self.wi_list.remove(doc_w_i)
             
     def get_docs(self):
         return self.doc_segs_dict.keys()
