@@ -196,11 +196,13 @@ class AbstractSegmentor(object):
         return None
     
     def get_next_cluster(self, k, doc_i, u_clusters):
-        for k_next in range(k+1, self.max_topics):
-            for u_cluster in u_clusters:
-                if u_cluster.k == k_next and u_cluster.has_doc(doc_i):
-                    return u_cluster
-        return None
+        cluster_order = self.get_cluster_order(doc_i, u_clusters)
+        for i, k2 in enumerate(cluster_order):
+            if k2 == k:
+                next_cluster_k = cluster_order[i+1]
+                break
+        next_u_cluster = self.get_k_cluster(next_cluster_k, u_clusters)
+        return next_u_cluster
     
     def get_u_segment(self, doc_i, u, u_clusters):
         for u_cluster in u_clusters:
@@ -208,6 +210,13 @@ class AbstractSegmentor(object):
                 u_begin, u_end = u_cluster.get_segment(doc_i)
                 if u >= u_begin and u <= u_end:
                     return u_cluster.k, u_begin, u_end
+                
+    def get_doc_i_clusters(self, doc_i, u_clusters):
+        k_list = []
+        for u_cluster in u_clusters:
+            if u_cluster.has_doc(doc_i):
+                k_list.append(u_cluster.k)
+        return k_list     
     
     def assign_target_k(self, u_begin, u_end, doc_i, k_target, possible_clusters, u_clusters):
         u_k_target_cluster = self.get_k_cluster(k_target, u_clusters)
@@ -480,7 +489,10 @@ class SentenceCluster(object):
         if current_seg[0] == u_begin and current_seg[1] == u:
             self.doc_segs_dict.pop(doc_i)
         else:
-            self.doc_segs_dict[doc_i] = [u+1, current_seg[1]]
+            if current_seg[0] >= u_begin:
+                self.doc_segs_dict[doc_i] = [u+1, current_seg[1]]
+            else:
+                self.doc_segs_dict[doc_i] = [current_seg[0], u_begin-1]
             
         self.word_counts -= np.sum(GL_DATA.doc_word_counts(doc_i)[u_begin:u+1], axis=0)
         seg = list(range(u_begin, u+1))
