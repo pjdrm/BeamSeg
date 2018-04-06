@@ -400,5 +400,5 @@ def real_dataset_tests():
     greedy_model_std3.segment_docs()
         
     
-skip_topics_test()
-#real_dataset_tests()
+#skip_topics_test()
+real_dataset_tests()

@@ -239,7 +239,29 @@ class MultiDocument(Document):
         self.update_doc_index()
         os.remove(doc_path)
         self.isMD = True
+        self.doc_topic_seq = self.load_doc_topic_seq(configs["real_data"]["doc_links_dir"])
         
+    def load_doc_topic_seq(self, links_dir):
+        topic_dict = {}
+        docs_topic_seq = []
+        for i, dir_name in enumerate(os.listdir(links_dir)):
+            topic_dict[dir_name] = i
+            
+        for doc_name in self.doc_names:
+            doc_name_split = doc_name.split("_")
+            doc_name = doc_name_split[0]+"_"+doc_name_split[1]
+            topic_seq = []
+            topic_seq_dict = {}
+            for dir_name in os.listdir(links_dir):
+                for doc_seg in os.listdir(links_dir+"/"+dir_name):
+                    if doc_name in doc_seg:
+                        i = int(doc_seg.split("_seg")[1].split(".txt")[0])
+                        topic_seq_dict[i] = topic_dict[dir_name]
+            for i in range(1, len(topic_seq_dict.keys())+1):
+                topic_seq.append(topic_seq_dict[i])
+            docs_topic_seq.append(topic_seq)
+        return docs_topic_seq
+    
     def prepare_multi_doc(self, doc_dir, doc_tmp_path):
         str_cat_files = ""
         doc_offset = 0
