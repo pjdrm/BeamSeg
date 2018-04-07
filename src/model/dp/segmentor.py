@@ -48,7 +48,7 @@ class AbstractSegmentor(object):
             seg = self.get_final_segmentation(doc_i, u_clusters)
             print("Doc %d: %s" % (doc_i, str(seg)))
             
-    def print_seg_with_topics(self, doc_i, u_clusters):
+    def get_seg_with_topics(self, doc_i, u_clusters):
         if isinstance(u_clusters[0], collections.Iterable):
             u_clusters = u_clusters[0]
             
@@ -64,7 +64,7 @@ class AbstractSegmentor(object):
             k = seg[0]
             for u in range(u_begin, u_end+1):
                 rho.append(k)
-        return str(rho)
+        return rho
             
     def get_cluster_order(self, doc_i, u_clusters):
         cluster_k_list = []
@@ -324,7 +324,7 @@ class AbstractSegmentor(object):
                     f.write("(%d,%d)\tll: %.3f\n"%(u_begin, u_end, seg_ll))
                     for doc_i in range(self.data.n_docs):
                         f.write(str(self.get_segmentation(doc_i, seg_clusters))+" "
-                                +str(self.print_seg_with_topics(doc_i, seg_clusters))+"\n")
+                                +str(self.get_seg_with_topics(doc_i, seg_clusters))+"\n")
                     f.write("\n")
                 f.write("============\n")
                 self.best_segmentation[u_end] = best_seg_clusters
@@ -340,6 +340,7 @@ class Data(object):
     def __init__(self, docs):
         self.doc_synth = docs
         self.docs_rho_gs = [doc.rho for doc in docs.get_single_docs()]
+        self.doc_rho_topics = docs.doc_rho_topics
         self.docs_index = docs.docs_index
         self.W = docs.W
         self.W_I_words = docs.W_I_words #Vector the vocabulary indexes of ith word in the full collection

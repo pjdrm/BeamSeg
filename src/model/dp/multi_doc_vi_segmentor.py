@@ -548,7 +548,7 @@ class MultiDocVISeg(AbstractSegmentor):
                     f.write("(%d,%d)\tll: %.3f\n"%(u_begin, u_end, best_mat_entry_seg_ll))
                     for doc_i in range(self.data.n_docs):
                         f.write(str(self.get_segmentation(doc_i, u_clusters_mat_entry[0][1]))+" "
-                                +str(self.print_seg_with_topics(doc_i, u_clusters_mat_entry[0][1]))+"\n")
+                                +str(self.get_seg_with_topics(doc_i, u_clusters_mat_entry[0][1]))+"\n")
                     f.write("\n")
                 #if u_end > 1:
                 #    self.check_if_lost_gs_seg(u_end, cached_segs)
@@ -559,7 +559,7 @@ class MultiDocVISeg(AbstractSegmentor):
                     f.write("ll: %.3f\n"%(cached_seg[0]))
                     for doc_i in range(self.data.n_docs):
                         f.write(str(self.get_segmentation(doc_i, cached_seg[1]))+" "
-                                +str(self.print_seg_with_topics(doc_i, cached_seg[1]))+"\n")
+                                +str(self.get_seg_with_topics(doc_i, cached_seg[1]))+"\n")
                     f.write("\n")
                 f.write("-----------\n")
                 f.write("============\n")
@@ -597,7 +597,7 @@ class MultiDocVISeg(AbstractSegmentor):
                 f.write("(%d,%d)\tll: %.3f\n"%(u_begin, u_end, best_mat_entry_seg_ll))
                 for doc_i in range(self.data.n_docs):
                     f.write(str(self.get_segmentation(doc_i, u_clusters_mat_entry))+" "
-                            +str(self.print_seg_with_topics(doc_i, u_clusters_mat_entry))+"\n")
+                            +str(self.get_seg_with_topics(doc_i, u_clusters_mat_entry))+"\n")
                 f.write("\n")
                 
             self.check_if_lost_gs_seg(u_end, cached_segs)
@@ -632,7 +632,7 @@ class MultiDocVISeg(AbstractSegmentor):
                     doc_i_log = segmentation_log_files[doc_i]
                     seg_log_str = "\nGS: "+str(self.data.docs_rho_gs[doc_i].tolist())+\
                                   "\nVI: "+str(self.get_segmentation(doc_i, self.best_segmentation[-1][0][1]))+\
-                                  "\n K: "+self.print_seg_with_topics(doc_i, self.best_segmentation[-1][0][1])
+                                  "\n K: "+self.get_seg_with_topics(doc_i, self.best_segmentation[-1][0][1])
                     doc_i_log.info(seg_log_str)
                     wi_list = self.data.d_u_wi_indexes[doc_i]
                     wi_list = list(chain(*wi_list))

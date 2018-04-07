@@ -202,32 +202,6 @@ class Document(object):
         self.rho_eq_1 = np.append(np.nonzero(self.rho)[0], [self.n_sents-1])
         self.n_segs = len(self.rho_eq_1)
         self.sents_len = np.sum(self.U_W_counts, axis = 1)
-        #TODO: update self.W_I_words and self.d_u_wi_indexes variables
-        '''
-        flat_u_list = []
-        for doc_i_u_list in self.d_u_wi_indexes:
-            for u in doc_i_u_list:
-                flat_u_list.append(u)
-        
-        u_to_del = []
-        wi_to_del = []
-        for u in self.ghost_lines:
-            for doc_i, doc_index in enumerate(self.docs_index):
-                if u < doc_index:
-                    break
-            u_to_del.append((doc_i, flat_u_list[u]))
-            for wi in flat_u_list[u]:
-                wi_to_del.append(wi)
-            
-        for doc_i, u_w_list in u_to_del:
-            self.d_u_wi_indexes[doc_i].remove(u_w_list)
-            
-        new_W_I_words = []
-        for i, wi in enumerate(self.W_I_words):
-            if i not in wi_to_del:
-                new_W_I_words.append(wi)
-        self.W_I_words = np.array(new_W_I_words)
-        '''
         
 class MultiDocument(Document):
     def __init__(self, configs):
@@ -239,7 +213,7 @@ class MultiDocument(Document):
         self.update_doc_index()
         os.remove(doc_path)
         self.isMD = True
-        self.doc_topic_seq = self.load_doc_topic_seq(configs["real_data"]["doc_links_dir"])
+        self.doc_topic_seq, self.doc_rho_topics = self.load_doc_topic_seq(configs["real_data"]["doc_links_dir"])
         
     def load_doc_topic_seq(self, links_dir):
         topic_dict = {}
@@ -260,7 +234,22 @@ class MultiDocument(Document):
             for i in range(1, len(topic_seq_dict.keys())+1):
                 topic_seq.append(topic_seq_dict[i])
             docs_topic_seq.append(topic_seq)
-        return docs_topic_seq
+        
+        doc_i = 0
+        doc_rho_topics = []
+        doc_i_rho_topics = []
+        i = 0
+        for u, rho_u in enumerate(self.rho):
+            doc_i_rho_topics.append(docs_topic_seq[doc_i][i])
+            if u+1 in self.docs_index:
+                i = 0
+                doc_i += 1
+                doc_rho_topics.append(doc_i_rho_topics)
+                doc_i_rho_topics = []
+            elif rho_u == 1:
+                i += 1
+            
+        return docs_topic_seq, doc_rho_topics
     
     def prepare_multi_doc(self, doc_dir, doc_tmp_path):
         str_cat_files = ""

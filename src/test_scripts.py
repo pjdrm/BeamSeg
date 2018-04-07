@@ -17,7 +17,7 @@ import numpy as np
 import toyplot
 import toyplot.pdf
 import json
-from eval.eval_tools import wd_evaluator
+from eval.eval_tools import wd_evaluator, f_measure
 from dataset.real_doc import MultiDocument
 
 def md_eval(doc_synth, models, models_desc):
@@ -49,6 +49,15 @@ def md_eval(doc_synth, models, models_desc):
         
     for i, model in enumerate(models):
         print(str(models_desc[i])+" WD: "+str(wd_evaluator(model.get_all_segmentations(), doc_synth)))
+        
+    for i, model in enumerate(models):
+        f1_scores = []
+        for doc_i in range(model.data.n_docs):
+            hyp_topics = model.get_seg_with_topics(doc_i, model.best_segmentation[-1][0][1])
+            gs_topics = model.data.doc_rho_topics[doc_i]
+            f1 = f_measure(gs_topics, hyp_topics)
+            f1_scores.append(f1)
+        print(str(models_desc[i])+" F1: "+str(f1_scores))
     
 def single_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_flag=False):
     '''
@@ -389,7 +398,7 @@ def skip_topics_incremental_test():
         print("doc_%d %s" % (doc_i, str(results_dict[doc_i])))
         
 def real_dataset_tests():
-    config_file = "/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/dataset/physics_test.json"
+    config_file = "/home/pjdrm/workspace/TopicTrackingSegmentation/dataset/physics_test.json"
     with open(config_file) as data_file:    
         config = json.load(data_file)
     doc_col = MultiDocument(config)
@@ -397,7 +406,7 @@ def real_dataset_tests():
     beta = np.array([0.3]*doc_col.W)
     pi = 0.1
     greedy_model_std3 = greedy_seg.MultiDocGreedySeg(beta, data, max_topics=3, seg_dur=1.0/pi, std=3.0, use_prior=True)
-    greedy_model_std3.segment_docs()
+    md_eval(doc_col, [greedy_model_std3], ["GS3"])
         
     
 #skip_topics_test()

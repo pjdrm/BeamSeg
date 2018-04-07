@@ -116,7 +116,7 @@ class MultiDocGreedySeg(AbstractSegmentor):
                     f.write("(%d)\tll: %.3f\n"%(u, cached_seg[0]))
                     for doc_i in range(self.data.n_docs):
                         f.write(str(self.get_segmentation(doc_i, cached_seg[1]))+" "
-                                +str(self.print_seg_with_topics(doc_i, cached_seg[1]))+"\n")
+                                +str(self.get_seg_with_topics(doc_i, cached_seg[1]))+"\n")
                     f.write("\n")
                 f.write("===============\n")
         cached_segs = sorted(cached_segs, key=operator.itemgetter(0), reverse=True)

@@ -289,7 +289,7 @@ class MultiDocDPSeg(AbstractSegmentor):
                     f.write("(%d,%d)\tll: %.3f\n"%(u_begin, u_end, cached_segs[0][0]))
                     for doc_i in range(self.data.n_docs):
                         f.write(str(self.get_segmentation(doc_i, cached_segs[0][1]))+" "
-                                +str(self.print_seg_with_topics(doc_i, cached_segs[0][1]))+"\n")
+                                +str(self.get_seg_with_topics(doc_i, cached_segs[0][1]))+"\n")
                     f.write("\n")
                 f.write("============\n")
                 self.best_segmentation[u_end] = cached_segs
