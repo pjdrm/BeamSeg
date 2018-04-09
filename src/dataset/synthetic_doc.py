@@ -290,7 +290,7 @@ class SyntheticDittoDocs(SyntheticDocument):
 def multi_doc_slicer(multi_doc):
     doc_l = []
     doc_begin = 0
-    for doc_end, doc_name in zip(multi_doc.docs_index, multi_doc.doc_names):
+    for doc_i, doc_end, doc_name in zip(range(multi_doc.n_docs), multi_doc.docs_index, multi_doc.doc_names):
         doc = copy.deepcopy(multi_doc)
         doc.n_sents = doc_end - doc_begin
         doc.n_docs = 1
@@ -304,5 +304,20 @@ def multi_doc_slicer(multi_doc):
         doc.U_I_words = doc.U_I_words[doc_begin:doc_end, :]
         doc.isMD = False
         doc_begin = doc_end
+        
+        if doc_i > 0:
+            last_word_prev_doc = multi_doc.d_u_wi_indexes[doc_i-1][-1][-1]
+        else:
+            last_word_prev_doc = -1
+        doc.d_u_wi_indexes = [[]]
+        for u in multi_doc.d_u_wi_indexes[doc_i]:
+            u_final = []
+            for wi in u:
+                u_final.append(wi-last_word_prev_doc-1)
+            doc.d_u_wi_indexes[0].append(u_final)
+            
+        word_begin = multi_doc.d_u_wi_indexes[doc_i][0][0]
+        word_end = multi_doc.d_u_wi_indexes[doc_i][-1][-1]
+        doc.W_I_words = doc.W_I_words[word_begin:word_end+1]
         doc_l.append(doc)
     return doc_l

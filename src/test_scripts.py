@@ -403,15 +403,24 @@ def real_dataset_tests():
         config = json.load(data_file)
     doc_col = MultiDocument(config)
     data = Data(doc_col)
-    beta = np.array([0.3]*doc_col.W)
-    pi = 0.1
-    greedy_model_std3 = greedy_seg.MultiDocGreedySeg(beta,\
-                                                     data,\
-                                                     max_topics=doc_col.max_topics,\
-                                                     seg_dur=doc_col.seg_dur,\
-                                                     std=doc_col.std,\
-                                                     use_prior=True)
-    md_eval(doc_col, [greedy_model_std3], ["GS3"])
+    betas = [0.1, 0.3, 0.6, 0.8, 1.0, 2.0, 5.0, 10]
+    #betas = [0.8]
+    
+    single_docs = doc_col.get_single_docs()
+    beta_models = []
+    beta_models_names = []
+    for beta in betas:
+        beta_prior = np.array([beta]*doc_col.W)
+        greedy_model = greedy_seg.MultiDocGreedySeg(beta_prior,\
+                                                         data,\
+                                                         max_topics=doc_col.max_topics,\
+                                                         seg_dur=doc_col.seg_dur,\
+                                                         std=doc_col.std,\
+                                                         use_prior=True)
+        sd_model = sd_seg.SingleDocDPSeg(beta_prior, single_docs, data)
+        beta_models_names += [sd_model.desc+str(beta), greedy_model.desc+str(beta)]
+        beta_models += [sd_model, greedy_model]
+    md_eval(doc_col, beta_models, beta_models_names)
         
     
 #skip_topics_test()

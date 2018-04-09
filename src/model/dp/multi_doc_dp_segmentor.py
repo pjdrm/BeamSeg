@@ -297,4 +297,5 @@ class MultiDocDPSeg(AbstractSegmentor):
             #print("==========================")
             
     def segment_docs(self):
+        self.set_gl_data(self.data)
         self.dp_segmentation_step_cache()

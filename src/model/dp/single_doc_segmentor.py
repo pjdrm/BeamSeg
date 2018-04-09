@@ -16,11 +16,12 @@ class SingleDocDPSeg():
         self.sd_topics = []
         self.data = data
         self.best_segmentation = [[(None, [])]]
+        self.desc = "SD_seg"
         
     def segment_docs(self):
         for doc in self.single_docs:
             data = Data(doc)
-            dp_model = dp_seg.MultiDocDPSeg(self.beta, data, desc="SD_seg")
+            dp_model = dp_seg.MultiDocDPSeg(self.beta, data, desc=self.desc)
             dp_model.max_row_cache = 1
             dp_model.segment_docs()
             u_clusters = dp_model.best_segmentation[-1][0][1]
