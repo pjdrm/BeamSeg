@@ -166,12 +166,14 @@ class CVBSynSkipTopics(object):
         self.sent_len = sent_len
         self.W = len(beta)
         self.rho = []
-        self.rho_u_clsuters = []
+        self.rho_u_clusters = []
         self.docs_index = []
         n_sents = 0
         self.doc_topic_seq = []
+        self.doc_rho_topics = []
         for doc_i in range(n_docs):
             doc_i_topic_seq = []
+            doc_i_rho_topics = []
             possible_topics = list(range(n_topics))
             for i in range(n_segs):
                 possible_topics_l = len(possible_topics)
@@ -181,14 +183,18 @@ class CVBSynSkipTopics(object):
                 doc_i_topic_seq.append(topic)
             doc_i_topic_seq = sorted(doc_i_topic_seq)
             self.doc_topic_seq.append(doc_i_topic_seq)
-                
+            i = 0
             for seg in range(n_segs):
                 while not np.random.binomial(1, pi):
                     n_sents += 1
                     self.rho.append(0)
+                    doc_i_rho_topics.append(doc_i_topic_seq[i])
                 n_sents += 1
                 self.rho.append(1)
+                doc_i_rho_topics.append(doc_i_topic_seq[i])
+                i += 1
             self.docs_index.append(n_sents)
+            self.doc_rho_topics.append(doc_i_rho_topics)
         self.rho[-1] = 0
         self.rho = np.array(self.rho)
         self.K = n_topics

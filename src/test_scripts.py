@@ -353,8 +353,8 @@ def skip_topics_test():
     mcmc_model_std3 = mcmc_seg.MultiDocMCMCSeg(beta, data, max_topics=n_topics, seg_dur=1.0/pi, std=3.0, use_prior=True)
     dp_model = dp_seg.MultiDocDPSeg(beta, data, max_topics=n_topics, seg_type=dp_seg.SEG_SKIP_K)
     dp_model_sc = dp_seg_sc.MultiDocDPSeg(beta, data, max_topics=n_topics, seg_type=dp_seg.SEG_SKIP_K)
-    md_eval(skip_topics_syn, [greedy_model_std3, mcmc_model, mcmc_model_std3, ], ["GS3", "MC ", "MCP"])
-    #md_eval(skip_topics_syn, [sd_model, greedy_model_std3, mcmc_model_std3], ["SD ", "GS3", "MC "])
+    #md_eval(skip_topics_syn, [greedy_model_std3, mcmc_model, mcmc_model_std3], ["GS3", "MC ", "MCP"])
+    md_eval(skip_topics_syn, [mcmc_model], ["MC "])
     
 def skip_topics_incremental_test():
     use_seed = True
@@ -398,7 +398,7 @@ def skip_topics_incremental_test():
         print("doc_%d %s" % (doc_i, str(results_dict[doc_i])))
         
 def real_dataset_tests():
-    config_file = "/home/pjdrm/workspace/TopicTrackingSegmentation/dataset/physics_test.json"
+    config_file = "/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/dataset/physics_test.json"
     with open(config_file) as data_file:    
         config = json.load(data_file)
     doc_col = MultiDocument(config)
@@ -409,5 +409,5 @@ def real_dataset_tests():
     md_eval(doc_col, [greedy_model_std3], ["GS3"])
         
     
-#skip_topics_test()
-real_dataset_tests()
+skip_topics_test()
+#real_dataset_tests()

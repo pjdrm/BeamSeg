@@ -13,7 +13,9 @@ class SingleDocDPSeg():
         self.single_docs = single_docs
         self.seg_type = seg_type
         self.sd_segs = []
+        self.sd_topics = []
         self.data = data
+        self.best_segmentation = [[(None, [])]]
         
     def segment_docs(self):
         for doc in self.single_docs:
@@ -21,8 +23,13 @@ class SingleDocDPSeg():
             dp_model = dp_seg.MultiDocDPSeg(self.beta, data, desc="SD_seg")
             dp_model.max_row_cache = 1
             dp_model.segment_docs()
+            u_clusters = dp_model.best_segmentation[-1][0][1]
             self.sd_segs.append(dp_model.get_final_segmentation(0))
+            self.sd_topics.append(dp_model.get_seg_with_topics(0, u_clusters))
     
+    def get_seg_with_topics(self, doc_i, u_clusters):
+        return self.sd_topics[doc_i]
+        
     def get_final_segmentation(self, doc_i):
         return self.sd_segs[doc_i]
     
