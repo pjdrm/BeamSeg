@@ -214,6 +214,22 @@ class MultiDocument(Document):
         os.remove(doc_path)
         self.isMD = True
         self.doc_topic_seq, self.doc_rho_topics = self.load_doc_topic_seq(configs["real_data"]["doc_links_dir"])
+        self.print_processed_docs(configs["real_data"]["docs_processed_dir"])
+        
+    def print_processed_docs(self, out_dir):
+        u_i = 0
+        for doc_i, doc_name in enumerate(self.doc_names):
+            doc_i_str = "==========\n"
+            for u in self.d_u_wi_indexes[doc_i]:
+                for wi in u:
+                    word = self.inv_vocab[self.W_I_words[wi]]
+                    doc_i_str += word + " "
+                doc_i_str += "\n"
+                if u_i in self.rho_eq_1:
+                    doc_i_str += "==========\n"
+                u_i += 1
+            with open(out_dir+doc_name, "w+") as f:
+                f.write(doc_i_str)
         
     def load_doc_topic_seq(self, links_dir):
         topic_dict = {}

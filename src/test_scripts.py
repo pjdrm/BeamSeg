@@ -409,5 +409,5 @@ def real_dataset_tests():
     md_eval(doc_col, [greedy_model_std3], ["GS3"])
         
     
-skip_topics_test()
-#real_dataset_tests()
+#skip_topics_test()
+real_dataset_tests()
