@@ -405,7 +405,12 @@ def real_dataset_tests():
     data = Data(doc_col)
     beta = np.array([0.3]*doc_col.W)
     pi = 0.1
-    greedy_model_std3 = greedy_seg.MultiDocGreedySeg(beta, data, max_topics=3, seg_dur=1.0/pi, std=3.0, use_prior=True) #TODO: adjust max_topics
+    greedy_model_std3 = greedy_seg.MultiDocGreedySeg(beta,\
+                                                     data,\
+                                                     max_topics=doc_col.max_topics,\
+                                                     seg_dur=doc_col.seg_dur,\
+                                                     std=doc_col.std,\
+                                                     use_prior=True)
     md_eval(doc_col, [greedy_model_std3], ["GS3"])
         
     

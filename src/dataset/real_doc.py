@@ -213,7 +213,8 @@ class MultiDocument(Document):
         self.update_doc_index()
         os.remove(doc_path)
         self.isMD = True
-        self.doc_topic_seq, self.doc_rho_topics = self.load_doc_topic_seq(configs["real_data"]["doc_links_dir"])
+        self.doc_topic_seq, self.doc_rho_topics, self.max_topics = self.load_doc_topic_seq(configs["real_data"]["doc_links_dir"])
+        self.seg_dur, self.std = self.get_prior()
         self.print_processed_docs(configs["real_data"]["docs_processed_dir"])
         
     def print_processed_docs(self, out_dir):
@@ -230,6 +231,15 @@ class MultiDocument(Document):
                 u_i += 1
             with open(out_dir+doc_name, "w+") as f:
                 f.write(doc_i_str)
+        
+    def get_prior(self):
+        seg_lens = []
+        prev_rho = 0
+        for rho_1 in self.rho_eq_1:
+            seg_len = rho_1-prev_rho+1
+            seg_lens.append(seg_len)
+            prev_rho = rho_1+1
+        return np.average(seg_lens), np.std(seg_lens)
         
     def load_doc_topic_seq(self, links_dir):
         topic_dict = {}
@@ -264,8 +274,14 @@ class MultiDocument(Document):
                 doc_i_rho_topics = []
             elif rho_u == 1:
                 i += 1
-            
-        return docs_topic_seq, doc_rho_topics
+        
+        topics_set = set()
+        for doc_i_rho_topics in doc_rho_topics:
+            for topic in doc_i_rho_topics:
+                topics_set.add(topic)
+        max_topics = len(topics_set)
+        
+        return docs_topic_seq, doc_rho_topics, max_topics
     
     def prepare_multi_doc(self, doc_dir, doc_tmp_path):
         str_cat_files = ""
