@@ -350,9 +350,11 @@ class Data(object):
         self.docs_word_counts = []
         self.multi_doc_slicer(docs)
         self.max_doc_len = np.max(self.doc_lens)
+        self.total_sents = 0
         self.total_words = 0 #Number of words in full document collection
         for doc_i in range(self.n_docs):
             self.total_words += np.sum(self.doc_word_counts(doc_i))
+            self.total_sents += self.doc_len(doc_i)
         
     def multi_doc_slicer(self, docs):
         doc_begin = 0
@@ -377,6 +379,11 @@ class Data(object):
         '''
         return self.docs_word_counts[doc_i]
     
+    def get_doc_i(self, u):
+        for doc_i, doc_i_index in enumerate(self.docs_index):
+            if u < doc_i_index:
+                return doc_i
+        
     def get_rho_u_clusters(self):
         gs_u_clusters = []
         doc_i = 0

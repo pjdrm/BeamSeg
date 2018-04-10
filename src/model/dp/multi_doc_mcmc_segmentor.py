@@ -66,7 +66,7 @@ class MultiDocMCMCSeg(AbstractSegmentor):
         hyp_seg = self.get_segmentation(doc_i, u_clusters)
         return hyp_seg
     
-    def test_splits(self, possible_k, doc_i, u_begin, u_end, best_seg_ll, u_clusters):
+    def test_split(self, possible_k, doc_i, u_begin, u_end, best_seg_ll, u_clusters):
         best_k = None
         best_u_clusters = None
         found_better_seg = False
@@ -126,7 +126,7 @@ class MultiDocMCMCSeg(AbstractSegmentor):
                         found_better_seg,\
                         split_k,\
                         split_seg_ll,\
-                        split_u_clusters = self.test_splits(possible_k,\
+                        split_u_clusters = self.test_split(possible_k,\
                                                            doc_i,\
                                                            u+1,\
                                                            u_end,\
@@ -148,10 +148,10 @@ class MultiDocMCMCSeg(AbstractSegmentor):
                         found_better_seg,\
                         split_k,\
                         split_seg_ll,\
-                        split_u_clusters = self.test_splits(possible_k,\
+                        split_u_clusters = self.test_split(possible_k,\
                                                            doc_i,\
                                                            u_begin,\
-                                                           u_end,\
+                                                           u,\
                                                            best_seg_ll,\
                                                            u_clusters_minus_current)
                         if found_better_seg:

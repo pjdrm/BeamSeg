@@ -12,6 +12,7 @@ import model.dp.multi_doc_vi_segmentor as vi_seg
 import model.dp.single_doc_segmentor as sd_seg
 import model.dp.multi_doc_greedy_segmentor as greedy_seg
 import model.dp.multi_doc_mcmc_segmentor as mcmc_seg
+import model.dp.multi_doc_mcmc_v2_segmentor as mcmc_seg_v2
 import copy
 import numpy as np
 import toyplot
@@ -350,11 +351,11 @@ def skip_topics_test():
     greedy_model_std2 = greedy_seg.MultiDocGreedySeg(beta, data, max_topics=n_topics, seg_dur=1.0/pi, std=2.0, use_prior=True)
     greedy_model_std3 = greedy_seg.MultiDocGreedySeg(beta, data, max_topics=n_topics, seg_dur=1.0/pi, std=3.0, use_prior=True)
     mcmc_model = mcmc_seg.MultiDocMCMCSeg(beta, data, max_topics=n_topics, seg_dur=1.0/pi, std=3.0, use_prior=False)
-    mcmc_model_std3 = mcmc_seg.MultiDocMCMCSeg(beta, data, max_topics=n_topics, seg_dur=1.0/pi, std=3.0, use_prior=True)
+    mcmc_model_v2 = mcmc_seg_v2.MultiDocMCMCSegV2(beta, data, max_topics=n_topics, seg_dur=1.0/pi, std=3.0, use_prior=False)
     dp_model = dp_seg.MultiDocDPSeg(beta, data, max_topics=n_topics, seg_type=dp_seg.SEG_SKIP_K)
     dp_model_sc = dp_seg_sc.MultiDocDPSeg(beta, data, max_topics=n_topics, seg_type=dp_seg.SEG_SKIP_K)
     #md_eval(skip_topics_syn, [greedy_model_std3, mcmc_model, mcmc_model_std3], ["GS3", "MC ", "MCP"])
-    md_eval(skip_topics_syn, [mcmc_model], ["MC "])
+    md_eval(skip_topics_syn, [mcmc_model_v2], ["MC2"])
     
 def skip_topics_incremental_test():
     use_seed = True
