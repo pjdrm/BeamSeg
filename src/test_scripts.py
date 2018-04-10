@@ -51,13 +51,13 @@ def md_eval(doc_synth, models, models_desc):
         print(str(models_desc[i])+" WD: "+str(wd_evaluator(model.get_all_segmentations(), doc_synth)))
         
     for i, model in enumerate(models):
-        f1_scores = []
+        hyp_topics = []
+        gs_topics = []
         for doc_i in range(model.data.n_docs):
-            hyp_topics = model.get_seg_with_topics(doc_i, model.best_segmentation[-1][0][1])
-            gs_topics = model.data.doc_rho_topics[doc_i]
-            f1 = f_measure(gs_topics, hyp_topics)
-            f1_scores.append(f1)
-        print(str(models_desc[i])+" F1: "+str(f1_scores))
+            hyp_topics += model.get_seg_with_topics(doc_i, model.best_segmentation[-1][0][1])
+            gs_topics += model.data.doc_rho_topics[doc_i]
+        f1_score = f_measure(gs_topics, hyp_topics)
+        print(str(models_desc[i])+" F1: "+str(f1_score))
     
 def single_vs_md_eval(doc_synth, beta, md_all_combs=True, md_fast=True, print_flag=False):
     '''
@@ -423,5 +423,5 @@ def real_dataset_tests():
     md_eval(doc_col, beta_models, beta_models_names)
         
     
-#skip_topics_test()
-real_dataset_tests()
+skip_topics_test()
+#real_dataset_tests()
