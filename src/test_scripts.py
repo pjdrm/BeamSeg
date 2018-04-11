@@ -17,10 +17,44 @@ import copy
 import numpy as np
 import toyplot
 import toyplot.pdf
+import toyplot.browser
 import json
+import operator
 from eval.eval_tools import wd_evaluator, f_measure
 from dataset.real_doc import MultiDocument
 
+def plot_topics(u_clusters, inv_vocab):
+    for u_cluster in u_clusters:
+        topic_plot_dict = {}
+        word_counts = u_cluster.get_word_counts()
+        total_words = np.sum(word_counts, axis=0)
+        word_probs = word_counts/total_words
+        for wi, word_prob in enumerate(word_probs):
+            topic_plot_dict[wi] = word_prob
+        sorted_prob = sorted(topic_plot_dict.items(), key=operator.itemgetter(1), reverse=True)
+        sorted_word_probs = []
+        words_sorted = []
+        for wi, prob in sorted_prob:
+            if prob == 0:
+                break
+            sorted_word_probs.append(prob)
+            words_sorted.append(inv_vocab[wi])
+        
+        if len(words_sorted) > 70:
+            h = 1200
+        else:
+            h = 800
+        sorted_word_probs.reverse()
+        words_sorted.reverse()
+        title = "Topic " + str(u_cluster.k)
+        canvas = toyplot.Canvas(width=500, height=h)
+        axes = canvas.cartesian(label=title, margin=100)
+        axes.bars(sorted_word_probs, along='y')
+        axes.y.ticks.locator = toyplot.locator.Explicit(labels=words_sorted)
+        axes.y.ticks.labels.angle = -90
+        
+        toyplot.browser.show(canvas)
+    
 def md_eval(doc_synth, models, models_desc):
     seg_times = []
     for model in models:
@@ -404,8 +438,8 @@ def real_dataset_tests():
         config = json.load(data_file)
     doc_col = MultiDocument(config)
     data = Data(doc_col)
-    betas = [0.1, 0.3, 0.6, 0.8, 1.0, 2.0, 5.0, 10]
-    #betas = [0.8]
+    #betas = [0.1, 0.3, 0.6, 0.8, 1.0, 2.0, 5.0, 10]
+    betas = [0.8]
     
     single_docs = doc_col.get_single_docs()
     beta_models = []
@@ -415,14 +449,15 @@ def real_dataset_tests():
         greedy_model = greedy_seg.MultiDocGreedySeg(beta_prior,\
                                                          data,\
                                                          max_topics=doc_col.max_topics,\
-                                                         seg_dur=doc_col.seg_dur,\
-                                                         std=doc_col.std,\
+                                                         seg_dur=8,\
+                                                         std=3,\
                                                          use_prior=True)
         sd_model = sd_seg.SingleDocDPSeg(beta_prior, single_docs, data)
         beta_models_names += [sd_model.desc+str(beta), greedy_model.desc+str(beta)]
         beta_models += [sd_model, greedy_model]
     md_eval(doc_col, beta_models, beta_models_names)
+    plot_topics(beta_models[1].best_segmentation[-1][0][1], doc_col.inv_vocab)
         
     
-skip_topics_test()
-#real_dataset_tests()
+#skip_topics_test()
+real_dataset_tests()
