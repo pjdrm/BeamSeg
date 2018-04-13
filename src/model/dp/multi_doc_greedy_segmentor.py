@@ -11,11 +11,10 @@ from tqdm import trange
 
 class MultiDocGreedySeg(AbstractSegmentor):
     
-    def __init__(self, beta, data, max_topics=None, seg_dur=10.0, std=3.0, use_prior=True):
-        super(MultiDocGreedySeg, self).__init__(beta,\
+    def __init__(self, alpha, data, max_topics=None, seg_prior=None, use_prior=True):
+        super(MultiDocGreedySeg, self).__init__(alpha,\
                                                 data,\
-                                                seg_dur=seg_dur,\
-                                                std=std,\
+                                                seg_prior=seg_prior,\
                                                 use_prior=use_prior,\
                                                 desc="greedy")
         self.max_topics = self.data.max_doc_len if max_topics is None else max_topics

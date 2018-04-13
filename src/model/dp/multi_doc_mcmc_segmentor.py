@@ -11,8 +11,8 @@ from tqdm import trange
 
 class MultiDocMCMCSeg(AbstractSegmentor):
     
-    def __init__(self, beta, data, max_topics=None, seg_dur=10.0, std=3.0, use_prior=True):
-        super(MultiDocMCMCSeg, self).__init__(beta,\
+    def __init__(self, alpha, data, max_topics=None, seg_dur=10.0, std=3.0, use_prior=True):
+        super(MultiDocMCMCSeg, self).__init__(alpha,\
                                                 data,\
                                                 seg_dur=seg_dur,\
                                                 std=std,\

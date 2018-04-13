@@ -24,7 +24,7 @@ SEG_VI = "vi_segmentation_step"
 
 class MultiDocVISeg(AbstractSegmentor):
     
-    def __init__(self, beta,\
+    def __init__(self, alpha,\
                        data,\
                        max_topics=None,\
                        seg_dur=10.0,\
@@ -34,7 +34,7 @@ class MultiDocVISeg(AbstractSegmentor):
                        seg_config=None,\
                        log_dir="../logs/",\
                        log_flag=True):
-        super(MultiDocVISeg, self).__init__(beta,\
+        super(MultiDocVISeg, self).__init__(alpha,\
                                             data,\
                                             max_topics=max_topics,\
                                             seg_dur=seg_dur, std=std,\

@@ -18,7 +18,7 @@ def print_corpus(vocab_dic, doc_synth_tt, desc, outDir, flags):
 def run():
     pi = 0.2
     alpha = 15
-    beta = 0.6
+    alpha = 0.6
     K = 10
     W = 15
     n_sents = 50
@@ -33,10 +33,10 @@ def run():
     print_text_flag = False
     flags = [print_theta_flag, print_heat_map_flag, print_text_flag]
     
-    doc_synth_tt = SyntheticTopicTrackingDoc(pi, alpha, beta, K, W, n_sents, sentence_l)
+    doc_synth_tt = SyntheticTopicTrackingDoc(pi, alpha, alpha, K, W, n_sents, sentence_l)
     doc_synth_tt.generate_doc()
     print_corpus(vocab_dic, doc_synth_tt, "Topic Tracking", outDir, flags)
     
-    doc_synth_rnd_tp = SyntheticRndTopicPropsDoc(pi, alpha, beta, K, W, n_sents, sentence_l)
+    doc_synth_rnd_tp = SyntheticRndTopicPropsDoc(pi, alpha, alpha, K, W, n_sents, sentence_l)
     doc_synth_rnd_tp.generate_doc()
     print_corpus(vocab_dic, doc_synth_rnd_tp, "Random Topic Proportions", outDir, flags)

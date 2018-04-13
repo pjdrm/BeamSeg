@@ -8,8 +8,8 @@ import model.dp.multi_doc_dp_segmentor as dp_seg
 
 class SingleDocDPSeg():
     
-    def __init__(self, beta, single_docs, data, seg_type=None):
-        self.beta = beta
+    def __init__(self, alpha, single_docs, data, seg_type=None):
+        self.beta = alpha
         self.single_docs = single_docs
         self.seg_type = seg_type
         self.sd_segs = []

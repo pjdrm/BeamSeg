@@ -13,7 +13,7 @@ class SyntheticDocument(object):
     def __init__(self, configs):
         self.pi = configs["model"]["pi"]
         self.alpha = configs["model"]["alpha"]
-        self.beta = configs["model"]["beta"]
+        self.beta = configs["model"]["alpha"]
         self.gamma = configs["model"]["gamma"]
         
         self.K = configs["synthetic_data"]["K"]
@@ -98,11 +98,11 @@ to use the draw_theta, update_alpha, and update_theta.
 Otherwise I would have to repeat the code.
 '''
 class SyntheticTopicTrackingDoc(SyntheticDocument, TopicTrackingModel):
-    def __init__(self, pi, alpha, beta, K, W, n_sents, sentence_l):
+    def __init__(self, pi, alpha, alpha, K, W, n_sents, sentence_l):
         configs = {"model": {}, "synthetic_data": {}}
         configs["model"]["pi"] = pi
         configs["model"]["alpha"] = alpha
-        configs["model"]["beta"] = beta
+        configs["model"]["alpha"] = alpha
         configs["model"]["gamma"] = 10
         
         configs["synthetic_data"]["K"] = 10

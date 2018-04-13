@@ -11,11 +11,11 @@ class CVBSynDoc(object):
     '''
     classdocs
     '''
-    def __init__(self, beta, pi, sent_len, doc_len, n_docs):
+    def __init__(self, alpha, pi, sent_len, doc_len, n_docs):
         self.isMD = False if n_docs == 1 else True
         self.n_docs = n_docs
         n_sents = doc_len*n_docs
-        self.W = len(beta)
+        self.W = len(alpha)
         self.rho = np.random.binomial(1, pi, size=n_sents)
         #The last sentence of each document must be 1
         for u in range(doc_len-1, n_sents, doc_len):
@@ -24,7 +24,7 @@ class CVBSynDoc(object):
         self.rho[-1] = 0
         self.docs_index = range(doc_len, n_sents+1, doc_len)
         self.K = np.count_nonzero(self.rho)+1
-        self.phi = np.array([np.random.dirichlet(beta) for k in range(self.K)])
+        self.phi = np.array([np.random.dirichlet(alpha) for k in range(self.K)])
             
         self.U_W_counts = np.zeros((n_sents, self.W), dtype=int32)
         k = 0
@@ -56,10 +56,10 @@ class CVBSynDoc2(object):
     '''
     This version forces all documents to have the same number of segments
     '''
-    def __init__(self, beta, pi, sent_len, n_segs, n_docs):
+    def __init__(self, alpha, pi, sent_len, n_segs, n_docs):
         self.isMD = False if n_docs == 1 else True
         self.n_docs = n_docs
-        self.W = len(beta)
+        self.W = len(alpha)
         self.rho = []
         self.docs_index = []
         n_sents = 0
@@ -74,7 +74,7 @@ class CVBSynDoc2(object):
         self.rho[-1] = 0
         self.rho = np.array(self.rho)
         self.K = n_segs
-        self.phi = np.array([np.random.dirichlet(beta) for k in range(self.K)])
+        self.phi = np.array([np.random.dirichlet(alpha) for k in range(self.K)])
         
         self.W_I_words = []
         doc_i = 0
@@ -122,16 +122,16 @@ class CVBSynDoc3(object):
     '''
     This version forces all documents to have the same number of segments
     '''
-    def __init__(self, beta):
+    def __init__(self, alpha):
         self.isMD = True
         self.n_docs = 2
-        self.W = len(beta)
+        self.W = len(alpha)
         self.rho = [0, 0, 0, 0, 0, 0, 0, 0, 1]
         self.rho += [0, 0, 0, 0, 0, 0, 0, 0, 0]
         self.docs_index = [9, 18]
         self.rho = np.array(self.rho)
         self.K = 2
-        self.phi = np.array([np.random.dirichlet(beta) for k in range(self.K)])
+        self.phi = np.array([np.random.dirichlet(alpha) for k in range(self.K)])
         n_sents = len(self.rho)
         self.U_W_counts = np.zeros((n_sents, self.W), dtype=int32)
         sent_len = 10
@@ -160,11 +160,11 @@ class CVBSynSkipTopics(object):
     '''
     This version forces all documents to have the same number of segments
     '''
-    def __init__(self, beta, pi, sent_len, n_segs, n_docs, n_topics, log_dir="../logs/"):
+    def __init__(self, alpha, pi, sent_len, n_segs, n_docs, n_topics, log_dir="../logs/"):
         self.isMD = False if n_docs == 1 else True
         self.n_docs = n_docs
         self.sent_len = sent_len
-        self.W = len(beta)
+        self.W = len(alpha)
         self.rho = []
         self.rho_u_clusters = []
         self.docs_index = []
@@ -198,7 +198,7 @@ class CVBSynSkipTopics(object):
         self.rho[-1] = 0
         self.rho = np.array(self.rho)
         self.K = n_topics
-        self.phi = np.array([np.random.dirichlet(beta) for i in range(self.K)])
+        self.phi = np.array([np.random.dirichlet(alpha) for i in range(self.K)])
         
         self.W_I_words = []
         doc_i = 0

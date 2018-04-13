@@ -10,6 +10,7 @@ from nltk.corpus import stopwords
 import nltk.stem
 import os
 import dataset.synthetic_doc as syn_doc
+import copy
 
 #add_to_stop_words = ["object", "time", "zero"]
 #add_to_stop_words = ["object", "time", "want", "one", "velocity", "would"]
@@ -214,7 +215,7 @@ class MultiDocument(Document):
         os.remove(doc_path)
         self.isMD = True
         self.doc_topic_seq, self.doc_rho_topics, self.max_topics = self.load_doc_topic_seq(configs["real_data"]["doc_links_dir"])
-        self.seg_dur, self.std = self.get_prior()
+        self.seg_prior = self.get_prior()
         self.print_processed_docs(configs["real_data"]["docs_processed_dir"])
         
     def print_processed_docs(self, out_dir):
@@ -233,13 +234,21 @@ class MultiDocument(Document):
                 f.write(doc_i_str)
         
     def get_prior(self):
+        prior_docs = []
         seg_lens = []
-        prev_rho = 0
-        for rho_1 in self.rho_eq_1:
-            seg_len = rho_1-prev_rho+1
-            seg_lens.append(seg_len)
-            prev_rho = rho_1+1
-        return np.average(seg_lens), np.std(seg_lens)
+        seg_len = 0
+        cp_rho = copy.deepcopy(self.rho)
+        cp_rho[-1] = 1
+        for u, rho in enumerate(cp_rho):
+            seg_len += 1
+            if rho == 1:
+                seg_lens.append(seg_len)
+                seg_len = 0
+                
+            if u+1 in self.docs_index:
+                prior_docs.append([np.average(seg_lens), np.std(seg_lens)])
+                seg_lens = []
+        return prior_docs
         
     def load_doc_topic_seq(self, links_dir):
         topic_dict = {}

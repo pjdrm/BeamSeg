@@ -14,23 +14,21 @@ GL_DATA = None
 
 class AbstractSegmentor(object):
 
-    def __init__(self, beta,\
+    def __init__(self, alpha,\
                        data,\
                        max_topics=None,\
-                       seg_dur=10.0,\
-                       std=3.0,\
+                       seg_prior=None,\
                        use_prior=True,\
                        log_dir="../logs/",\
                        desc="Abs_seg"):
         self.set_gl_data(data)
         self.data = data
-        self.seg_dur = seg_dur
-        self.std = std
+        self.seg_prior = seg_prior
         self.use_prior = use_prior
         self.max_topics = self.data.max_doc_len if max_topics is None else max_topics
         self.desc = desc
         self.log_dir = log_dir
-        self.beta = beta
+        self.beta = alpha
         self.C_beta = np.sum(self.beta)
         self.W = data.W
         self.best_segmentation = [[] for i in range(self.data.max_doc_len)]
@@ -256,11 +254,13 @@ class AbstractSegmentor(object):
                 break
         return is_cached
     
-    def segment_log_prior(self, seg_size):
-        seg_prob = norm(self.seg_dur, self.std).pdf(seg_size)
+    def segment_log_prior(self, seg_size, doc_i):
+        seg_dur = self.seg_prior[doc_i][0]
+        std = self.seg_prior[doc_i][1]
+        seg_prob = norm(seg_dur, std).pdf(seg_size)
         return np.log(seg_prob)
         
-    def segmentation_log_prior(self, u_clusters):
+    def segmentation_log_prior(self, u_clusters): #TODO: this seems to slow down computation a lot, make more efficient
         log_prior = 0.0
         for doc_i in range(self.data.n_docs):
             doc_i_segmentation = self.get_segmentation(doc_i, u_clusters)
@@ -270,7 +270,7 @@ class AbstractSegmentor(object):
             seg_size = 0
             for u in doc_i_segmentation:
                 if u == 1:
-                    log_prior += self.segment_log_prior(seg_size)
+                    log_prior += self.segment_log_prior(seg_size, doc_i)
                     seg_size = 0
                 else:
                     seg_size += 1

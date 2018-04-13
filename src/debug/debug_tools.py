@@ -176,10 +176,10 @@ def run_gibbs_sampler(rnd_topics_model, configs, sampler_log_file="logging/Sampl
     wd = sampler.gibbs_sampler(n_iter, burn_in, lag)
     return wd, sampler
 
-def print_matrix_heat_map(matrix, title, outFile):
+def print_matrix_heat_map(matrix, prior, outFile):
     ax = plt.axes()
     sns.heatmap(matrix, ax = ax, cmap='RdYlGn_r')
-    ax.set_title(title)
+    ax.set_title(prior)
     plt.xlabel('Topics', fontsize=14)
     plt.ylabel('Segments', fontsize=14)
     plt.savefig(outFile, bbox_inches='tight')

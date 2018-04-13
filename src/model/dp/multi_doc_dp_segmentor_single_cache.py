@@ -15,8 +15,8 @@ SEG_SKIP_K = "seg_skip_k"
 
 class MultiDocDPSeg(AbstractSegmentor):
     
-    def __init__(self, beta, data, max_topics=None, seg_type=None, desc="MD_DP_seg"):
-        super(MultiDocDPSeg, self).__init__(beta, data, max_topics=max_topics, desc=desc)
+    def __init__(self, alpha, data, max_topics=None, seg_type=None, desc="MD_DP_seg"):
+        super(MultiDocDPSeg, self).__init__(alpha, data, max_topics=max_topics, desc=desc)
         self.max_cache = 20
         if seg_type is None or seg_type == SEG_ALL_COMBS:
             self.seg_func = self.segment_u

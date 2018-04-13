@@ -166,14 +166,14 @@ def syn_ditto_doc_test():
     debug_tools.clean_log()
     pi = 0.02
     alpha = 0.7
-    beta = 0.7
+    alpha = 0.7
     K = 6
     W = 150
     n_sents = 300
     sentence_l = 5
     log_flag = False
     
-    doc_synth_tt = syn_doc.SyntheticRndTopicPropsDoc(pi, alpha, beta, K, W, n_sents, sentence_l)
+    doc_synth_tt = syn_doc.SyntheticRndTopicPropsDoc(pi, alpha, alpha, K, W, n_sents, sentence_l)
     doc_synth_tt.generate_doc()
     
     n_copies = 4
@@ -184,7 +184,7 @@ def syn_ditto_doc_test():
     burn_in = 0
     lag = 0
     
-    rnd_topics_model = seg.RndTopicsCacheModel(gamma, alpha, beta, K, ditto_doc, log_flag)
+    rnd_topics_model = seg.RndTopicsCacheModel(gamma, alpha, alpha, K, ditto_doc, log_flag)
     md_log_file_cache = "logging/Sampler_MD_cache.log"
     wd_md_doc_results_cache, sampler = debug_tools.run_gibbs_sampler(rnd_topics_model, n_iter, burn_in, lag, md_log_file_cache)
     
@@ -194,7 +194,7 @@ def syn_ditto_doc_test():
     for i in range(n_copies):
         sampler_log_file = "logging/Sampler" + str(i) + "_indv.log"
         ind_log_file_list.append(sampler_log_file)
-        rnd_topics_model = seg.RndTopicsCacheModel(gamma, alpha, beta, K, doc_synth_tt, log_flag)
+        rnd_topics_model = seg.RndTopicsCacheModel(gamma, alpha, alpha, K, doc_synth_tt, log_flag)
         wd, sampler = debug_tools.run_gibbs_sampler(rnd_topics_model, n_iter, burn_in, lag, sampler_log_file)
         wd_indv_doc_results += wd
     
