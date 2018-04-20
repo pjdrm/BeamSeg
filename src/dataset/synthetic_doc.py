@@ -97,12 +97,17 @@ Making this class to inherit from TopicTrackingModel
 to use the draw_theta, update_alpha, and update_theta.
 Otherwise I would have to repeat the code.
 '''
+'''
+Making this class to inherit from TopicTrackingModel
+to use the draw_theta, update_alpha, and update_theta.
+Otherwise I would have to repeat the code.
+'''
 class SyntheticTopicTrackingDoc(SyntheticDocument, TopicTrackingModel):
-    def __init__(self, pi, alpha, alpha, K, W, n_sents, sentence_l):
+    def __init__(self, pi, alpha, beta, K, W, n_sents, sentence_l):
         configs = {"model": {}, "synthetic_data": {}}
         configs["model"]["pi"] = pi
         configs["model"]["alpha"] = alpha
-        configs["model"]["alpha"] = alpha
+        configs["model"]["beta"] = beta
         configs["model"]["gamma"] = 10
         
         configs["synthetic_data"]["K"] = 10

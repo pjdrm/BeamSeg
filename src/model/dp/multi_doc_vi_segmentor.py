@@ -437,7 +437,7 @@ class MultiDocVISeg(AbstractSegmentor):
             total_ll += self.segment_ll(word_counts)
             
         u_clusters_hyps = self.get_var_seg_greedy(u_begin, u_end, u_clusters_hyps)
-        if self.use_prior:
+        if self.use_dur_prior:
             total_ll += self.segmentation_log_prior(u_clusters_hyps[0][1])
         return total_ll, u_clusters_hyps
     
@@ -485,7 +485,7 @@ class MultiDocVISeg(AbstractSegmentor):
         for prev_seg_ll, prev_u_clusters in best_seg:
             u_clusters = copy.deepcopy(prev_u_clusters)
             seg_ll, u_clusters = self.get_var_seg_greedy(u_begin, u_end, u_clusters)
-            if self.use_prior:
+            if self.use_dur_prior:
                 seg_ll += self.segmentation_log_prior(u_clusters)
             if seg_ll > best_seg_ll:
                 best_u_clusters = u_clusters
@@ -583,7 +583,7 @@ class MultiDocVISeg(AbstractSegmentor):
                     seg_ll = seg_hyps[0][0]
                     u_clusters = seg_hyps[0][1]
                     
-                    if self.use_prior:
+                    if self.use_dur_prior:
                         seg_ll += self.segmentation_log_prior(u_clusters)
                         
                     if seg_ll > best_seg_ll:

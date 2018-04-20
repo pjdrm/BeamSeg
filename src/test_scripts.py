@@ -5,7 +5,7 @@ Created on Feb 22, 2018
 '''
 from dataset.synthetic_doc_cvb import CVBSynDoc2, CVBSynSkipTopics
 import time
-from model.dp.segmentor import Data
+from model.dp.segmentor import Data, SEG_TT, SEG_BL
 import model.dp.multi_doc_dp_segmentor as dp_seg
 import model.dp.multi_doc_dp_segmentor_single_cache as dp_seg_sc
 import model.dp.multi_doc_vi_segmentor as vi_seg
@@ -489,26 +489,28 @@ def real_dataset_tests():
         config = json.load(data_file)
     doc_col = MultiDocument(config)
     data = Data(doc_col)
-    #betas = [0.1, 0.3, 0.6, 0.8, 1.0, 2.0, 5.0, 10]
-    #betas = [0.8]
-    betas = [get_best_prior(doc_col)]
-    
-    single_docs = doc_col.get_single_docs()
-    beta_models = []
-    beta_models_names = []
-    for beta_prior in betas:
-        #beta_prior = np.array([alpha]*doc_col.W)
-        greedy_model = greedy_seg.MultiDocGreedySeg(beta_prior,\
-                                                         data,\
-                                                         max_topics=doc_col.max_topics,\
-                                                         seg_prior=doc_col.seg_prior,\
-                                                         use_prior=True)
-        prior_desc = str(beta_prior[0])[:3]
-        sd_model = sd_seg.SingleDocDPSeg(beta_prior, single_docs, data)
-        beta_models_names += [sd_model.desc+prior_desc, greedy_model.desc+prior_desc]
-        beta_models += [sd_model, greedy_model]
-    md_eval(doc_col, beta_models, beta_models_names)
-    #plot_topics(beta_models[1].best_segmentation[-1][0][1], doc_col.inv_vocab)
+    alpha_tt_t0_test = [4]
+    greedy_seg_config = {"max_topics": doc_col.max_topics,\
+                         "max_cache": 10,
+                         "beta": np.array([0.8]*doc_col.W),\
+                         "use_dur_prior": True,
+                         "seg_dur_prior": doc_col.seg_dur_prior,\
+                         "seg_func": SEG_BL,\
+                         "phi_log_dir": "/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/logs/phi"}
+    #single_docs = doc_col.get_single_docs()
+    models = []
+    models_names = []
+    for alpha_tt_t0 in alpha_tt_t0_test:
+        greedy_seg_config["alpha_tt_t0"] = alpha_tt_t0
+        greedy_model = greedy_seg.MultiDocGreedySeg(data, seg_config=greedy_seg_config)
+        prior_desc = str(alpha_tt_t0)
+        #sd_model = sd_seg.SingleDocDPSeg(beta_prior, single_docs, data)
+        #models_names += [sd_model.desc+prior_desc, greedy_model.desc+prior_desc]
+        #models += [sd_model, greedy_model]
+        models_names.append(greedy_model.desc+prior_desc)
+        models.append(greedy_model)
+    md_eval(doc_col, models, models_names)
+    #plot_topics(models[1].best_segmentation[-1][0][1], doc_col.inv_vocab)
         
     
 #skip_topics_test()

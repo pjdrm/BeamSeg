@@ -53,8 +53,8 @@ def update_theta(N_t_k_w_k, beta_t_k, theta_t_mean_k):
     theta_t_mean_update = num_theta_t_mean/denom_theta_t_mean
     return theta_t_mean_update
     
-use_seed = False
-seed = 229#84
+use_seed = True
+seed = 232#84
 if use_seed:
     np.random.seed(seed)
         
@@ -62,9 +62,17 @@ n_draws = 100
 W = 10
 K = 5
 n_chunks = 20
-base_prior = 10
-alpha_t = 12
+base_prior = 0.8
+
+alpha_t = 10
+
+phi_t_init = np.random.dirichlet([base_prior]*K)
+topic_draws = np.random.multinomial(n_draws, phi_t_init, size=1)[0]
+alpha_smooth = 0.001
+phi_t_mean = (topic_draws+alpha_smooth)/(np.sum(topic_draws*1.0)+alpha_smooth*K)
+
 phi_t_mean = np.random.dirichlet([base_prior]*K)
+phi_t = phi_t_mean
 
 beta_t = [base_prior]*K
 theta_t_mean = [np.array([1.0]*W) for k in range(K)]
@@ -73,16 +81,19 @@ theta_t = draw_theta_topics(beta_t, theta_t_mean, K)
 all_topic_prop_draws = []
 for t in range(n_chunks):
     print(phi_t_mean)
-    phi_t = np.random.dirichlet(alpha_t*phi_t_mean)
+    print("alpha: " + str(alpha_t))
+    
     all_topic_prop_draws.append(phi_t)
-    topic_draws = np.random.multinomial(n_draws, phi_t, size=1)[0]
     
     theta_t = draw_theta_topics(beta_t, theta_t_mean, K)
     N_t_k_w = draw_words(K, W, topic_draws, theta_t)
     
     alpha_t = update_alpha(phi_t_mean, topic_draws, alpha_t)
     phi_t_mean = update_phi(topic_draws, alpha_t, phi_t_mean)
-
+    
+    phi_t = np.random.dirichlet(alpha_t*phi_t_mean)
+    topic_draws = np.random.multinomial(n_draws, phi_t, size=1)[0]
+    
     for k, beta in enumerate(beta_t):
         beta_t[k] = update_beta(theta_t_mean[k], N_t_k_w[k], beta)
         theta_t_mean[k] = update_theta(N_t_k_w[k], beta_t[k], theta_t_mean[k])
@@ -94,7 +105,7 @@ for t in range(n_chunks):
 canvas = toyplot.Canvas(width=1500, height=500)
 axes = canvas.cartesian(label="Random Topics", margin=100)
 axes.bars(rnd_topics)
-toyplot.browser.show(canvas)
+#toyplot.browser.show(canvas)
 
 canvas = toyplot.Canvas(width=1500, height=500)
 axes = canvas.cartesian(label="Dynamic Topics", margin=100)

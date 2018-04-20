@@ -75,7 +75,7 @@ class MultiDocMCMCSegV2(AbstractSegmentor):
             u_clusters.append(new_cluster)
             
         seg_ll = self.segmentation_ll(u_clusters)
-        if self.use_prior:
+        if self.use_dur_prior:
             seg_ll += self.segmentation_log_prior(u_clusters)
             
         return seg_ll, u_clusters
@@ -91,7 +91,7 @@ class MultiDocMCMCSegV2(AbstractSegmentor):
     def mcmc_segmentation_step(self, best_u_clusters):
         doc_i_rho = [self.get_final_segmentation(doc_i) for doc_i in range(self.data.n_docs)]
         best_seg_ll = self.segmentation_ll(best_u_clusters)
-        if self.use_prior:
+        if self.use_dur_prior:
             best_seg_ll += self.segmentation_log_prior(best_u_clusters)
                             
         with open(self.log_dir+"dp_tracker_"+self.desc+".txt", "a+") as f:
@@ -176,7 +176,7 @@ class MultiDocMCMCSegV2(AbstractSegmentor):
             
                 move_u_clusters = u_clusters_merge
                 move_seg_ll = self.segmentation_ll(u_clusters_merge)
-                if self.use_prior:
+                if self.use_dur_prior:
                     move_seg_ll += self.segmentation_log_prior(u_clusters_merge)
                     
             accept = self.accept_move(move_u_clusters, move_seg_ll, best_seg_ll)

@@ -10,7 +10,7 @@ import math
 import logging
 
 class TopicTrackingModel(object):
-    def __init__(self, gamma, alpha, alpha, K, data, log_flag=False):
+    def __init__(self, gamma, alpha, beta, K, data, log_flag=False):
         if log_flag:
             logging.basicConfig(format='%(levelname)s:%(message)s',\
                                 filename='logging/TopicTrackingModel.log',\
@@ -21,7 +21,7 @@ class TopicTrackingModel(object):
             logger.disabled = True
         
         self.gamma = gamma
-        self.beta = alpha
+        self.beta = beta
         self.K = K
         self.W = data.W
         '''

@@ -215,7 +215,7 @@ class MultiDocument(Document):
         os.remove(doc_path)
         self.isMD = True
         self.doc_topic_seq, self.doc_rho_topics, self.max_topics = self.load_doc_topic_seq(configs["real_data"]["doc_links_dir"])
-        self.seg_prior = self.get_prior()
+        self.seg_dur_prior = self.get_prior()
         self.print_processed_docs(configs["real_data"]["docs_processed_dir"])
         
     def print_processed_docs(self, out_dir):
@@ -258,7 +258,7 @@ class MultiDocument(Document):
             
         for doc_name in self.doc_names:
             doc_name_split = doc_name.split("_")
-            doc_name = doc_name_split[0]+"_"+doc_name_split[1]
+            doc_name = doc_name_split[0]+"_"+doc_name_split[1]+"_"
             topic_seq = []
             topic_seq_dict = {}
             for dir_name in os.listdir(links_dir):

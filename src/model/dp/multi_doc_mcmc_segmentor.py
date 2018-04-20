@@ -80,7 +80,7 @@ class MultiDocMCMCSeg(AbstractSegmentor):
                 current_u_clusters.append(new_cluster)
                 
             seg_ll = self.segmentation_ll(current_u_clusters)
-            if self.use_prior:
+            if self.use_dur_prior:
                 seg_ll += self.segmentation_log_prior(current_u_clusters)
                 
             if seg_ll > best_seg_ll:
@@ -94,7 +94,7 @@ class MultiDocMCMCSeg(AbstractSegmentor):
     def mcmc_segmentation_step(self, best_u_clusters):
         doc_i_rho = [self.get_final_segmentation(doc_i) for doc_i in range(self.data.n_docs)]
         best_seg_ll = self.segmentation_ll(best_u_clusters)
-        if self.use_prior:
+        if self.use_dur_prior:
             best_seg_ll += self.segmentation_log_prior(best_u_clusters)
                             
         with open(self.log_dir+"dp_tracker_"+self.desc+".txt", "a+") as f:
@@ -192,7 +192,7 @@ class MultiDocMCMCSeg(AbstractSegmentor):
                                 current_u_clusters.append(new_u_cluster)
                         
                             seg_ll = self.segmentation_ll(current_u_clusters)
-                            if self.use_prior:
+                            if self.use_dur_prior:
                                 seg_ll += self.segmentation_log_prior(current_u_clusters)
                                 
                             if seg_ll > best_seg_ll:

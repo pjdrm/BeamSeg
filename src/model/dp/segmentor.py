@@ -6,33 +6,42 @@ Created on Feb 22, 2018
 import numpy as np
 import copy
 from scipy.special import gammaln
+from scipy.special import digamma
 import os
 import collections
 from scipy.stats import norm
 
 GL_DATA = None
+SEG_BL = "seg_bl" #as in base line segmentation
+SEG_TT = "seg_tt" #as in 
 
 class AbstractSegmentor(object):
 
-    def __init__(self, alpha,\
-                       data,\
-                       max_topics=None,\
-                       seg_prior=None,\
-                       use_prior=True,\
+    def __init__(self, data,\
+                       seg_config=None,\
                        log_dir="../logs/",\
                        desc="Abs_seg"):
         self.set_gl_data(data)
         self.data = data
-        self.seg_prior = seg_prior
-        self.use_prior = use_prior
-        self.max_topics = self.data.max_doc_len if max_topics is None else max_topics
+        self.use_dur_prior = seg_config["use_dur_prior"]
+        if self.use_dur_prior:
+            self.seg_dur_prior = seg_config["seg_dur_prior"] #this is the prior regarding segment length
+        self.max_topics = self.data.max_doc_len if seg_config["max_topics"] is None else seg_config["max_topics"]
         self.desc = desc
         self.log_dir = log_dir
-        self.beta = alpha
-        self.C_beta = np.sum(self.beta)
         self.W = data.W
         self.best_segmentation = [[] for i in range(self.data.max_doc_len)]
-        self.seg_ll_C = gammaln(self.beta.sum())-gammaln(self.beta).sum()
+        
+        if seg_config is None or seg_config["seg_func"] == SEG_BL:
+            self.seg_func_desc = SEG_BL
+            self.beta = seg_config["beta"]
+            self.segmentation_ll = self.segmentation_ll_bs
+            self.seg_ll_C = gammaln(self.beta.sum())-gammaln(self.beta).sum()
+        elif seg_config["seg_func"] == SEG_TT:
+            self.seg_func_desc = SEG_TT
+            self.segmentation_ll = self.segmentation_ll_topic_tracking
+            self.alpha_tt_t0 = seg_config["alpha_tt_t0"]
+            self.phi_tt_t0 = np.sum(self.data.all_doc_word_counts(), axis=0)/np.sum(self.data.total_words)
         
         os.remove(self.log_dir+"dp_tracker_"+self.desc+".txt") if os.path.exists(self.log_dir+"dp_tracker_"+self.desc+".txt") else None
 
@@ -245,7 +254,7 @@ class AbstractSegmentor(object):
     
     def is_cached_seg(self, seg_ll, cached_segs):
         is_cached = False
-        for cached_seg_ll, cached_u_clusters in cached_segs:
+        for cached_seg_ll, cached_u_clusters, phi_t in cached_segs:
             if cached_seg_ll == seg_ll:
                 is_cached = True
                 break
@@ -255,25 +264,18 @@ class AbstractSegmentor(object):
         return is_cached
     
     def segment_log_prior(self, seg_size, doc_i):
-        seg_dur = self.seg_prior[doc_i][0]
-        std = self.seg_prior[doc_i][1]
+        seg_dur = self.seg_dur_prior[doc_i][0]
+        std = self.seg_dur_prior[doc_i][1]
         seg_prob = norm(seg_dur, std).pdf(seg_size)
         return np.log(seg_prob)
         
     def segmentation_log_prior(self, u_clusters): #TODO: this seems to slow down computation a lot, make more efficient
         log_prior = 0.0
-        for doc_i in range(self.data.n_docs):
-            doc_i_segmentation = self.get_segmentation(doc_i, u_clusters)
-            if len(doc_i_segmentation) == 0:
-                continue
-            doc_i_segmentation[-1] = 1
-            seg_size = 0
-            for u in doc_i_segmentation:
-                if u == 1:
-                    log_prior += self.segment_log_prior(seg_size, doc_i)
-                    seg_size = 0
-                else:
-                    seg_size += 1
+        for u_cluster in u_clusters:
+            for doc_i in u_cluster.get_docs():
+                u_begin, u_end = u_cluster.get_segment(doc_i)
+                seg_size = u_end-u_begin+1
+                log_prior += self.segment_log_prior(seg_size, doc_i)
         return log_prior
     
     def segment_ll(self, word_counts):
@@ -288,20 +290,66 @@ class AbstractSegmentor(object):
         seg_ll = self.seg_ll_C+f1-f2
         return seg_ll
     
-    def segmentation_ll(self, u_clusters):
+    def segmentation_ll_bs(self, u_clusters):
         '''
         Returns the log likelihood of the segmentation of all documents.
         :param u_clusters: list of SentenceCluster corresponding to the best segmentation up to u-1
         '''
+        
         segmentation_ll = 0.0
         for u_cluster in u_clusters:
             word_counts = u_cluster.get_word_counts()
             segmentation_ll += self.segment_ll(word_counts)
             
-        if self.use_prior:
+        if self.use_dur_prior:
             segmentation_ll += self.segmentation_log_prior(u_clusters)
                                 
         return segmentation_ll
+    
+    def get_topic_tracking_prior(self, u_clusters):#TODO: deal with t=0
+        #Computing beta and theta for t=0, which is the word probability
+        #distribution for the first cluster. 
+        #Another possibility is compute from the collection
+        #alpha_smooth = 0.8
+        #phi_tt = [(u_clusters[0].get_word_counts()+alpha_smooth)/(np.sum(u_clusters[0].get_word_counts()*1.0)+alpha_smooth*self.data.W)] 
+        phi_tt = [self.phi_tt_t0]
+        
+        alpha_tt = self.alpha_tt_t0
+        all_alpha_tt = []
+        for t, u_cluster in enumerate(u_clusters):
+            word_counts = u_cluster.get_word_counts()
+            #update alpha
+            num_alpha_update = np.sum(phi_tt[t]*(digamma(word_counts+alpha_tt*phi_tt[t])-digamma(alpha_tt*phi_tt[t])))
+            denom_alpha_update = digamma(np.sum(word_counts)+alpha_tt)-digamma(alpha_tt)
+            alpha_tt = alpha_tt*(num_alpha_update/denom_alpha_update)
+            all_alpha_tt.append(alpha_tt)
+            
+            #current phi estimation
+            num_phi_tt = word_counts+alpha_tt*phi_tt[t]
+            denom_phi_tt = np.sum(word_counts)+alpha_tt
+            phi_tt.append(num_phi_tt/denom_phi_tt)
+            
+        return all_alpha_tt, phi_tt
+    
+    def segmentation_ll_topic_tracking(self, u_clusters):
+        '''
+        Returns the log likelihood of the segmentation of all documents. Uses
+        a dynamic topic modeling based on Shinji Watanabe 2010.
+        :param u_clusters: list of SentenceCluster corresponding to the best segmentation up to u-1
+        '''
+        segmentation_ll = 0.0
+        alpha, phi_tt = self.get_topic_tracking_prior(u_clusters)
+        for alpha_t, phi_t, u_cluster in zip(alpha, phi_tt[:-1], u_clusters):
+            word_counts = u_cluster.get_word_counts()
+            f1 = gammaln(word_counts+alpha_t*phi_t).sum()
+            f2 = gammaln(word_counts.sum()+alpha_t)
+            C = gammaln(alpha_t)-gammaln(alpha_t*phi_t).sum()
+            segmentation_ll += C+f1-f2
+            
+        if self.use_dur_prior: #this is the prior on segment duration
+            segmentation_ll += self.segmentation_log_prior(u_clusters)
+                                
+        return segmentation_ll, phi_tt
     
     def dp_segmentation_step(self):
         with open(self.log_dir+"dp_tracker_"+self.desc+".txt", "a+") as f:
@@ -379,6 +427,9 @@ class Data(object):
         '''
         return self.docs_word_counts[doc_i]
     
+    def all_doc_word_counts(self):
+        return self.doc_synth.U_W_counts
+    
     def get_doc_i(self, u):
         for doc_i, doc_i_index in enumerate(self.docs_index):
             if u < doc_i_index:
@@ -411,6 +462,22 @@ class Data(object):
                 doc_u = 0
             else:
                 doc_u += 1
+        return gs_u_clusters
+    
+    def get_gs_u_clusters(self, u_max):
+        gs_u_clusters = []
+        for doc_i in range(self.n_docs):
+            for doc_u, k in enumerate(self.doc_rho_topics[doc_i][:u_max+1]):
+                u_k_cluster = None
+                for u_cluster in gs_u_clusters:
+                    if u_cluster.k == k:
+                        u_k_cluster = u_cluster
+                        break
+                if u_k_cluster is None:
+                    u_k_cluster = SentenceCluster(doc_u, doc_u, [doc_i], k)
+                    gs_u_clusters.append(u_k_cluster)
+                else:
+                    u_k_cluster.add_sents(doc_u, doc_u, doc_i)
         return gs_u_clusters
     
 class SentenceCluster(object):
