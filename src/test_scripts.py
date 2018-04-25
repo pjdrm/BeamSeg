@@ -489,26 +489,43 @@ def real_dataset_tests():
         config = json.load(data_file)
     doc_col = MultiDocument(config)
     data = Data(doc_col)
-    alpha_tt_t0_test = [4]
+    alpha_tt_t0_test = []
+    betas = [0.1, .5, 2, 5, 10, 20, 30]
     greedy_seg_config = {"max_topics": doc_col.max_topics,\
-                         "max_cache": 10,
+                         "max_cache": 50,
                          "beta": np.array([0.8]*doc_col.W),\
                          "use_dur_prior": True,
                          "seg_dur_prior": doc_col.seg_dur_prior,\
-                         "seg_func": SEG_BL,\
+                         "seg_func": SEG_TT,\
                          "phi_log_dir": "/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/logs/phi"}
     #single_docs = doc_col.get_single_docs()
     models = []
     models_names = []
-    for alpha_tt_t0 in alpha_tt_t0_test:
-        greedy_seg_config["alpha_tt_t0"] = alpha_tt_t0
+    for beta in betas:
+        #for alpha_tt_t0 in alpha_tt_t0_test:
+        #greedy_seg_config["alpha_tt_t0"] = alpha_tt_t0
+        greedy_seg_config["beta"] = np.array([beta]*doc_col.W)
         greedy_model = greedy_seg.MultiDocGreedySeg(data, seg_config=greedy_seg_config)
-        prior_desc = str(alpha_tt_t0)
+        prior_desc = str(beta)
         #sd_model = sd_seg.SingleDocDPSeg(beta_prior, single_docs, data)
         #models_names += [sd_model.desc+prior_desc, greedy_model.desc+prior_desc]
         #models += [sd_model, greedy_model]
         models_names.append(greedy_model.desc+prior_desc)
         models.append(greedy_model)
+        
+    sd_seg_config = {"max_topics": doc_col.max_topics,\
+                     "max_cache": 10,
+                     "seg_type": None,
+                     "beta": np.array([0.8]*doc_col.W),\
+                     "use_dur_prior": True,
+                     "seg_dur_prior": doc_col.seg_dur_prior,\
+                     "seg_func": SEG_BL,\
+                     "alpha_tt_t0": 4,\
+                     "phi_log_dir": "/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/logs/phi"}
+    single_docs = doc_col.get_single_docs()
+    sd_model = sd_seg.SingleDocDPSeg(single_docs, data, seg_config=sd_seg_config)
+    #models_names += [sd_model.desc+"0.8"]
+    #models += [sd_model]
     md_eval(doc_col, models, models_names)
     #plot_topics(models[1].best_segmentation[-1][0][1], doc_col.inv_vocab)
         

@@ -23,6 +23,7 @@ class AbstractSegmentor(object):
                        desc="Abs_seg"):
         self.set_gl_data(data)
         self.data = data
+        self.beta = seg_config["beta"]
         self.use_dur_prior = seg_config["use_dur_prior"]
         if self.use_dur_prior:
             self.seg_dur_prior = seg_config["seg_dur_prior"] #this is the prior regarding segment length
@@ -34,14 +35,19 @@ class AbstractSegmentor(object):
         
         if seg_config is None or seg_config["seg_func"] == SEG_BL:
             self.seg_func_desc = SEG_BL
-            self.beta = seg_config["beta"]
             self.segmentation_ll = self.segmentation_ll_bs
             self.seg_ll_C = gammaln(self.beta.sum())-gammaln(self.beta).sum()
         elif seg_config["seg_func"] == SEG_TT:
             self.seg_func_desc = SEG_TT
             self.segmentation_ll = self.segmentation_ll_topic_tracking
-            self.alpha_tt_t0 = seg_config["alpha_tt_t0"]
+            self.alpha_tt_t0 = np.sum(self.beta)#seg_config["alpha_tt_t0"]
+            self.phi_tt_t0 = self.beta/self.alpha_tt_t0#self.beta/self.alpha_tt_t0
+            '''
             self.phi_tt_t0 = np.sum(self.data.all_doc_word_counts(), axis=0)/np.sum(self.data.total_words)
+            if np.count_nonzero(self.phi_tt_t0==0) > 0:
+                alpha_smooth = 0.8
+                self.phi_tt_t0 = (self.phi_tt_t0+alpha_smooth)/(np.sum(self.phi_tt_t0*1.0)+alpha_smooth*self.data.W)
+            '''
         
         os.remove(self.log_dir+"dp_tracker_"+self.desc+".txt") if os.path.exists(self.log_dir+"dp_tracker_"+self.desc+".txt") else None
 
@@ -254,7 +260,8 @@ class AbstractSegmentor(object):
     
     def is_cached_seg(self, seg_ll, cached_segs):
         is_cached = False
-        for cached_seg_ll, cached_u_clusters, phi_t in cached_segs:
+        for cached_seg in cached_segs:
+            cached_seg_ll = cached_seg[0]
             if cached_seg_ll == seg_ll:
                 is_cached = True
                 break
@@ -313,10 +320,16 @@ class AbstractSegmentor(object):
         #alpha_smooth = 0.8
         #phi_tt = [(u_clusters[0].get_word_counts()+alpha_smooth)/(np.sum(u_clusters[0].get_word_counts()*1.0)+alpha_smooth*self.data.W)] 
         phi_tt = [self.phi_tt_t0]
-        
         alpha_tt = self.alpha_tt_t0
         all_alpha_tt = []
         for t, u_cluster in enumerate(u_clusters):
+            '''
+            if t > 1:
+                all_alpha_tt.append(1.0)
+                phi_tt.append(np.array([.8]*self.data.W))
+                continue
+            '''
+             
             word_counts = u_cluster.get_word_counts()
             #update alpha
             num_alpha_update = np.sum(phi_tt[t]*(digamma(word_counts+alpha_tt*phi_tt[t])-digamma(alpha_tt*phi_tt[t])))

@@ -44,7 +44,7 @@ class MultiDocGreedySeg(AbstractSegmentor):
                 if prob <= 0.001:
                     break
                 sorted_word_probs.append(prob)
-                words_sorted.append(self.data.doc_synth.inv_vocab[wi])
+                words_sorted.append(str(prob)[:4]+" "+self.data.doc_synth.inv_vocab[wi])
             
             if len(words_sorted) >= 70:
                 h = 1200
@@ -79,7 +79,7 @@ class MultiDocGreedySeg(AbstractSegmentor):
             t = trange(self.data.max_doc_len, desc='', leave=True)
             cached_segs = [(-np.inf, [], None)]
             for u in t:
-                if u == 45:
+                if u == 26:
                     a = 0
                 for doc_i in range(self.data.n_docs):
                     t.set_description("(%d, %d)" % (u, doc_i))

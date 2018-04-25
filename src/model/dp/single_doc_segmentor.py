@@ -8,20 +8,19 @@ import model.dp.multi_doc_dp_segmentor as dp_seg
 
 class SingleDocDPSeg():
     
-    def __init__(self, alpha, single_docs, data, seg_type=None):
-        self.beta = alpha
+    def __init__(self, single_docs, data, seg_config):
+        self.seg_config = seg_config
         self.single_docs = single_docs
-        self.seg_type = seg_type
         self.sd_segs = []
         self.sd_topics = []
         self.data = data
-        self.best_segmentation = [[(None, [])]]
+        self.best_segmentation = [[(None, [], None)]]
         self.desc = "SD_seg"
         
     def segment_docs(self):
         for doc in self.single_docs:
             data = Data(doc)
-            dp_model = dp_seg.MultiDocDPSeg(self.beta, data, desc=self.desc)
+            dp_model = dp_seg.MultiDocDPSeg(data, seg_config=self.seg_config, desc=self.desc)
             dp_model.max_row_cache = 1
             dp_model.segment_docs()
             u_clusters = dp_model.best_segmentation[-1][0][1]

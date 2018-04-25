@@ -16,10 +16,11 @@ SEG_SKIP_K = "seg_skip_k"
 
 class MultiDocDPSeg(AbstractSegmentor):
     
-    def __init__(self, alpha, data, max_topics=None, seg_type=None, desc="MD_DP_seg"):
-        super(MultiDocDPSeg, self).__init__(alpha, data, max_topics=max_topics, desc=desc)
-        self.max_cache = 5
+    def __init__(self, data, seg_config, desc="MD_DP_seg"):
+        super(MultiDocDPSeg, self).__init__(data, seg_config=seg_config, desc=desc)
+        self.max_cache = seg_config["max_cache"]
         self.max_row_cache = 10
+        seg_type = seg_config["seg_type"]
         if seg_type is None or seg_type == SEG_ALL_COMBS:
             self.seg_func = self.segment_u
             self.doc_combs_list = self.init_doc_combs()#All n possible combinations (up to the number of documents). Its a list of pairs where the first element is the combination and second the remaining docs
@@ -104,7 +105,11 @@ class MultiDocDPSeg(AbstractSegmentor):
         '''
         if u_begin == 0:#The first column corresponds to having all sentences from all docs in a single segment (there is only one language model)
             u_cluster = SentenceCluster(u_begin, u_end, list(range(self.data.n_docs)), 0)
-            segmentation_ll = self.segmentation_ll([u_cluster])
+            seg_result = self.segmentation_ll([u_cluster])
+            if isinstance(seg_result, float):
+                segmentation_ll = seg_result
+            else:
+                segmentation_ll = seg_result[0]
             return [(segmentation_ll, [u_cluster])]
            
         best_seg_ll = -np.inf
@@ -114,7 +119,11 @@ class MultiDocDPSeg(AbstractSegmentor):
             self.fit_sentences(u_begin, u_end, other_docs, best_seg) #Note that this changes u_clusters
             self.new_seg_point(u_begin, u_end, doc_comb, best_seg) #Note that this changes u_clusters
             #if self.valid_segmentation(u_clusters):
-            segmentation_ll = self.segmentation_ll(best_seg)
+            seg_result = self.segmentation_ll(best_seg)
+            if isinstance(seg_result, float):
+                segmentation_ll = seg_result
+            else:
+                segmentation_ll = seg_result[0]
             if segmentation_ll >= best_seg_ll:
                 best_seg_ll = segmentation_ll
                 best_seg_clusters = best_seg

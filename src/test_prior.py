@@ -53,7 +53,7 @@ def update_theta(N_t_k_w_k, beta_t_k, theta_t_mean_k):
     theta_t_mean_update = num_theta_t_mean/denom_theta_t_mean
     return theta_t_mean_update
     
-use_seed = True
+use_seed = False
 seed = 232#84
 if use_seed:
     np.random.seed(seed)
@@ -62,16 +62,18 @@ n_draws = 100
 W = 10
 K = 5
 n_chunks = 20
-base_prior = 0.8
+base_prior = 10.0
 
-alpha_t = 10
+alpha_base = 10
+alpha_t = [alpha_base]*n_chunks
 
 phi_t_init = np.random.dirichlet([base_prior]*K)
 topic_draws = np.random.multinomial(n_draws, phi_t_init, size=1)[0]
 alpha_smooth = 0.001
-phi_t_mean = (topic_draws+alpha_smooth)/(np.sum(topic_draws*1.0)+alpha_smooth*K)
+#phi_t_mean = (topic_draws+alpha_smooth)/(np.sum(topic_draws*1.0)+alpha_smooth*K)
 
-phi_t_mean = np.random.dirichlet([base_prior]*K)
+#phi_t_mean = np.random.dirichlet([base_prior]*K)
+phi_t_mean = np.array([base_prior]*K)/alpha_t[0]
 phi_t = phi_t_mean
 
 beta_t = [base_prior]*K
@@ -80,18 +82,18 @@ theta_t = draw_theta_topics(beta_t, theta_t_mean, K)
 
 all_topic_prop_draws = []
 for t in range(n_chunks):
-    print(phi_t_mean)
-    print("alpha: " + str(alpha_t))
+    #print(phi_t_mean)
+    #print("alpha: " + str(alpha_t))
     
     all_topic_prop_draws.append(phi_t)
     
     theta_t = draw_theta_topics(beta_t, theta_t_mean, K)
     N_t_k_w = draw_words(K, W, topic_draws, theta_t)
     
-    alpha_t = update_alpha(phi_t_mean, topic_draws, alpha_t)
-    phi_t_mean = update_phi(topic_draws, alpha_t, phi_t_mean)
+    #alpha_t = update_alpha(phi_t_mean, topic_draws, alpha_t)
+    phi_t_mean = update_phi(topic_draws, alpha_t[t], phi_t_mean)
     
-    phi_t = np.random.dirichlet(alpha_t*phi_t_mean)
+    phi_t = np.random.dirichlet(alpha_t[t]*phi_t_mean)
     topic_draws = np.random.multinomial(n_draws, phi_t, size=1)[0]
     
     for k, beta in enumerate(beta_t):
@@ -109,5 +111,5 @@ axes.bars(rnd_topics)
 
 canvas = toyplot.Canvas(width=1500, height=500)
 axes = canvas.cartesian(label="Dynamic Topics", margin=100)
-axes.bars(all_topic_prop_draws)
+axes.bars(all_topic_prop_draws[1:])
 toyplot.browser.show(canvas)
