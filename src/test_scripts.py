@@ -489,8 +489,8 @@ def real_dataset_tests():
         config = json.load(data_file)
     doc_col = MultiDocument(config)
     data = Data(doc_col)
-    alpha_tt_t0_test = []
-    betas = [0.1, .5, 2, 5, 10, 20, 30]
+    alpha_tt_t0_test = [0.2, 3, 8, 10, 20, 80, 100]
+    betas = [8]
     greedy_seg_config = {"max_topics": doc_col.max_topics,\
                          "max_cache": 50,
                          "beta": np.array([0.8]*doc_col.W),\
@@ -503,7 +503,7 @@ def real_dataset_tests():
     models_names = []
     for beta in betas:
         #for alpha_tt_t0 in alpha_tt_t0_test:
-        #greedy_seg_config["alpha_tt_t0"] = alpha_tt_t0
+        #    greedy_seg_config["alpha_tt_t0"] = alpha_tt_t0
         greedy_seg_config["beta"] = np.array([beta]*doc_col.W)
         greedy_model = greedy_seg.MultiDocGreedySeg(data, seg_config=greedy_seg_config)
         prior_desc = str(beta)

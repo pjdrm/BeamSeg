@@ -41,7 +41,7 @@ class AbstractSegmentor(object):
             self.seg_func_desc = SEG_TT
             self.segmentation_ll = self.segmentation_ll_topic_tracking
             self.alpha_tt_t0 = np.sum(self.beta)#seg_config["alpha_tt_t0"]
-            self.phi_tt_t0 = self.beta/self.alpha_tt_t0#self.beta/self.alpha_tt_t0
+            self.phi_tt_t0 = self.beta/self.alpha_tt_t0
             '''
             self.phi_tt_t0 = np.sum(self.data.all_doc_word_counts(), axis=0)/np.sum(self.data.total_words)
             if np.count_nonzero(self.phi_tt_t0==0) > 0:
@@ -313,36 +313,42 @@ class AbstractSegmentor(object):
                                 
         return segmentation_ll
     
+    def fix_point_est_alpha(self, phi_t, word_counts, max_iters=500, tol=1e-7):
+        alpha_t = 10
+        for i in range(max_iters):
+            print(alpha_t)
+            num_alpha_new = np.sum(phi_t*(digamma(word_counts+alpha_t*phi_t)-digamma(alpha_t*phi_t)))
+            denom_alpha_new = digamma(np.sum(word_counts)+alpha_t)-digamma(alpha_t)
+            alpha_t_new = alpha_t*(num_alpha_new/denom_alpha_new)
+            if abs(alpha_t_new-alpha_t) < tol:
+                return alpha_t_new
+            alpha_t = alpha_t_new
+        return alpha_t
+    
     def get_topic_tracking_prior(self, u_clusters):#TODO: deal with t=0
         #Computing beta and theta for t=0, which is the word probability
         #distribution for the first cluster. 
         #Another possibility is compute from the collection
         #alpha_smooth = 0.8
-        #phi_tt = [(u_clusters[0].get_word_counts()+alpha_smooth)/(np.sum(u_clusters[0].get_word_counts()*1.0)+alpha_smooth*self.data.W)] 
-        phi_tt = [self.phi_tt_t0]
-        alpha_tt = self.alpha_tt_t0
-        all_alpha_tt = []
+        #phi = [(u_clusters[0].get_word_counts()+alpha_smooth)/(np.sum(u_clusters[0].get_word_counts()*1.0)+alpha_smooth*self.data.W)] 
+        phi = [self.phi_tt_t0]
+        alpha_t = self.alpha_tt_t0
+        alpha = []
         for t, u_cluster in enumerate(u_clusters):
-            '''
-            if t > 1:
-                all_alpha_tt.append(1.0)
-                phi_tt.append(np.array([.8]*self.data.W))
-                continue
-            '''
-             
             word_counts = u_cluster.get_word_counts()
             #update alpha
-            num_alpha_update = np.sum(phi_tt[t]*(digamma(word_counts+alpha_tt*phi_tt[t])-digamma(alpha_tt*phi_tt[t])))
-            denom_alpha_update = digamma(np.sum(word_counts)+alpha_tt)-digamma(alpha_tt)
-            alpha_tt = alpha_tt*(num_alpha_update/denom_alpha_update)
-            all_alpha_tt.append(alpha_tt)
+            num_alpha_update = np.sum(phi[t]*(digamma(word_counts+alpha_t*phi[t])-digamma(alpha_t*phi[t])))
+            denom_alpha_update = digamma(np.sum(word_counts)+alpha_t)-digamma(alpha_t)
+            alpha_t_update= alpha_t*(num_alpha_update/denom_alpha_update)
+            #alpha_t = self.fix_point_est_alpha(phi[t], word_counts)
+            alpha.append(alpha_t_update)
             
             #current phi estimation
-            num_phi_tt = word_counts+alpha_tt*phi_tt[t]
-            denom_phi_tt = np.sum(word_counts)+alpha_tt
-            phi_tt.append(num_phi_tt/denom_phi_tt)
+            num_phi_tt = word_counts+alpha_t*phi[t]
+            denom_phi_tt = np.sum(word_counts)+alpha_t
+            phi.append(num_phi_tt/denom_phi_tt)
             
-        return all_alpha_tt, phi_tt
+        return alpha, phi
     
     def segmentation_ll_topic_tracking(self, u_clusters):
         '''
