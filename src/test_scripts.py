@@ -490,13 +490,16 @@ def real_dataset_tests():
     doc_col = MultiDocument(config)
     data = Data(doc_col)
     alpha_tt_t0_test = [0.2, 3, 8, 10, 20, 80, 100]
-    betas = [8]
+    betas = [2]
+    import ray
+    ray.init(redirect_output=True)
     greedy_seg_config = {"max_topics": doc_col.max_topics,\
-                         "max_cache": 50,
+                         "max_cache": 80,
                          "beta": np.array([0.8]*doc_col.W),\
                          "use_dur_prior": True,
                          "seg_dur_prior": doc_col.seg_dur_prior,\
                          "seg_func": SEG_TT,\
+                         "run_parallel": True,\
                          "phi_log_dir": "/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/logs/phi"}
     #single_docs = doc_col.get_single_docs()
     models = []
@@ -519,7 +522,7 @@ def real_dataset_tests():
                      "beta": np.array([0.8]*doc_col.W),\
                      "use_dur_prior": True,
                      "seg_dur_prior": doc_col.seg_dur_prior,\
-                     "seg_func": SEG_BL,\
+                     "seg_func": SEG_TT,\
                      "alpha_tt_t0": 4,\
                      "phi_log_dir": "/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/logs/phi"}
     single_docs = doc_col.get_single_docs()

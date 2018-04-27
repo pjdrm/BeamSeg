@@ -507,6 +507,7 @@ class SentenceCluster(object):
     def __init__(self, u_begin, u_end, docs, k):
         self.k = k
         self.doc_segs_dict = {}
+        global GL_DATA
         self.word_counts = np.zeros(GL_DATA.W)
         
         for doc_i in docs:

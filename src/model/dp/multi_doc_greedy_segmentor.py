@@ -12,6 +12,9 @@ import toyplot
 import toyplot.pdf
 import shutil
 import os
+import ray
+import itertools
+import multiprocessing
 
 class MultiDocGreedySeg(AbstractSegmentor):
     
@@ -22,6 +25,8 @@ class MultiDocGreedySeg(AbstractSegmentor):
         self.max_topics = self.data.max_doc_len if seg_config["max_topics"] is None else seg_config["max_topics"]
         self.max_cache = seg_config["max_cache"]
         self.phi_log_dir = seg_config["phi_log_dir"]
+        self.run_parallel = seg_config["run_parallel"]
+        self.n_cpus = multiprocessing.cpu_count()
         shutil.rmtree(self.phi_log_dir) if os.path.isdir(self.phi_log_dir) else None
         os.makedirs(self.phi_log_dir)
         
@@ -69,6 +74,36 @@ class MultiDocGreedySeg(AbstractSegmentor):
         hyp_seg = self.get_segmentation(doc_i, u_clusters)
         return hyp_seg
     
+    def compute_seg_ll_seq(self, cached_segs, doc_i, u):
+        '''
+        Computes in sequentially the segmentation likelihood of assigning u to
+        some topic k starting from a segmentation in cached_segs
+        :param cached_segs: u_clusters for which we want to know the likelihood
+        :param doc_i: document index from which u comes
+        :param u: utterance index
+        '''
+        self.set_gl_data(self.data)
+        b = 0
+        doc_i_segs = []
+        for cached_seg_ll, cached_u_clusters, phi_tt in cached_segs:
+            if b == 28:
+                a = 0
+            b += 1
+            possible_clusters = self.get_valid_insert_clusters(doc_i, cached_u_clusters)
+            for k in range(self.max_topics):
+                current_u_clusters = copy.deepcopy(cached_u_clusters)
+                current_u_clusters = self.assign_target_k(u, u, doc_i, k, possible_clusters, current_u_clusters)
+                phi_tt = None
+                if self.seg_func_desc == SEG_TT:
+                    seg_ll, phi_tt = self.segmentation_ll(current_u_clusters)
+                else:
+                    seg_ll = self.segmentation_ll(current_u_clusters)
+                #This was here before but seems wrong, prior is already added in segmentation_ll (even in pre topic tracking version)
+                #if self.use_dur_prior:
+                #    seg_ll += self.segmentation_log_prior(current_u_clusters)
+                doc_i_segs.append((seg_ll, current_u_clusters, phi_tt))
+        return doc_i_segs
+    
     def greedy_segmentation_step(self):
         '''
         Similar to vi_segmentation_step, but considers all
@@ -79,32 +114,20 @@ class MultiDocGreedySeg(AbstractSegmentor):
             t = trange(self.data.max_doc_len, desc='', leave=True)
             cached_segs = [(-np.inf, [], None)]
             for u in t:
-                if u == 26:
+                if u == 22:
                     a = 0
                 for doc_i in range(self.data.n_docs):
                     t.set_description("(%d, %d)" % (u, doc_i))
                     if u > self.data.doc_len(doc_i)-1:
                         continue
                     
-                    doc_i_segs = []
-                    b = 0
-                    for cached_seg_ll, cached_u_clusters, phi_tt in cached_segs:
-                        if b == 28:
-                            a = 0
-                        b += 1
-                        possible_clusters = self.get_valid_insert_clusters(doc_i, cached_u_clusters)
-                        for k in range(self.max_topics):
-                            current_u_clusters = copy.deepcopy(cached_u_clusters)
-                            current_u_clusters = self.assign_target_k(u, u, doc_i, k, possible_clusters, current_u_clusters)
-                            phi_tt = None
-                            if self.seg_func_desc == SEG_TT:
-                                seg_ll, phi_tt = self.segmentation_ll(current_u_clusters)
-                            else:
-                                seg_ll = self.segmentation_ll(current_u_clusters)
-                            #This was here before but seems wrong, prior is already added in segmentation_ll (even in pre topic tracking version)
-                            #if self.use_dur_prior:
-                            #    seg_ll += self.segmentation_log_prior(current_u_clusters)
-                            doc_i_segs.append((seg_ll, current_u_clusters, phi_tt))
+                    if self.run_parallel:
+                        n = int(self.max_cache/(self.n_cpus+1)) #TODO: adjust to number of CPUs
+                        cached_segs_split = [cached_segs[i:i+n] for i in range(0, len(cached_segs), n)]
+                        results = ray.get([compute_seg_ll_parallel.remote(self, cached_segs_job, doc_i, u) for cached_segs_job in cached_segs_split])
+                        doc_i_segs = list(itertools.chain.from_iterable(results))
+                    else:
+                        doc_i_segs = self.compute_seg_ll_seq(cached_segs, doc_i, u)
                             
                     doc_i_segs = sorted(doc_i_segs, key=operator.itemgetter(0), reverse=True)
                     no_dups_doc_i_segs = []
@@ -188,3 +211,34 @@ class MultiDocGreedySeg(AbstractSegmentor):
     def segment_docs(self):
         self.set_gl_data(self.data)
         self.greedy_segmentation_step()
+        
+@ray.remote
+def compute_seg_ll_parallel(segmentor, cached_segs, doc_i, u):
+    '''
+    Computes in parallel the segmentation likelihood of assigning u to
+    some topic k starting from a segmetnation in cached_segs
+    :param cached_segs: u_clusters for which we want to know the likelihood
+    :param doc_i: document index from which u comes
+    :param u: utterance index
+    '''
+    segmentor.set_gl_data(segmentor.data)
+    b = 0
+    doc_i_segs = []
+    for cached_seg_ll, cached_u_clusters, phi_tt in cached_segs:
+        if b == 28:
+            a = 0
+        b += 1
+        possible_clusters = segmentor.get_valid_insert_clusters(doc_i, cached_u_clusters)
+        for k in range(segmentor.max_topics):
+            current_u_clusters = copy.deepcopy(cached_u_clusters)
+            current_u_clusters = segmentor.assign_target_k(u, u, doc_i, k, possible_clusters, current_u_clusters)
+            phi_tt = None
+            if segmentor.seg_func_desc == SEG_TT:
+                seg_ll, phi_tt = segmentor.segmentation_ll(current_u_clusters)
+            else:
+                seg_ll = segmentor.segmentation_ll(current_u_clusters)
+            #This was here before but seems wrong, prior is already added in segmentation_ll (even in pre topic tracking version)
+            #if self.use_dur_prior:
+            #    seg_ll += self.segmentation_log_prior(current_u_clusters)
+            doc_i_segs.append((seg_ll, current_u_clusters, phi_tt))
+    return doc_i_segs        
