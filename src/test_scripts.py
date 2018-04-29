@@ -484,23 +484,25 @@ def skip_topics_incremental_test():
         print("doc_%d %s" % (doc_i, str(results_dict[doc_i])))
         
 def real_dataset_tests():
-    config_file = "/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/dataset/physics_test.json"
+    config_file = "../dataset/physics_test.json"
     with open(config_file) as data_file:    
         config = json.load(data_file)
     doc_col = MultiDocument(config)
     data = Data(doc_col)
     alpha_tt_t0_test = [0.2, 3, 8, 10, 20, 80, 100]
-    betas = [2]
+    betas = [0.8]
     import ray
     ray.init(redirect_output=True)
     greedy_seg_config = {"max_topics": doc_col.max_topics,\
-                         "max_cache": 80,
+                         "max_cache": 50,
                          "beta": np.array([0.8]*doc_col.W),\
                          "use_dur_prior": True,
                          "seg_dur_prior": doc_col.seg_dur_prior,\
                          "seg_func": SEG_TT,\
-                         "run_parallel": True,\
-                         "phi_log_dir": "/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/logs/phi"}
+                         "run_parallel": False,\
+                         "check_cache_flag": False,\
+                         "log_flag": False,\
+                         "phi_log_dir": "../TopicTrackingSegmentation/logs/phi"}
     #single_docs = doc_col.get_single_docs()
     models = []
     models_names = []

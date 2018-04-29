@@ -276,13 +276,13 @@ class MultiDocument(Document):
         i = 0
         for u, rho_u in enumerate(self.rho):
             doc_i_rho_topics.append(docs_topic_seq[doc_i][i])
+            if rho_u == 1:
+                i += 1
             if u+1 in self.docs_index:
                 i = 0
                 doc_i += 1
                 doc_rho_topics.append(doc_i_rho_topics)
                 doc_i_rho_topics = []
-            elif rho_u == 1:
-                i += 1
         
         topics_set = set()
         for doc_i_rho_topics in doc_rho_topics:
@@ -295,7 +295,9 @@ class MultiDocument(Document):
     def prepare_multi_doc(self, doc_dir, doc_tmp_path):
         str_cat_files = ""
         doc_offset = 0
-        for doc in os.listdir(doc_dir):
+        docs_file_names = ['L02_14_processed_annotated_html.txt', 'L02_19_processed_annotated_html.txt', 'L02_8_processed_annotated_html.txt']#os.listdir(doc_dir)
+        #sorted(docs_file_names)
+        for doc in docs_file_names:
             self.doc_names.append(doc)
             with open(os.path.join(doc_dir, doc), encoding="utf-8", errors='ignore') as f:
                 str_doc = f.read()
@@ -325,6 +327,22 @@ class MultiDocument(Document):
         for doc_index in self.docs_index:
             updated_doc_index.append(doc_index-c)
         self.docs_index = updated_doc_index
+        
+        '''
+        carry = 0
+        gl_index = 0
+        for doc_index in self.docs_index:
+            updated_index = doc_index-carry
+            for i in range(gl_index, len(self.ghost_lines)):
+                if self.ghost_lines[i] < doc_index:
+                    updated_index -= 1
+                    carry += 1
+                    gl_index += 1
+                    if gl_index == len(self.ghost_lines):
+                        break
+            updated_doc_index.append(updated_index)
+        self.docs_index = updated_doc_index
+        '''
         
     def get_single_docs(self):
         indv_docs = syn_doc.multi_doc_slicer(self)

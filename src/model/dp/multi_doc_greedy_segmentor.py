@@ -26,6 +26,8 @@ class MultiDocGreedySeg(AbstractSegmentor):
         self.max_cache = seg_config["max_cache"]
         self.phi_log_dir = seg_config["phi_log_dir"]
         self.run_parallel = seg_config["run_parallel"]
+        self.check_cache_flag = seg_config["check_cache_flag"]
+        self.log_flag = seg_config["log_flag"]
         self.n_cpus = multiprocessing.cpu_count()
         shutil.rmtree(self.phi_log_dir) if os.path.isdir(self.phi_log_dir) else None
         os.makedirs(self.phi_log_dir)
@@ -104,6 +106,53 @@ class MultiDocGreedySeg(AbstractSegmentor):
                 doc_i_segs.append((seg_ll, current_u_clusters, phi_tt))
         return doc_i_segs
     
+    def check_cache(self, doc_i, u, no_dups_doc_i_segs):
+        cached_segs = []
+        gave_warn = False
+        cached_correct_seg = False
+        found_correct_seg = False
+        for i, seg_result in enumerate(no_dups_doc_i_segs):
+            seg_ll = seg_result[0]
+            seg_clusters = seg_result[1]
+            
+            if u > 1:
+                n_correct_segs = 0
+                for doc_j in range(0, doc_i+1):
+                    rho_seg = self.get_segmentation(doc_j, seg_clusters)
+                    rho_gs = list(self.data.docs_rho_gs[doc_j][:u+1])
+                    rho_seg[-1] = 1
+                    rho_gs[-1] = 1
+                    if str(rho_seg) == str(rho_gs):
+                        n_correct_segs += 1
+                if n_correct_segs == doc_i+1: 
+                    is_correct_seg = True
+                    found_correct_seg = True
+                else:
+                    is_correct_seg = False
+            else:
+                is_correct_seg = True
+                found_correct_seg = True
+            
+            is_cached = self.is_cached_seg(seg_ll, cached_segs)
+            if not is_cached:
+                if len(cached_segs) < self.max_cache:
+                    if is_correct_seg:
+                        cached_correct_seg = True
+                    cached_segs.append(seg_result)
+                    cached_segs = sorted(cached_segs, key=operator.itemgetter(0), reverse=True)
+                    
+                elif seg_ll > cached_segs[-1][0]:
+                    if is_correct_seg:
+                        cached_correct_seg = True
+                    cached_segs[-1] = (seg_ll, seg_clusters)
+                    cached_segs = sorted(cached_segs, key=operator.itemgetter(0), reverse=True)
+                elif is_correct_seg and not gave_warn and not cached_correct_seg:
+                    print("\nWARNING NEED CACHE LEN %d"%i)
+                    gave_warn = True
+        if not found_correct_seg:
+            print("\nLOST CORRECT SEG u: %d"%u)
+        return cached_segs
+                        
     def greedy_segmentation_step(self):
         '''
         Similar to vi_segmentation_step, but considers all
@@ -131,7 +180,6 @@ class MultiDocGreedySeg(AbstractSegmentor):
                             
                     doc_i_segs = sorted(doc_i_segs, key=operator.itemgetter(0), reverse=True)
                     no_dups_doc_i_segs = []
-                    cached_segs = []
                     prev_seg_ll = -np.inf
                     for seg_result in doc_i_segs:
                         seg_ll = seg_result[0]
@@ -140,66 +188,28 @@ class MultiDocGreedySeg(AbstractSegmentor):
                             no_dups_doc_i_segs.append(seg_result)
                         prev_seg_ll = seg_ll
                     
-                    gave_warn = False
-                    cached_correct_seg = False
-                    found_correct_seg = False
-                    for i, seg_result in enumerate(no_dups_doc_i_segs):
-                        seg_ll = seg_result[0]
-                        seg_clusters = seg_result[1]
-                        
-                        if u > 1:
-                            n_correct_segs = 0
-                            for doc_j in range(0, doc_i+1):
-                                rho_seg = self.get_segmentation(doc_j, seg_clusters)
-                                rho_gs = list(self.data.docs_rho_gs[doc_j][:u+1])
-                                rho_seg[-1] = 1
-                                rho_gs[-1] = 1
-                                if str(rho_seg) == str(rho_gs):
-                                    n_correct_segs += 1
-                            if n_correct_segs == doc_i+1: 
-                                is_correct_seg = True
-                                found_correct_seg = True
-                            else:
-                                is_correct_seg = False
-                        else:
-                            is_correct_seg = True
-                            found_correct_seg = True
-                        
-                        is_cached = self.is_cached_seg(seg_ll, cached_segs)
-                        if not is_cached:
-                            if len(cached_segs) < self.max_cache:
-                                if is_correct_seg:
-                                    cached_correct_seg = True
-                                cached_segs.append(seg_result)
-                                cached_segs = sorted(cached_segs, key=operator.itemgetter(0), reverse=True)
-                                
-                            elif seg_ll > cached_segs[-1][0]:
-                                if is_correct_seg:
-                                    cached_correct_seg = True
-                                cached_segs[-1] = (seg_ll, seg_clusters)
-                                cached_segs = sorted(cached_segs, key=operator.itemgetter(0), reverse=True)
-                            elif is_correct_seg and not gave_warn and not cached_correct_seg:
-                                print("\nWARNING NEED CACHE LEN %d"%i)
-                                gave_warn = True
-                    if not found_correct_seg:
-                        print("\nLOST CORRECT SEG u: %d"%u)
+                    if self.check_cache_flag:
+                        cached_segs = self.check_cache(doc_i, u, no_dups_doc_i_segs)
+                    else:
+                        cached_segs = no_dups_doc_i_segs[:self.max_cache]
                 
-                gs_seg = self.data.get_gs_u_clusters(u)
-                if self.seg_func_desc == SEG_TT:
-                    gs_ll, gs_phi_tt = self.segmentation_ll(gs_seg)
-                else:
-                    gs_ll = self.segmentation_ll(gs_seg)
-                f.write("(%d) gs_ll: %.3f\n\n"%(u, gs_ll))
-                                
-                for i, cached_seg in enumerate(cached_segs):
-                    f.write("(%d)\t%d\tll: %.3f\n"%(u, i, cached_seg[0]))
-                    for doc_i in range(self.data.n_docs):
-                        f.write(str(self.get_segmentation(doc_i, cached_seg[1]))+" "
-                                +str(self.get_seg_with_topics(doc_i, cached_seg[1]))+"\n")
-                    f.write("\n")
-                if self.seg_func_desc == SEG_TT:
-                    self.log_phi_tt(u, cached_segs)
-                f.write("===============\n")
+                if self.log_flag:
+                    gs_seg = self.data.get_gs_u_clusters(u)
+                    if self.seg_func_desc == SEG_TT:
+                        gs_ll, gs_phi_tt = self.segmentation_ll(gs_seg)
+                    else:
+                        gs_ll = self.segmentation_ll(gs_seg)
+                    f.write("(%d) gs_ll: %.3f\n\n"%(u, gs_ll))
+                                    
+                    for i, cached_seg in enumerate(cached_segs):
+                        f.write("(%d)\t%d\tll: %.3f\n"%(u, i, cached_seg[0]))
+                        for doc_i in range(self.data.n_docs):
+                            f.write(str(self.get_segmentation(doc_i, cached_seg[1]))+" "
+                                    +str(self.get_seg_with_topics(doc_i, cached_seg[1]))+"\n")
+                        f.write("\n")
+                    if self.seg_func_desc == SEG_TT:
+                        self.log_phi_tt(u, cached_segs)
+                    f.write("===============\n")
         cached_segs = sorted(cached_segs, key=operator.itemgetter(0), reverse=True)
         self.best_segmentation[-1] = cached_segs
         if self.seg_func_desc == SEG_TT:
