@@ -91,6 +91,17 @@ class AbstractSegmentor(object):
             ret_list.append(cluster_k[0])
         return ret_list
     
+    def order_cluster(self, u_clusters):
+        ordered_clusters = []
+        for doc_i in range(self.data.n_docs):
+            ordered_k = self.get_cluster_order(doc_i, u_clusters)
+            for k in ordered_k:
+                k_cluster = self.get_k_cluster(k, u_clusters)
+                if k_cluster not in ordered_clusters:
+                    ordered_clusters.append(k_cluster)
+                if len(ordered_clusters) == len(u_clusters):
+                    return ordered_clusters
+    
     def get_final_segmentation(self, doc_i):
         '''
         Returns the final segmentation for a document.
@@ -357,6 +368,7 @@ class AbstractSegmentor(object):
         :param u_clusters: list of SentenceCluster corresponding to the best segmentation up to u-1
         '''
         segmentation_ll = 0.0
+        #u_clusters = self.order_cluster(u_clusters)
         alpha, phi_tt = self.get_topic_tracking_prior(u_clusters)
         for alpha_t, phi_t, u_cluster in zip(alpha, phi_tt[:-1], u_clusters):
             word_counts = u_cluster.get_word_counts()

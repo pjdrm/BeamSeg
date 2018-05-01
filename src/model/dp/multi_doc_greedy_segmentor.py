@@ -40,7 +40,7 @@ class MultiDocGreedySeg(AbstractSegmentor):
         '''
         phi = cached_segs[0][2]
         
-        for t, phi_t in enumerate(phi[:-1]):
+        for t, phi_t in enumerate(phi):
             topic_plot_dict = {}
             for wi, word_prob in enumerate(phi_t):
                 topic_plot_dict[wi] = word_prob
@@ -61,7 +61,11 @@ class MultiDocGreedySeg(AbstractSegmentor):
                 h = 800
             sorted_word_probs.reverse()
             words_sorted.reverse()
-            title = "Topic t" + str(cached_segs[0][1][t].k)
+            if len(cached_segs[0][1]) == t:
+                label = "Extra"
+            else:
+                label = "t " + str(cached_segs[0][1][t].k)
+            title = "Topic " + label
             canvas = toyplot.Canvas(width=500, height=h)
             axes = canvas.cartesian(label=title, margin=100)
             axes.bars(sorted_word_probs, along='y')
@@ -84,11 +88,10 @@ class MultiDocGreedySeg(AbstractSegmentor):
         :param doc_i: document index from which u comes
         :param u: utterance index
         '''
-        self.set_gl_data(self.data)
         b = 0
         doc_i_segs = []
         for cached_seg_ll, cached_u_clusters, phi_tt in cached_segs:
-            if b == 28:
+            if b == 23:
                 a = 0
             b += 1
             possible_clusters = self.get_valid_insert_clusters(doc_i, cached_u_clusters)
@@ -152,7 +155,7 @@ class MultiDocGreedySeg(AbstractSegmentor):
         if not found_correct_seg:
             print("\nLOST CORRECT SEG u: %d"%u)
         return cached_segs
-                        
+    
     def greedy_segmentation_step(self):
         '''
         Similar to vi_segmentation_step, but considers all
@@ -163,7 +166,7 @@ class MultiDocGreedySeg(AbstractSegmentor):
             t = trange(self.data.max_doc_len, desc='', leave=True)
             cached_segs = [(-np.inf, [], None)]
             for u in t:
-                if u == 22:
+                if u == 21:
                     a = 0
                 for doc_i in range(self.data.n_docs):
                     t.set_description("(%d, %d)" % (u, doc_i))

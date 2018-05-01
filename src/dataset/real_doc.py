@@ -238,7 +238,6 @@ class MultiDocument(Document):
         seg_lens = []
         seg_len = 0
         cp_rho = copy.deepcopy(self.rho)
-        cp_rho[-1] = 1
         for u, rho in enumerate(cp_rho):
             seg_len += 1
             if rho == 1:
@@ -246,6 +245,8 @@ class MultiDocument(Document):
                 seg_len = 0
                 
             if u+1 in self.docs_index:
+                seg_lens.append(seg_len)
+                seg_len = 0
                 prior_docs.append([np.average(seg_lens), np.std(seg_lens)])
                 seg_lens = []
         return prior_docs
@@ -295,7 +296,7 @@ class MultiDocument(Document):
     def prepare_multi_doc(self, doc_dir, doc_tmp_path):
         str_cat_files = ""
         doc_offset = 0
-        docs_file_names = ['L02_14_processed_annotated_html.txt', 'L02_19_processed_annotated_html.txt', 'L02_8_processed_annotated_html.txt']#os.listdir(doc_dir)
+        docs_file_names = ['L02_19_processed_annotated_html.txt', 'L02_14_processed_annotated_html.txt']#os.listdir(doc_dir)
         #sorted(docs_file_names)
         for doc in docs_file_names:
             self.doc_names.append(doc)
@@ -313,22 +314,6 @@ class MultiDocument(Document):
     #TODO: REALLY CHECK THIS IS CORRECT
     def update_doc_index(self):
         updated_doc_index = []
-        c = 0
-        doc_index = self.docs_index.pop(0)
-        checked_indexes = []
-        for gl in self.ghost_lines:
-            if gl > doc_index - 1:
-                checked_indexes.append(doc_index)
-                updated_doc_index.append(doc_index-c)
-                doc_index = self.docs_index.pop(0)
-            c += 1
-        if not doc_index in checked_indexes:
-            updated_doc_index.append(doc_index-c)
-        for doc_index in self.docs_index:
-            updated_doc_index.append(doc_index-c)
-        self.docs_index = updated_doc_index
-        
-        '''
         carry = 0
         gl_index = 0
         for doc_index in self.docs_index:
@@ -342,7 +327,6 @@ class MultiDocument(Document):
                         break
             updated_doc_index.append(updated_index)
         self.docs_index = updated_doc_index
-        '''
         
     def get_single_docs(self):
         indv_docs = syn_doc.multi_doc_slicer(self)

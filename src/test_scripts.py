@@ -493,23 +493,23 @@ def real_dataset_tests():
     betas = [0.8]
     import ray
     ray.init(redirect_output=True)
-    greedy_seg_config = {"max_topics": doc_col.max_topics,\
+    greedy_seg_config = {"max_topics": doc_col.max_topics,
                          "max_cache": 50,
-                         "beta": np.array([0.8]*doc_col.W),\
+                         "beta": np.array([0.8]*doc_col.W),
                          "use_dur_prior": True,
-                         "seg_dur_prior": doc_col.seg_dur_prior,\
-                         "seg_func": SEG_TT,\
-                         "run_parallel": False,\
-                         "check_cache_flag": False,\
-                         "log_flag": False,\
-                         "phi_log_dir": "../TopicTrackingSegmentation/logs/phi"}
+                         "seg_dur_prior": doc_col.seg_dur_prior,
+                         "seg_func": SEG_BL,
+                         "run_parallel": True,
+                         "check_cache_flag": False,
+                         "log_flag": True,
+                         "phi_log_dir": "../logs/phi"}
     #single_docs = doc_col.get_single_docs()
     models = []
     models_names = []
     for beta in betas:
         #for alpha_tt_t0 in alpha_tt_t0_test:
         #    greedy_seg_config["alpha_tt_t0"] = alpha_tt_t0
-        greedy_seg_config["beta"] = np.array([beta]*doc_col.W)
+        greedy_seg_config["beta"] = get_best_prior(doc_col)#np.array([beta]*doc_col.W)
         greedy_model = greedy_seg.MultiDocGreedySeg(data, seg_config=greedy_seg_config)
         prior_desc = str(beta)
         #sd_model = sd_seg.SingleDocDPSeg(beta_prior, single_docs, data)
