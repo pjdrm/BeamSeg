@@ -10,6 +10,7 @@ from scipy.special import digamma
 import os
 import collections
 from scipy.stats import norm
+import dirichlet
 
 GL_DATA = None
 SEG_BL = "seg_bl" #as in base line segmentation
@@ -24,6 +25,7 @@ class AbstractSegmentor(object):
         self.set_gl_data(data)
         self.data = data
         self.beta = seg_config["beta"]
+        self.first_beta = seg_config["beta"]
         self.use_dur_prior = seg_config["use_dur_prior"]
         if self.use_dur_prior:
             self.seg_dur_prior = seg_config["seg_dur_prior"] #this is the prior regarding segment length
@@ -314,6 +316,35 @@ class AbstractSegmentor(object):
         :param u_clusters: list of SentenceCluster corresponding to the best segmentation up to u-1
         '''
         
+        segmentation_ll = 0.0
+        for u_cluster in u_clusters:
+            word_counts = u_cluster.get_word_counts()
+            segmentation_ll += self.segment_ll(word_counts)
+            
+        if self.use_dur_prior:
+            segmentation_ll += self.segmentation_log_prior(u_clusters)
+                                
+        return segmentation_ll
+    
+    def segmentation_ll_opt_beta(self, u_clusters):
+        '''
+        Returns the log likelihood of the segmentation of all documents.
+        Does hyper parameter optimization on beta instead of using a given one in a fixed way.
+        :param u_clusters: list of SentenceCluster corresponding to the best segmentation up to u-1
+        '''
+        dir_samples = []
+        alpha = 0.01
+        for u_cluster in u_clusters:
+            total_words = np.sum(u_cluster.get_word_counts(), axis=0)
+            dir_samples.append((u_cluster.get_word_counts()+alpha)/(total_words+alpha*self.data.W))
+        
+        try:
+            self.beta = dirichlet.mle(np.array(dir_samples))
+        except:
+            print("WARNING: dirichlet.mle did not converge, defaulting to first prior")
+            self.beta = self.first_beta
+        self.seg_ll_C = gammaln(self.beta.sum())-gammaln(self.beta).sum()
+            
         segmentation_ll = 0.0
         for u_cluster in u_clusters:
             word_counts = u_cluster.get_word_counts()

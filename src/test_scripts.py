@@ -25,6 +25,32 @@ from dataset.real_doc import MultiDocument
 import dirichlet
 from itertools import chain
 
+def hyper_param_opt(data, n=10):
+    dir_samples = []
+    alpha = 0.01
+    for i in range(96, len(data.U_W_counts), n):
+        word_counts = np.sum(data.U_W_counts[i:i+n], axis=0)
+        total_words = np.sum(word_counts)
+        dir_samples.append((word_counts+alpha)/(total_words+alpha*data.W))
+    dir_samples = np.array(dir_samples)
+    prior = dirichlet.mle(dir_samples)
+    #plot_prior(prior, data)
+    return prior
+
+def hyper_param_opt_v2(doc_col):
+    single_docs = doc_col.get_single_docs()
+    dir_samples = []
+    alpha = 0.01
+    for doc_i, doc in enumerate(single_docs):
+        n = int(doc_col.seg_dur_prior[doc_i][0])
+        for i in range(0, len(doc.U_W_counts), n):
+            word_counts = np.sum(doc.U_W_counts[i:i+n], axis=0)
+            total_words = np.sum(word_counts)
+            dir_samples.append((word_counts+alpha)/(total_words+alpha*doc_col.W))
+    dir_samples = np.array(dir_samples)
+    prior = dirichlet.mle(dir_samples)
+    return prior
+
 def get_best_prior(data):
     topic_draws = {}
     flat_gs_topics = data.doc_rho_topics
@@ -38,40 +64,12 @@ def get_best_prior(data):
     dir_samples = []
     alpha = 0.01
     for k in topic_draws:
-        total_words = np.sum(topic_draws[k], axis=0)
+        total_words = np.sum(topic_draws[k])
         dir_samples.append((topic_draws[k]+alpha)/(total_words+alpha*data.W))
         
     dir_samples = np.array(dir_samples)
     prior = dirichlet.mle(dir_samples)
     
-    '''
-    topic_plot_dict = {}
-    for wi, word_prob in enumerate(prior):
-        topic_plot_dict[wi] = word_prob
-            
-    sorted_prob = sorted(topic_plot_dict.items(), key=operator.itemgetter(1), reverse=True)
-    sorted_word_probs = []
-    words_sorted = []
-    for wi, prob in sorted_prob:
-        if prob == 0:
-            break
-        sorted_word_probs.append(prob)
-        words_sorted.append(data.inv_vocab[wi])
-    
-    sorted_word_probs.reverse()
-    words_sorted.reverse()
-    max_words = 8000
-    sorted_word_probs = sorted_word_probs[:max_words]
-    words_sorted = words_sorted[:max_words]
-    canvas = toyplot.Canvas(width=500, height=3000)
-    axes = canvas.cartesian(label="Estimated Prior", margin=100)
-    axes.bars(sorted_word_probs, along='y')
-    axes.y.ticks.locator = toyplot.locator.Explicit(labels=words_sorted)
-    axes.y.ticks.labels.angle = -90
-    
-    toyplot.browser.show(canvas)
-    '''
-        
     return prior
         
 def plot_topics(u_clusters, inv_vocab):
@@ -105,6 +103,33 @@ def plot_topics(u_clusters, inv_vocab):
         axes.y.ticks.labels.angle = -90
         
         toyplot.browser.show(canvas)
+    
+def plot_prior(prior, data):
+    topic_plot_dict = {}
+    for wi, word_prob in enumerate(prior):
+        topic_plot_dict[wi] = word_prob
+            
+    sorted_prob = sorted(topic_plot_dict.items(), key=operator.itemgetter(1), reverse=True)
+    sorted_word_probs = []
+    words_sorted = []
+    for wi, prob in sorted_prob:
+        if prob == 0:
+            break
+        sorted_word_probs.append(prob)
+        words_sorted.append(data.inv_vocab[wi])
+    
+    sorted_word_probs.reverse()
+    words_sorted.reverse()
+    max_words = 8000
+    sorted_word_probs = sorted_word_probs[:max_words]
+    words_sorted = words_sorted[:max_words]
+    canvas = toyplot.Canvas(width=500, height=3000)
+    axes = canvas.cartesian(label="Estimated Prior", margin=100)
+    axes.bars(sorted_word_probs, along='y')
+    axes.y.ticks.locator = toyplot.locator.Explicit(labels=words_sorted)
+    axes.y.ticks.labels.angle = -90
+    
+    toyplot.browser.show(canvas)
     
 def md_eval(doc_synth, models, models_desc):
     seg_times = []
@@ -489,49 +514,52 @@ def real_dataset_tests():
         config = json.load(data_file)
     doc_col = MultiDocument(config)
     data = Data(doc_col)
+    single_docs = doc_col.get_single_docs()
     alpha_tt_t0_test = [0.2, 3, 8, 10, 20, 80, 100]
-    betas = [0.8]
     import ray
     ray.init(redirect_output=True)
+    sd_seg_config = {"max_topics": doc_col.max_topics,\
+                         "max_cache": 10,
+                         "seg_type": None,
+                         "beta": np.array([0.8]*doc_col.W),\
+                         "use_dur_prior": True,
+                         "seg_dur_prior": doc_col.seg_dur_prior,\
+                         "seg_func": SEG_TT,\
+                         "alpha_tt_t0": 4,\
+                         "phi_log_dir": "../logs/phi"}
+    
     greedy_seg_config = {"max_topics": doc_col.max_topics,
-                         "max_cache": 50,
+                         "max_cache": 200,
                          "beta": np.array([0.8]*doc_col.W),
                          "use_dur_prior": True,
                          "seg_dur_prior": doc_col.seg_dur_prior,
                          "seg_func": SEG_BL,
-                         "run_parallel": True,
+                         "run_parallel": False,
                          "check_cache_flag": False,
                          "log_flag": True,
                          "phi_log_dir": "../logs/phi"}
     #single_docs = doc_col.get_single_docs()
     models = []
     models_names = []
+    betas = [30]
+    run_MD = True
+    run_SD = False
     for beta in betas:
         #for alpha_tt_t0 in alpha_tt_t0_test:
         #    greedy_seg_config["alpha_tt_t0"] = alpha_tt_t0
-        greedy_seg_config["beta"] = get_best_prior(doc_col)#np.array([beta]*doc_col.W)
-        greedy_model = greedy_seg.MultiDocGreedySeg(data, seg_config=greedy_seg_config)
-        prior_desc = str(beta)
-        #sd_model = sd_seg.SingleDocDPSeg(beta_prior, single_docs, data)
-        #models_names += [sd_model.desc+prior_desc, greedy_model.desc+prior_desc]
-        #models += [sd_model, greedy_model]
-        models_names.append(greedy_model.desc+prior_desc)
-        models.append(greedy_model)
-        
-    sd_seg_config = {"max_topics": doc_col.max_topics,\
-                     "max_cache": 10,
-                     "seg_type": None,
-                     "beta": np.array([0.8]*doc_col.W),\
-                     "use_dur_prior": True,
-                     "seg_dur_prior": doc_col.seg_dur_prior,\
-                     "seg_func": SEG_TT,\
-                     "alpha_tt_t0": 4,\
-                     "phi_log_dir": "/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/logs/phi"}
-    single_docs = doc_col.get_single_docs()
-    sd_model = sd_seg.SingleDocDPSeg(single_docs, data, seg_config=sd_seg_config)
-    #models_names += [sd_model.desc+"0.8"]
-    #models += [sd_model]
+        if run_MD:
+            greedy_seg_config["beta"] = hyper_param_opt(doc_col, n=beta) #np.array([beta]*doc_col.W)
+            greedy_model = greedy_seg.MultiDocGreedySeg(data, seg_config=greedy_seg_config)
+            prior_desc = str(beta)
+            models_names.append(greedy_model.desc+prior_desc)
+            models.append(greedy_model)
+        if run_SD:
+            sd_seg_config["beta"] = np.array([beta]*doc_col.W)#hyper_param_opt(doc_col, n=beta)
+            sd_model = sd_seg.SingleDocDPSeg(single_docs, data, seg_config=sd_seg_config)
+            models_names += [sd_model.desc+str(beta)]
+            models += [sd_model]
     md_eval(doc_col, models, models_names)
+    print(doc_col.doc_names)
     #plot_topics(models[1].best_segmentation[-1][0][1], doc_col.inv_vocab)
         
     
