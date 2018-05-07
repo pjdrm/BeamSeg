@@ -20,6 +20,7 @@ import toyplot.pdf
 import toyplot.browser
 import json
 import operator
+import sys
 from eval.eval_tools import wd_evaluator, f_measure
 from dataset.real_doc import MultiDocument
 import dirichlet
@@ -28,12 +29,12 @@ from itertools import chain
 def hyper_param_opt(data, n=10):
     dir_samples = []
     alpha = 0.01
-    for i in range(96, len(data.U_W_counts), n):
+    for i in range(0, len(data.U_W_counts), n):
         word_counts = np.sum(data.U_W_counts[i:i+n], axis=0)
         total_words = np.sum(word_counts)
         dir_samples.append((word_counts+alpha)/(total_words+alpha*data.W))
     dir_samples = np.array(dir_samples)
-    prior = dirichlet.mle(dir_samples)
+    prior = dirichlet.mle(dir_samples, maxiter=sys.maxsize)
     #plot_prior(prior, data)
     return prior
 
@@ -529,35 +530,38 @@ def real_dataset_tests():
                          "phi_log_dir": "../logs/phi"}
     
     greedy_seg_config = {"max_topics": doc_col.max_topics,
-                         "max_cache": 200,
+                         "max_cache": 50,
                          "beta": np.array([0.8]*doc_col.W),
                          "use_dur_prior": True,
                          "seg_dur_prior": doc_col.seg_dur_prior,
                          "seg_func": SEG_BL,
-                         "run_parallel": False,
+                         "u_order": "window",
+                         "window_size": 3,
+                         "run_parallel": True,
                          "check_cache_flag": False,
                          "log_flag": True,
                          "phi_log_dir": "../logs/phi"}
     #single_docs = doc_col.get_single_docs()
     models = []
     models_names = []
-    betas = [30]
+    betas = [20]
+    windows = [6]
     run_MD = True
     run_SD = False
     for beta in betas:
-        #for alpha_tt_t0 in alpha_tt_t0_test:
-        #    greedy_seg_config["alpha_tt_t0"] = alpha_tt_t0
-        if run_MD:
-            greedy_seg_config["beta"] = hyper_param_opt(doc_col, n=beta) #np.array([beta]*doc_col.W)
-            greedy_model = greedy_seg.MultiDocGreedySeg(data, seg_config=greedy_seg_config)
-            prior_desc = str(beta)
-            models_names.append(greedy_model.desc+prior_desc)
-            models.append(greedy_model)
-        if run_SD:
-            sd_seg_config["beta"] = np.array([beta]*doc_col.W)#hyper_param_opt(doc_col, n=beta)
-            sd_model = sd_seg.SingleDocDPSeg(single_docs, data, seg_config=sd_seg_config)
-            models_names += [sd_model.desc+str(beta)]
-            models += [sd_model]
+        for window in windows:
+            if run_MD:
+                greedy_seg_config["beta"] = hyper_param_opt(doc_col, n=beta) #np.array([beta]*doc_col.W)
+                greedy_seg_config["window_size"] = window
+                greedy_model = greedy_seg.MultiDocGreedySeg(data, seg_config=greedy_seg_config)
+                prior_desc = str(beta)+"_"+str(window)
+                models_names.append(greedy_model.desc+"_" + greedy_seg_config["u_order"]+"_"+prior_desc)
+                models.append(greedy_model)
+            if run_SD:
+                sd_seg_config["beta"] = np.array([beta]*doc_col.W)#hyper_param_opt(doc_col, n=beta)
+                sd_model = sd_seg.SingleDocDPSeg(single_docs, data, seg_config=sd_seg_config)
+                models_names += [sd_model.desc+str(beta)]
+                models += [sd_model]
     md_eval(doc_col, models, models_names)
     print(doc_col.doc_names)
     #plot_topics(models[1].best_segmentation[-1][0][1], doc_col.inv_vocab)

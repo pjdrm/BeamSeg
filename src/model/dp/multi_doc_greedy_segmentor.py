@@ -28,6 +28,14 @@ class MultiDocGreedySeg(AbstractSegmentor):
         self.run_parallel = seg_config["run_parallel"]
         self.check_cache_flag = seg_config["check_cache_flag"]
         self.log_flag = seg_config["log_flag"]
+        if "u_order" not in seg_config or seg_config["u_order"] is None:
+            self.u_order = None
+        elif seg_config["u_order"] == "window":
+            self.u_order = self.window_order(self.data.max_doc_len, self.data.n_docs, seg_config["window_size"])
+        elif seg_config["u_order"] == "seg_dur_prior":
+            self.u_order = self.seg_dur_prior_order(self.data.max_doc_len, self.data.n_docs, seg_config["seg_dur_prior"])
+        else:
+            self.u_order = None
         self.n_cpus = multiprocessing.cpu_count()
         shutil.rmtree(self.phi_log_dir) if os.path.isdir(self.phi_log_dir) else None
         os.makedirs(self.phi_log_dir)
@@ -195,47 +203,85 @@ class MultiDocGreedySeg(AbstractSegmentor):
             print("\nLOST CORRECT SEG u: %d"%u)
         return cached_segs
     
-    def greedy_segmentation_step(self):
+    def seg_dur_prior_order(self, max_u, n_docs, seg_dur_prior):
+        doc_windows = []
+        max_windows = -1
+        for doc_i in range(n_docs):
+            u = list(range(max_u))
+            window = int(seg_dur_prior[doc_i][0])
+            u_window = [u[i:i+window] for i in range(0, max_u, window)]
+            if len(u_window) > max_windows:
+                max_windows = len(u_window)
+            doc_windows.append(u_window)
+        
+        u_order = []
+        for window in range(max_windows):
+            for doc_i in range(n_docs):
+                if window >= len(doc_windows[doc_i]):
+                    continue
+                for u in doc_windows[doc_i][window]: 
+                    u_order.append((u, doc_i))
+                    
+        return u_order
+        
+    def window_order(self, max_u, n_docs, window):
+        u_order = []
+        u = list(range(max_u))
+        u_window = [u[i:i+window] for i in range(0, max_u, window)]
+        
+        for window in u_window:
+            for doc_i in range(n_docs):
+                for u in window:
+                    u_order.append((u, doc_i))
+        return u_order
+        
+    def greedy_segmentation_step(self, u_order=None):
         '''
         Similar to vi_segmentation_step, but considers all
         valid u_clusters where a sentence can be inserted.
         Technically does not use VI. 
         '''
+        if u_order == None:
+            u_order = []
+            for u in range(self.data.max_doc_len):
+                for doc_i in range(self.data.n_docs):
+                    u_order.append((u, doc_i))
+                    
         with open(self.log_dir+"dp_tracker_"+self.desc+".txt", "a+") as f:
-            t = trange(self.data.max_doc_len, desc='', leave=True)
+            t = trange(len(u_order), desc='', leave=True)
             cached_segs = [(-np.inf, [], None)]
-            for u in t:
+            for i in t:
+                u = u_order[i][0]
+                doc_i = u_order[i][1]
                 if u == 10:
                     a = 0
-                for doc_i in range(self.data.n_docs):
-                    #if u == 25 and doc_i ==1:
-                    #    self.max_cache += 20
-                    t.set_description("(%d, %d)" % (u, doc_i))
-                    if u > self.data.doc_len(doc_i)-1:
-                        continue
-                    
-                    if self.run_parallel:
-                        n = int(self.max_cache/(self.n_cpus+1)) #TODO: adjust to number of CPUs
-                        cached_segs_split = [cached_segs[i:i+n] for i in range(0, len(cached_segs), n)]
-                        results = ray.get([compute_seg_ll_parallel.remote(self, cached_segs_job, doc_i, u) for cached_segs_job in cached_segs_split])
-                        doc_i_segs = list(itertools.chain.from_iterable(results))
-                    else:
-                        doc_i_segs = self.compute_seg_ll_seq(cached_segs, doc_i, u)
-                            
-                    doc_i_segs = sorted(doc_i_segs, key=operator.itemgetter(0), reverse=True)
-                    no_dups_doc_i_segs = []
-                    prev_seg_ll = -np.inf
-                    for seg_result in doc_i_segs:
-                        seg_ll = seg_result[0]
-                        seg_clusters = seg_result[1]
-                        if seg_ll != prev_seg_ll:
-                            no_dups_doc_i_segs.append(seg_result)
-                        prev_seg_ll = seg_ll
-                    
-                    if self.check_cache_flag:
-                        cached_segs = self.check_cache(doc_i, u, no_dups_doc_i_segs)
-                    else:
-                        cached_segs = no_dups_doc_i_segs[:self.max_cache]
+
+                t.set_description("(%d, %d)" % (u, doc_i))
+                if u > self.data.doc_len(doc_i)-1:
+                    continue
+                
+                if self.run_parallel:
+                    n = int(self.max_cache/(self.n_cpus+1)) #TODO: adjust to number of CPUs
+                    cached_segs_split = [cached_segs[i:i+n] for i in range(0, len(cached_segs), n)]
+                    results = ray.get([compute_seg_ll_parallel.remote(self, cached_segs_job, doc_i, u) for cached_segs_job in cached_segs_split])
+                    doc_i_segs = list(itertools.chain.from_iterable(results))
+                else:
+                    doc_i_segs = self.compute_seg_ll_seq(cached_segs, doc_i, u)
+                        
+                doc_i_segs = sorted(doc_i_segs, key=operator.itemgetter(0), reverse=True)
+                no_dups_doc_i_segs = []
+                prev_seg_ll = -np.inf
+                for seg_result in doc_i_segs:
+                    seg_ll = seg_result[0]
+                    seg_clusters = seg_result[1]
+                    if seg_ll != prev_seg_ll:
+                        no_dups_doc_i_segs.append(seg_result)
+                    prev_seg_ll = seg_ll
+                
+                if self.check_cache_flag:
+                    cached_segs = self.check_cache(doc_i, u, no_dups_doc_i_segs)
+                else:
+                    cached_segs = no_dups_doc_i_segs[:self.max_cache]
                 
                 if self.log_flag:
                     gs_seg = self.data.get_gs_u_clusters(u)
@@ -264,10 +310,10 @@ class MultiDocGreedySeg(AbstractSegmentor):
         
     def segment_docs(self):
         self.set_gl_data(self.data)
-        self.greedy_segmentation_step()
+        self.greedy_segmentation_step(self.u_order)
         
 @ray.remote
-def compute_seg_ll_parallel_old(segmentor, cached_segs, doc_i, u):
+def compute_seg_ll_parallel(segmentor, cached_segs, doc_i, u):
     '''
     Computes in parallel the segmentation likelihood of assigning u to
     some topic k starting from a segmetnation in cached_segs
@@ -298,7 +344,7 @@ def compute_seg_ll_parallel_old(segmentor, cached_segs, doc_i, u):
     return doc_i_segs   
 
 @ray.remote
-def compute_seg_ll_parallel(segmentor, cached_segs, doc_i, u):
+def compute_seg_ll_parallel_new(segmentor, cached_segs, doc_i, u):
     '''
     Computes in sequentially the segmentation likelihood of assigning u to
     some topic k starting from a segmentation in cached_segs
