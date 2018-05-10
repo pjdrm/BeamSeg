@@ -154,9 +154,9 @@ def md_eval(doc_synth, models, models_desc):
         gs_segs.append(gs_doc)
         
     for j, gs_seg in enumerate(gs_segs):
-        print("GS:  " + str(gs_seg.tolist()))
+        print("GS:\n" + str(gs_seg.tolist()))
         for i in range(len(models)):
-            print(str(models_desc[i]) + ": " + str(md_segs[i][j]))
+            print(str(models_desc[i]) + ":\n" + str(md_segs[i][j]))
         print("")
         
     for i, model in enumerate(models):
@@ -517,8 +517,6 @@ def real_dataset_tests():
     data = Data(doc_col)
     single_docs = doc_col.get_single_docs()
     alpha_tt_t0_test = [0.2, 3, 8, 10, 20, 80, 100]
-    import ray
-    ray.init(redirect_output=True)
     sd_seg_config = {"max_topics": doc_col.max_topics,\
                          "max_cache": 10,
                          "seg_type": None,
@@ -530,30 +528,36 @@ def real_dataset_tests():
                          "phi_log_dir": "../logs/phi"}
     
     greedy_seg_config = {"max_topics": doc_col.max_topics,
-                         "max_cache": 50,
+                         "max_cache": 300,
                          "beta": np.array([0.8]*doc_col.W),
                          "use_dur_prior": True,
                          "seg_dur_prior": doc_col.seg_dur_prior,
-                         "seg_func": SEG_BL,
+                         "seg_func": SEG_TT,
                          "u_order": "window",
+                         "cache_prune": "k_slot_cache_prune",
                          "window_size": 3,
                          "run_parallel": True,
                          "check_cache_flag": False,
                          "log_flag": True,
-                         "phi_log_dir": "../logs/phi"}
+                         "phi_log_dir": "../logs/phi",
+                         "seg_type": "seg_skip_k"}
+    if greedy_seg_config["run_parallel"]:
+        import ray
+        ray.init(redirect_output=True)
     #single_docs = doc_col.get_single_docs()
     models = []
     models_names = []
-    betas = [20]
-    windows = [6]
+    betas = [.8]
+    windows = [40]
     run_MD = True
     run_SD = False
     for beta in betas:
         for window in windows:
             if run_MD:
-                greedy_seg_config["beta"] = hyper_param_opt(doc_col, n=beta) #np.array([beta]*doc_col.W)
+                greedy_seg_config["beta"] = np.array([beta]*doc_col.W) #hyper_param_opt(doc_col, n=beta)
                 greedy_seg_config["window_size"] = window
                 greedy_model = greedy_seg.MultiDocGreedySeg(data, seg_config=greedy_seg_config)
+                #greedy_model = dp_seg.MultiDocDPSeg(data, greedy_seg_config)
                 prior_desc = str(beta)+"_"+str(window)
                 models_names.append(greedy_model.desc+"_" + greedy_seg_config["u_order"]+"_"+prior_desc)
                 models.append(greedy_model)

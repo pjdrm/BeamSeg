@@ -386,8 +386,33 @@ class AbstractSegmentor(object):
             alpha.append(alpha_t_update)
             
             #current phi estimation
-            num_phi_tt = word_counts+alpha_t*phi[t]
-            denom_phi_tt = np.sum(word_counts)+alpha_t
+            num_phi_tt = word_counts+alpha_t_update*phi[t] #NOTE: I was using alpha_t before
+            denom_phi_tt = np.sum(word_counts)+alpha_t_update
+            phi.append(num_phi_tt/denom_phi_tt)
+            
+        return alpha, phi
+    
+    def get_topic_tracking_prior_new(self, u_clusters):
+        '''
+        This version restarts the prior calculations from self.phi_tt_t0
+        if we find the start of a new document in the cluster.
+        '''
+        phi = [self.phi_tt_t0]
+        alpha_t = self.alpha_tt_t0
+        alpha = []
+        for t, u_cluster in enumerate(u_clusters):
+            if u_cluster.has_stat_doc():
+                phi[t] = self.phi_tt_t0
+            word_counts = u_cluster.get_word_counts()
+            #update alpha
+            num_alpha_update = np.sum(phi[t]*(digamma(word_counts+alpha_t*phi[t])-digamma(alpha_t*phi[t])))
+            denom_alpha_update = digamma(np.sum(word_counts)+alpha_t)-digamma(alpha_t)
+            alpha_t_update= alpha_t*(num_alpha_update/denom_alpha_update)
+            alpha.append(alpha_t_update)
+            
+            #current phi estimation
+            num_phi_tt = word_counts+alpha_t_update*phi[t] #NOTE: I was using alpha_t before
+            denom_phi_tt = np.sum(word_counts)+alpha_t_update
             phi.append(num_phi_tt/denom_phi_tt)
             
         return alpha, phi
@@ -674,3 +699,9 @@ class SentenceCluster(object):
         u_begin = seg_bound[0]
         u_end = seg_bound[1]
         return u_begin, u_end
+    
+    def has_stat_doc(self):
+        for doc_i in self.doc_segs_dict:
+            if self.doc_segs_dict[doc_i][0] == 0:
+                return True
+        return False

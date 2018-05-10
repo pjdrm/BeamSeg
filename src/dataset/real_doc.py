@@ -238,6 +238,7 @@ class MultiDocument(Document):
         seg_lens = []
         seg_len = 0
         cp_rho = copy.deepcopy(self.rho)
+        cp_rho[-1] = 1
         for u, rho in enumerate(cp_rho):
             seg_len += 1
             if rho == 1:
@@ -245,8 +246,6 @@ class MultiDocument(Document):
                 seg_len = 0
                 
             if u+1 in self.docs_index:
-                seg_lens.append(seg_len)
-                seg_len = 0
                 prior_docs.append([np.average(seg_lens), np.std(seg_lens)])
                 seg_lens = []
         return prior_docs
@@ -296,7 +295,7 @@ class MultiDocument(Document):
     def prepare_multi_doc(self, doc_dir, doc_tmp_path):
         str_cat_files = ""
         doc_offset = 0
-        docs_file_names = os.listdir(doc_dir) #['L02_14_processed_annotated_html.txt', 'L02_8_processed_annotated_html.txt']
+        docs_file_names = ['L02_14_processed_annotated_html.txt', 'L02_8_processed_annotated_html.txt', 'L02_19_processed_annotated_html.txt', 'L02_0_processed_annotated_html.txt'] #s.listdir(doc_dir) 
         #sorted(docs_file_names)
         for doc in docs_file_names:
             self.doc_names.append(doc)
@@ -334,9 +333,9 @@ class MultiDocument(Document):
                         
 class ENLemmatizerCountVectorizer(CountVectorizer):
     def __init__(self, stopwords_list=None, max_features=None):
-        CountVectorizer.__init__(self,analyzer = "word",\
-                                 strip_accents = "unicode",\
-                                 stop_words = stopwords_list,\
+        CountVectorizer.__init__(self,analyzer="word",\
+                                 strip_accents="unicode",\
+                                 stop_words=stopwords_list,\
                                  max_features=max_features)
         self.en_lemmatizer = nltk.stem.WordNetLemmatizer()
         

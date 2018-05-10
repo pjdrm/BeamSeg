@@ -185,11 +185,11 @@ class MultiDocDPSeg(AbstractSegmentor):
                     u_clusters = copy.deepcopy(best_seg)
                     u_k_cluster = self.get_k_cluster(k, u_clusters)
                     if u_k_cluster is None:
-                        u_k_cluster = SentenceCluster(u_begin, u_end, [doc_i], self.data, k)
+                        u_k_cluster = SentenceCluster(u_begin, u_end, [doc_i], k)
                         u_clusters.append(u_k_cluster)
                     else:
                         u_k_cluster.add_sents(u_begin, u_end, doc_i)
-                    seg_ll = self.segmentation_ll(u_clusters)
+                    seg_ll = self.segmentation_ll(u_clusters)[0]
                     if seg_ll > best_seg_ll:
                         best_seg_ll = seg_ll
                         best_clusters = u_clusters
@@ -236,7 +236,7 @@ class MultiDocDPSeg(AbstractSegmentor):
                         best_seg = self.assign_target_k(u_begin,u_end, doc_i,\
                                                         k_target, possible_clusters, best_seg)
                             
-                        seg_ll = self.segmentation_ll(best_seg)
+                        seg_ll = self.segmentation_ll(best_seg)[0]
                         current_best_u_clusters.append((seg_ll, best_seg))
                         
                 current_best_u_clusters = sorted(current_best_u_clusters, key=operator.itemgetter(0), reverse=True)
