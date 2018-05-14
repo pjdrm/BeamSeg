@@ -21,7 +21,7 @@ import toyplot.browser
 import json
 import operator
 import sys
-from eval.eval_tools import wd_evaluator, f_measure
+from eval.eval_tools import wd_evaluator, f_measure, accuracy
 from dataset.real_doc import MultiDocument
 import dirichlet
 from itertools import chain
@@ -169,7 +169,8 @@ def md_eval(doc_synth, models, models_desc):
             hyp_topics += model.get_seg_with_topics(doc_i, model.best_segmentation[-1][0][1])
             gs_topics += model.data.doc_rho_topics[doc_i]
         f1_score = f_measure(gs_topics, hyp_topics)
-        print(str(models_desc[i])+" F1: "+str(f1_score))
+        acc = accuracy(gs_topics, hyp_topics)
+        print("%s F1: %f Acc %f" % (str(models_desc[i]), f1_score, acc))
     
 def single_vs_md_eval(doc_synth, alpha, md_all_combs=True, md_fast=True, print_flag=False):
     '''
@@ -528,15 +529,15 @@ def real_dataset_tests():
                          "phi_log_dir": "../logs/phi"}
     
     greedy_seg_config = {"max_topics": doc_col.max_topics,
-                         "max_cache": 300,
+                         "max_cache": 50,
                          "beta": np.array([0.8]*doc_col.W),
                          "use_dur_prior": True,
                          "seg_dur_prior": doc_col.seg_dur_prior,
                          "seg_func": SEG_TT,
                          "u_order": "window",
-                         "cache_prune": "k_slot_cache_prune",
+                         "cache_prune": "topn_cache_prune",
                          "window_size": 3,
-                         "run_parallel": True,
+                         "run_parallel": False,
                          "check_cache_flag": False,
                          "log_flag": True,
                          "phi_log_dir": "../logs/phi",
@@ -548,7 +549,7 @@ def real_dataset_tests():
     models = []
     models_names = []
     betas = [.8]
-    windows = [40]
+    windows = [60]
     run_MD = True
     run_SD = False
     for beta in betas:
@@ -556,8 +557,9 @@ def real_dataset_tests():
             if run_MD:
                 greedy_seg_config["beta"] = np.array([beta]*doc_col.W) #hyper_param_opt(doc_col, n=beta)
                 greedy_seg_config["window_size"] = window
-                greedy_model = greedy_seg.MultiDocGreedySeg(data, seg_config=greedy_seg_config)
+                #greedy_model = greedy_seg.MultiDocGreedySeg(data, seg_config=greedy_seg_config)
                 #greedy_model = dp_seg.MultiDocDPSeg(data, greedy_seg_config)
+                greedy_model = mcmc_seg_v2.MultiDocMCMCSegV2(data, greedy_seg_config)
                 prior_desc = str(beta)+"_"+str(window)
                 models_names.append(greedy_model.desc+"_" + greedy_seg_config["u_order"]+"_"+prior_desc)
                 models.append(greedy_model)

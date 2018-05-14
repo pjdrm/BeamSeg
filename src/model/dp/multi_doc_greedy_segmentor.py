@@ -265,12 +265,18 @@ class MultiDocGreedySeg(AbstractSegmentor):
                 for doc_i in range(self.data.n_docs):
                     u_order.append((u, doc_i))
                     
+        prev_doc = 0
         with open(self.log_dir+"dp_tracker_"+self.desc+".txt", "a+") as f:
             t = trange(len(u_order), desc='', leave=True)
             cached_segs = [(-np.inf, [], None)]
             for i in t:
                 u = u_order[i][0]
                 doc_i = u_order[i][1]
+                
+                if doc_i != prev_doc:
+                    cached_segs = cached_segs[:int(self.max_cache/3)]
+                prev_doc = doc_i
+                
                 if u == 18:
                     a = 0
 
@@ -315,6 +321,9 @@ class MultiDocGreedySeg(AbstractSegmentor):
             seg_ll_gs, phi_tt = self.segmentation_ll(self.data.get_rho_u_clusters())
         else:
             seg_ll_gs = self.segmentation_ll(self.data.get_rho_u_clusters())
+        
+        with open(self.log_dir+"final_phi.txt", "w+") as f_phi:
+            f_phi.write(str(cached_segs[0][2])+"\n"+str(self.data.doc_synth.inv_vocab))
         print("\nBest found ll: %f\nGS seg_ll: %f\n" % (cached_segs[0][0], seg_ll_gs))
         
     def segment_docs(self):

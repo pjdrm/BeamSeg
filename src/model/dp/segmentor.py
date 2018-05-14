@@ -401,7 +401,7 @@ class AbstractSegmentor(object):
         alpha_t = self.alpha_tt_t0
         alpha = []
         for t, u_cluster in enumerate(u_clusters):
-            if u_cluster.has_stat_doc():
+            if u_cluster.has_start_doc():
                 phi[t] = self.phi_tt_t0
             word_counts = u_cluster.get_word_counts()
             #update alpha
@@ -700,7 +700,7 @@ class SentenceCluster(object):
         u_end = seg_bound[1]
         return u_begin, u_end
     
-    def has_stat_doc(self):
+    def has_start_doc(self):
         for doc_i in self.doc_segs_dict:
             if self.doc_segs_dict[doc_i][0] == 0:
                 return True

@@ -7,6 +7,7 @@ from segeval import window_diff
 import numpy as np
 from scipy.sparse import coo_matrix
 from scipy.misc import comb
+from munkres import Munkres
 
 def segeval_converter(segmentation):
     segeval_format = []
@@ -98,6 +99,32 @@ def comb2(n):
     # the exact version is faster for k == 2: use it by default globally in
     # this module instead of the float approximate variant
     return comb(n, 2, exact=1)
+
+def accuracy(labels_true, labels_pred):
+    labels_true, labels_pred = check_clusterings(labels_true, labels_pred)
+    n_samples = labels_true.shape[0]
+    classes = np.unique(labels_true)
+    clusters = np.unique(labels_pred)
+    # Special limit cases: no clustering since the data is not split;
+    # or trivial clustering where each document is assigned a unique cluster.
+    # These are perfect matches hence return 1.0.
+    if (classes.shape[0] == clusters.shape[0] == 1
+            or classes.shape[0] == clusters.shape[0] == 0
+            or classes.shape[0] == clusters.shape[0] == len(labels_true)):
+        return 1.0
+    
+    # print "accuracy testing..."
+    contingency = contingency_matrix(labels_true, labels_pred) #Type: <type 'numpy.ndarray'>:rows are clusters, cols are classes
+    contingency = -contingency
+    #print contingency
+    contingency = contingency.tolist()
+    m = Munkres() # Best mapping by using Kuhn-Munkres algorithm
+    map_pairs = m.compute(contingency) #best match to find the minimum cost
+    sum_value = 0
+    for key,value in map_pairs:
+        sum_value = sum_value + contingency[key][value]
+    
+    return float(-sum_value)/n_samples
 
 def f_measure(labels_true, labels_pred): #Return the F1 score
     labels_true, labels_pred = check_clusterings(labels_true, labels_pred)

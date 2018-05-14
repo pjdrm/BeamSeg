@@ -21,7 +21,7 @@ class MultiDocMCMCSeg(AbstractSegmentor):
         self.max_topics = self.data.max_doc_len if max_topics is None else max_topics
     
     def rnd_init_seg(self):
-        pi = 1.0/self.seg_dur
+        pi = 1.0/self.seg_dur_prior
         initial_u_clusters = []
         for doc_i in range(self.data.n_docs):
             doc_i_rho = []
