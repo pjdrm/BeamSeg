@@ -70,12 +70,8 @@ class MultiDocMCMCSegV2(AbstractSegmentor):
         hyp_seg = self.get_segmentation(doc_i, u_clusters)
         return hyp_seg
     
-    def add_sample(self, u_clusters):
-        for u_cluster in u_clusters:
-            for doc_i in u_cluster.get_docs():
-                u_begin, u_end = u_cluster.get_segment(doc_i)
-                for u in range(u_begin, u_end+1):
-                    self.samples_dict[doc_i][u][u_cluster.k] += 1
+    def add_sample(self, doc_i, u, k):
+        self.samples_dict[doc_i][u][k] += 1
         
     def test_split(self, k, doc_i, u_begin, u_end, u_clusters):
         u_k_cluster = self.get_k_cluster(k, u_clusters)
@@ -192,14 +188,18 @@ class MultiDocMCMCSegV2(AbstractSegmentor):
             if accept:
                 best_u_clusters = move_u_clusters
                 best_seg_ll = move_seg_ll
-                    
+                k_final = k_move
+                self.add_sample(doc_i_move, u_move, k_move)
                 f.write("ll: %.3f\n"%best_seg_ll)
                 for doc_i in range(self.data.n_docs):
                     f.write("GS: "+str(self.data.docs_rho_gs[doc_i].tolist())+"\n"+\
                             "HYP "+str(self.get_segmentation(doc_i, best_u_clusters))+"\n"+\
                             "K:  "+str(self.get_seg_with_topics(doc_i, best_u_clusters))+"\n\n")
                 f.write("===============\n")
-        self.add_sample(best_u_clusters)
+            else:
+                k_final = current_k
+            self.add_sample(doc_i_move, u_move, k_final)
+                    
         self.best_segmentation[-1] = [(best_seg_ll, best_u_clusters)]
         return best_u_clusters
         #print("\nBest found ll: %f\nGS move_seg_ll: %f\n" % (cached_segs[0][0], self.segmentation_ll(self.data.get_rho_u_clusters())))
