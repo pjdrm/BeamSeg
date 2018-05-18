@@ -9,19 +9,20 @@ import copy
 import operator
 from tqdm import trange
 
-class MultiDocMCMCSeg(AbstractSegmentor):
+class MultiDocMCMCSegV2(AbstractSegmentor):
     
-    def __init__(self, alpha, data, max_topics=None, seg_dur=10.0, std=3.0, use_prior=True):
-        super(MultiDocMCMCSeg, self).__init__(alpha,\
-                                                data,\
-                                                seg_dur=seg_dur,\
-                                                std=std,\
-                                                use_prior=use_prior,\
-                                                desc="mcmc")
-        self.max_topics = self.data.max_doc_len if max_topics is None else max_topics
+    def __init__(self, data, seg_config=None):
+        super(MultiDocMCMCSegV2, self).__init__(data,\
+                                                seg_config=seg_config,\
+                                                desc="mcmc_v2")
+        self.max_topics = self.data.max_doc_len if seg_config["max_topics"] is None else seg_config["max_topics"]
+        self.total_accepts = 0
+        self.n_samples = {}
+        for doc_i in range(self.data.n_docs):
+            self.n_samples[doc_i] = np.zeros(self.data.doc_len(doc_i))
     
     def rnd_init_seg(self):
-        pi = 1.0/self.seg_dur_prior
+        pi = 1.0/np.average(self.seg_dur_prior)
         initial_u_clusters = []
         for doc_i in range(self.data.n_docs):
             doc_i_rho = []
@@ -65,162 +66,135 @@ class MultiDocMCMCSeg(AbstractSegmentor):
         u_clusters = self.best_segmentation[-1][0][1]
         hyp_seg = self.get_segmentation(doc_i, u_clusters)
         return hyp_seg
+        
+    def test_split(self, k, doc_i, u_begin, u_end, u_clusters):
+        u_k_cluster = self.get_k_cluster(k, u_clusters)
+        if u_k_cluster is not None:
+            u_k_cluster.add_sents(u_begin, u_end, doc_i)
+        else:
+            new_cluster = SentenceCluster(u_begin, u_end, [doc_i], k)
+            u_clusters.append(new_cluster)
+            
+        seg_ll = self.segmentation_ll(u_clusters)[0]
+        return seg_ll, u_clusters
+        
+    def accept_move(self, move_seg_ll, best_seg_ll):
+        #TODO: do a version similar to the split-merge sampler.
+        #The problem now is that I should have split all document in
+        #the same two topics. But for now the split is in random possible
+        #topics for each documents. This is to not have the same topic
+        #ordering in all documents
+        uniform_draw = np.random.uniform(0,1)
+        ratio = move_seg_ll/best_seg_ll
+        if uniform_draw < ratio:
+            return True
+        else:
+            return False
+        
+    def sample_u(self, doc_i, k, u_clusters):
+        u_k_cluster = self.get_k_cluster(k, u_clusters)
+        u_begin, u_end = u_k_cluster.get_segment(doc_i)
+        seg_len = u_end-u_begin+1
+        draw = np.random.multinomial(1, [1.0/seg_len]*seg_len)
+        u_sample = u_begin+np.nonzero(draw)[0][0]
+        return u_sample
     
-    def test_split(self, possible_k, doc_i, u_begin, u_end, best_seg_ll, u_clusters):
-        best_k = None
-        best_u_clusters = None
-        found_better_seg = False
-        for k in possible_k:
-            current_u_clusters = copy.deepcopy(u_clusters)
-            u_k_cluster = self.get_k_cluster(k, current_u_clusters)
-            if u_k_cluster is not None:
-                u_k_cluster.add_sents(u_begin, u_end, doc_i)
-            else:
-                new_cluster = SentenceCluster(u_begin, u_end, [doc_i], k)
-                current_u_clusters.append(new_cluster)
-                
-            seg_ll = self.segmentation_ll(current_u_clusters)
-            if self.use_dur_prior:
-                seg_ll += self.segmentation_log_prior(current_u_clusters)
-                
-            if seg_ll > best_seg_ll:
-                found_better_seg = True
-                best_k = k
-                best_seg_ll = seg_ll
-                best_u_clusters = current_u_clusters
-                
-        return found_better_seg, best_k, best_seg_ll, best_u_clusters
+    def sample_rnd_k(self, u_clusters):
+        draw = np.random.multinomial(1, [1.0/self.data.total_sents]*self.data.total_sents)
+        u_move = np.nonzero(draw)[0][0]
+        doc_i_move = self.data.get_doc_i(u_move)
+        if doc_i_move > 0:
+            u_move = u_move-self.data.docs_index[doc_i_move-1]
+        k1, u_begin, u_end = self.get_u_segment(doc_i_move, u_move, u_clusters)
+        
+        u_move = np.nonzero(draw)[0][0]
+        doc_i_move = self.data.get_doc_i(u_move)
+        if doc_i_move > 0:
+            u_move = u_move-self.data.docs_index[doc_i_move-1]
+        k2, u_begin, u_end = self.get_u_segment(doc_i_move, u_move, u_clusters)
+        return k1, k2
         
     def mcmc_segmentation_step(self, best_u_clusters):
         doc_i_rho = [self.get_final_segmentation(doc_i) for doc_i in range(self.data.n_docs)]
-        best_seg_ll = self.segmentation_ll(best_u_clusters)
-        if self.use_dur_prior:
-            best_seg_ll += self.segmentation_log_prior(best_u_clusters)
+        best_seg_ll = self.segmentation_ll(best_u_clusters)[0]
                             
         with open(self.log_dir+"dp_tracker_"+self.desc+".txt", "a+") as f:
-            t = trange(self.data.max_doc_len, desc='', leave=True)
-            for u in t:
-                if u == 6:
-                    a = 3
+            k1, k2 = self.sample_rnd_k(best_u_clusters)
+            
+            if k1 == k2:
+                #Split case
+                u_clusters_split_test = copy.deepcopy(best_u_clusters)
                 for doc_i in range(self.data.n_docs):
-                    t.set_description("(%d, %d)" % (u, doc_i))
-                    if u > self.data.doc_len(doc_i)-1:
-                        continue
+                    possible_k = list(range(self.max_topics))
+                    for doc_i_k in self.get_doc_i_clusters(doc_i, u_clusters_split_test):
+                        if doc_i_k in possible_k:
+                            possible_k.remove(doc_i_k)
+                    draw = np.random.multinomial(1, [1.0/len(possible_k)]*len(possible_k))
+                    k_split = possible_k[np.nonzero(draw)[0][0]]
+                    u_end_split = self.sample_u(doc_i, k1, u_clusters_split_test)
+                    u_k_cluster = self.get_k_cluster(k1, u_clusters_split_test)
+                    u_begin, u_end = u_k_cluster.get_segment(doc_i)
                     
-                    current_k, u_begin, u_end = self.get_u_segment(doc_i, u, best_u_clusters)
-                    rho_u = doc_i_rho[doc_i][u]
-                    if rho_u == 0:
-                        #Split case
-                        possible_k = list(range(self.max_topics))
-                        for doc_i_k in self.get_doc_i_clusters(doc_i, best_u_clusters):
-                            if doc_i_k in possible_k:
-                                possible_k.remove(doc_i_k)
-                                
-                        #Split case 1: keep topic on first u_cluster
-                        u_clusters_minus_next = copy.deepcopy(best_u_clusters)
-                        current_u_cluster = self.get_k_cluster(current_k, u_clusters_minus_next)
-                        current_u_cluster.remove_seg(doc_i, u+1, u_end)
-                        if len(current_u_cluster.get_docs()) == 0:
-                            u_clusters_minus_next.remove(current_u_cluster)
-                        
-                        found_better_seg,\
-                        split_k,\
-                        split_seg_ll,\
-                        split_u_clusters = self.test_split(possible_k,\
-                                                           doc_i,\
-                                                           u+1,\
-                                                           u_end,\
-                                                           best_seg_ll,\
-                                                           u_clusters_minus_next)
-                        
-                        if found_better_seg:
-                            best_seg_ll = split_seg_ll
-                            best_u_clusters = split_u_clusters
-                            doc_i_rho[doc_i] = self.get_segmentation(doc_i, best_u_clusters)
-                            
-                        #Split case 2: change topic on first u_cluster
-                        u_clusters_minus_current = copy.deepcopy(best_u_clusters)
-                        current_u_cluster = self.get_k_cluster(current_k, u_clusters_minus_current)
-                        current_u_cluster.remove_seg(doc_i, u_begin, u)
-                        if len(current_u_cluster.get_docs()) == 0:
-                            u_clusters_minus_current.remove(current_u_cluster)
-                            
-                        found_better_seg,\
-                        split_k,\
-                        split_seg_ll,\
-                        split_u_clusters = self.test_split(possible_k,\
-                                                           doc_i,\
-                                                           u_begin,\
-                                                           u,\
-                                                           best_seg_ll,\
-                                                           u_clusters_minus_current)
-                        if found_better_seg:
-                            current_k = split_k
-                            best_seg_ll = split_seg_ll
-                            best_u_clusters = split_u_clusters
-                            doc_i_rho[doc_i] = self.get_segmentation(doc_i, best_u_clusters)
-                    else:
-                        #Merge case
-                        if u == self.data.doc_len(doc_i)-1:
-                            continue #this is the last sentence, cant perform merge
-                        
-                        next_u_cluster = self.get_next_cluster(current_k, doc_i, best_u_clusters)
-                        u_begin_next_c, u_end_next_c = next_u_cluster.get_segment(doc_i)
-                        u_clusters_minus_merge = copy.deepcopy(best_u_clusters)
-                        uc1 = self.get_k_cluster(current_k, u_clusters_minus_merge)
-                        uc1.remove_seg(doc_i, u_begin, u_end)
-                        if len(uc1.get_docs()) == 0:
-                            u_clusters_minus_merge.remove(uc1)
-                        uc2 = self.get_k_cluster(next_u_cluster.k, u_clusters_minus_merge)
-                        uc2.remove_seg(doc_i, u_begin_next_c, u_end_next_c)
-                        if len(uc2.get_docs()) == 0:
-                            u_clusters_minus_merge.remove(uc2)
-                            
-                        for k in range(self.max_topics):
-                            current_u_clusters = copy.deepcopy(u_clusters_minus_merge)
-                            u_k_cluster = self.get_k_cluster(k, current_u_clusters)
-                            if k != current_k and\
-                               k != next_u_cluster.k and\
-                               u_k_cluster is not None\
-                               and u_k_cluster.has_doc(doc_i):
-                                continue #Means some other segments has this topics and we cant repeat it
-                            
-                            if u_k_cluster is not None:
-                                u_k_cluster.add_sents(u_begin, u_end_next_c, doc_i)
-                            else:
-                                new_u_cluster = SentenceCluster(u_begin, u_end_next_c, [doc_i], k)
-                                current_u_clusters.append(new_u_cluster)
-                        
-                            seg_ll = self.segmentation_ll(current_u_clusters)
-                            if self.use_dur_prior:
-                                seg_ll += self.segmentation_log_prior(current_u_clusters)
-                                
-                            if seg_ll > best_seg_ll:
-                                best_seg_ll = seg_ll
-                                best_u_clusters = current_u_clusters
-                                doc_i_rho[doc_i] = self.get_segmentation(doc_i, best_u_clusters)
+                    u_k_cluster.remove_seg(doc_i, u_begin, u_end_split)
+                    u_begin_split = u_begin
                     
-            f.write("ll: %.3f\n"%best_seg_ll)
-            for doc_i in range(self.data.n_docs):
-                f.write("GS: "+str(self.data.docs_rho_gs[doc_i].tolist())+"\n"+\
-                        "HYP "+str(self.get_segmentation(doc_i, best_u_clusters))+"\n"+\
-                        "K:  "+str(self.get_seg_with_topics(doc_i, best_u_clusters))+"\n\n")
-            f.write("===============\n")
+                    move_seg_ll,\
+                    move_u_clusters = self.test_split(k_split,\
+                                                      doc_i,\
+                                                      u_begin_split,\
+                                                      u_end_split,\
+                                                      u_clusters_split_test)
+            else:
+                #Merge case
+                u_clusters_merge = copy.deepcopy(best_u_clusters)
+                u_k_cluster = self.get_k_cluster(k1, u_clusters_merge)
+                for doc_i in u_k_cluster.get_docs():
+                    u_begin, u_end = u_k_cluster.get_segment(doc_i)
+                    if u_end == self.data.doc_len(doc_i)-1:
+                        continue#this is the last sentence, cant perform merge
+                    
+                    uc1 = self.get_k_cluster(k1, u_clusters_merge)
+                    uc1.remove_seg(doc_i, u_begin, u_end)
+                    if len(uc1.get_docs()) == 0:
+                        u_clusters_merge.remove(uc1)
+                    
+                    next_u_cluster = self.get_next_cluster(k1, doc_i, u_clusters_merge)
+                    u_begin_next_c, u_end_next_c = next_u_cluster.get_segment(doc_i)
+                    next_u_cluster.remove_seg(doc_i, u_begin_next_c, u_end_next_c)
+                    next_u_cluster.add_sents(u_begin, u_end_next_c, doc_i)
+                    move_u_clusters = u_clusters_merge
+                    move_seg_ll = self.segmentation_ll(u_clusters_merge)[0]
+                    
+            accept = self.accept_move(move_seg_ll, best_seg_ll)
+            if accept:
+                self.total_accepts += 1
+                best_u_clusters = move_u_clusters
+                best_seg_ll = move_seg_ll
+                f.write("ll: %.3f\n"%best_seg_ll)
+                for doc_i in range(self.data.n_docs):
+                    f.write("GS: "+str(self.data.docs_rho_gs[doc_i].tolist())+"\n"+\
+                            "HYP "+str(self.get_segmentation(doc_i, best_u_clusters))+"\n"+\
+                            "K:  "+str(self.get_seg_with_topics(doc_i, best_u_clusters))+"\n\n")
+                f.write("===============\n")
+                    
         self.best_segmentation[-1] = [(best_seg_ll, best_u_clusters)]
         return best_u_clusters
-        #print("\nBest found ll: %f\nGS seg_ll: %f\n" % (cached_segs[0][0], self.segmentation_ll(self.data.get_rho_u_clusters())))
+        #print("\nBest found ll: %f\nGS move_seg_ll: %f\n" % (cached_segs[0][0], self.segmentation_ll(self.data.get_rho_u_clusters())))
         
     def segment_docs(self):
+        iters = 500000
         self.set_gl_data(self.data)
         u_clusters = self.rnd_init_seg()
         self.best_segmentation[-1] = [(-np.inf, u_clusters)]
-        for i in range(10):
-            if i == 5:
+        t = trange(iters, desc='', leave=True)
+        for i in t:
+            t.set_description("Iter %d" % i)
+            if i == 4:
                 a = 0
             u_clusters = self.mcmc_segmentation_step(u_clusters)
-        print("GS ll: %.3f" % self.segmentation_ll(self.data.get_rho_u_clusters()))
+        print("#accepts: %d #rejects: %d" % (self.total_accepts, iters-self.total_accepts))
+        for doc_i in self.n_samples:
+            print("doc_%d u_sampled: %s" %(doc_i, str(self.n_samples[doc_i])))
+        #self.best_segmentation[-1] = self.samples_decoder()
+        #print("GS ll: %.3f" % self.segmentation_ll(self.data.get_rho_u_clusters()))
         
-            
-            
-            
-            

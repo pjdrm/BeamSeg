@@ -103,6 +103,12 @@ class AbstractSegmentor(object):
                     ordered_clusters.append(k_cluster)
                 if len(ordered_clusters) == len(u_clusters):
                     return ordered_clusters
+                
+    def get_free_clusters(self, u_clusters):
+        free_clusters = list(range(self.max_topics))
+        for u_cluster in u_clusters:
+            free_clusters.remove(u_cluster.k)
+        return free_clusters
     
     def get_final_segmentation(self, doc_i):
         '''

@@ -11,6 +11,8 @@ import nltk.stem
 import os
 import dataset.synthetic_doc as syn_doc
 import copy
+import operator
+from audioop import reverse
 
 #add_to_stop_words = ["object", "time", "zero"]
 #add_to_stop_words = ["object", "time", "want", "one", "velocity", "would"]
@@ -129,7 +131,7 @@ class Document(object):
         U_W_counts = vectorizer.fit_transform(sents)
         vocab = vectorizer.vocabulary_
         inv_vocab =  {v: k for k, v in vocab.items()}
-        w_total_counts = np.sum(U_W_counts, axis=0).A1
+        w_total_counts = np.array(np.sum(U_W_counts, axis=0))[0]
         filter_words = []
         
         for w in range(U_W_counts.shape[1]):
@@ -250,6 +252,24 @@ class MultiDocument(Document):
                 seg_lens = []
         return prior_docs
         
+    def find_target_docs(self, doc_names, docs_topic_seq):
+        for i, doc_name in enumerate(doc_names):
+            if "ref" in doc_name:
+                doc_ref = i
+                break
+        
+        overlap_dict = {}
+        for i, doc_name in enumerate(doc_names):
+            if i == doc_ref:
+                continue
+            overlap_dict[doc_name] = 0
+            for k in docs_topic_seq[i]:
+                if k in docs_topic_seq[doc_ref]:
+                    overlap_dict[doc_name] += 1
+        sorted_docs = sorted(overlap_dict.items(), key=operator.itemgetter(1), reverse=True)
+        for doc_name, count in sorted_docs:
+            print("%s %s" % (doc_name, count))
+        
     def load_doc_topic_seq(self, links_dir):
         topic_dict = {}
         docs_topic_seq = []
@@ -270,6 +290,7 @@ class MultiDocument(Document):
                 topic_seq.append(topic_seq_dict[i])
             docs_topic_seq.append(topic_seq)
         
+        self.find_target_docs(self.doc_names, docs_topic_seq)
         doc_i = 0
         doc_rho_topics = []
         doc_i_rho_topics = []
@@ -295,7 +316,7 @@ class MultiDocument(Document):
     def prepare_multi_doc(self, doc_dir, doc_tmp_path):
         str_cat_files = ""
         doc_offset = 0
-        docs_file_names = ['L02_8_processed_annotated_html.txt', 'L02_14_processed_annotated_html.txt']#os.listdir(doc_dir) 
+        docs_file_names = ['L03_7_processed_annotated_html.txt', 'L03_13_processed_annotated_html.txt', 'L03_270_processed_annotated_pdf.txt', 'L03_323_processed_annotated_pdf.txt', 'L03_342_processed_annotated_pdf.txt', 'L03_365_processed_annotated_pdf.txt', 'L03_401_processed_annotated_ppt.txt', 'L03_402_processed_annotated_ppt.txt', 'L03_48_processed_annotated_html.txt', 'L03_174_processed_annotated_html.txt', 'L03_185_processed_annotated_html.txt', 'L03_203_processed_annotated_html.txt', 'L03_213_processed_annotated_html.txt', 'L03_239_processed_annotated_html.txt', 'L03_v19_cap_man_processed_annotated.txt', 'L03_v22_cap_man_processed_annotated.txt', 'L03_vref_cap_man_processed_annotated.txt', 'L03_399_processed_annotated_ppt.txt']
         #sorted(docs_file_names)
         for doc in docs_file_names:
             self.doc_names.append(doc)

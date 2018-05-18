@@ -28,6 +28,7 @@ class MultiDocGreedySeg(AbstractSegmentor):
         self.run_parallel = seg_config["run_parallel"]
         self.check_cache_flag = seg_config["check_cache_flag"]
         self.log_flag = seg_config["log_flag"]
+        self.flush_cache_flag = seg_config["flush_cache_flag"]
         if "u_order" not in seg_config or seg_config["u_order"] is None:
             self.u_order = None
         elif seg_config["u_order"] == "window":
@@ -108,8 +109,23 @@ class MultiDocGreedySeg(AbstractSegmentor):
             if b == 23:
                 a = 0
             b += 1
+            
             possible_clusters = self.get_valid_insert_clusters(doc_i, cached_u_clusters)
-            for k in range(self.max_topics):
+            free_clusters = self.get_free_clusters(cached_u_clusters)
+            test_clusters = []
+            if len(free_clusters) > 0: #The idea is to just test on a single free clusters, since they all give the same likelihood
+                k_free_cluster = free_clusters[0]
+                for k_poss in possible_clusters:
+                    if k_poss != k_free_cluster and k_poss in free_clusters:
+                        continue
+                    else:
+                        test_clusters.append(k_poss)
+            else:
+                test_clusters = possible_clusters
+            merge_move_clusters = list(set(range(0, self.max_topics))-possible_clusters)
+            test_clusters = test_clusters+merge_move_clusters
+                
+            for k in test_clusters:
                 current_u_clusters = copy.deepcopy(cached_u_clusters)
                 current_u_clusters = self.assign_target_k(u, u, doc_i, k, possible_clusters, current_u_clusters)
                 phi_tt = None
@@ -273,7 +289,7 @@ class MultiDocGreedySeg(AbstractSegmentor):
                 u = u_order[i][0]
                 doc_i = u_order[i][1]
                 
-                if doc_i != prev_doc:
+                if self.flush_cache_flag and u % 215 == 0:
                     cached_segs = cached_segs[:int(self.max_cache/3)]
                 prev_doc = doc_i
                 
@@ -349,7 +365,21 @@ def compute_seg_ll_parallel(segmentor, cached_segs, doc_i, u):
             a = 0
         b += 1
         possible_clusters = segmentor.get_valid_insert_clusters(doc_i, cached_u_clusters)
-        for k in range(segmentor.max_topics):
+        free_clusters = segmentor.get_free_clusters(cached_u_clusters)
+        test_clusters = []
+        if len(free_clusters) > 0: #The idea is to just test on a single free clusters, since they all give the same likelihood
+            k_free_cluster = free_clusters[0]
+            for k_poss in possible_clusters:
+                if k_poss != k_free_cluster and k_poss in free_clusters:
+                    continue
+                else:
+                    test_clusters.append(k_poss)
+        else:
+            test_clusters = possible_clusters
+        #merge_move_clusters = list(set(range(0, segmentor.max_topics))-set(possible_clusters))
+        #test_clusters = test_clusters+merge_move_clusters
+                
+        for k in test_clusters:
             current_u_clusters = copy.deepcopy(cached_u_clusters)
             current_u_clusters = segmentor.assign_target_k(u, u, doc_i, k, possible_clusters, current_u_clusters)
             phi_tt = None

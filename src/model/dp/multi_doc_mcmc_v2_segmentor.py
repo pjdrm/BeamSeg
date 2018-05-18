@@ -16,13 +16,10 @@ class MultiDocMCMCSegV2(AbstractSegmentor):
                                                 seg_config=seg_config,\
                                                 desc="mcmc_v2")
         self.max_topics = self.data.max_doc_len if seg_config["max_topics"] is None else seg_config["max_topics"]
-        self.samples_dict = {}
+        self.total_accepts = 0
+        self.n_samples = {}
         for doc_i in range(self.data.n_docs):
-            self.samples_dict[doc_i] = {}
-            for u in range(self.data.doc_len(doc_i)):
-                self.samples_dict[doc_i][u] = {}
-                for k in range(self.max_topics):
-                    self.samples_dict[doc_i][u][k] = 0
+            self.n_samples[doc_i] = np.zeros(self.data.doc_len(doc_i))
     
     def rnd_init_seg(self):
         pi = 1.0/np.average(self.seg_dur_prior)
@@ -69,9 +66,6 @@ class MultiDocMCMCSegV2(AbstractSegmentor):
         u_clusters = self.best_segmentation[-1][0][1]
         hyp_seg = self.get_segmentation(doc_i, u_clusters)
         return hyp_seg
-    
-    def add_sample(self, doc_i, u, k):
-        self.samples_dict[doc_i][u][k] += 1
         
     def test_split(self, k, doc_i, u_begin, u_end, u_clusters):
         u_k_cluster = self.get_k_cluster(k, u_clusters)
@@ -82,12 +76,9 @@ class MultiDocMCMCSegV2(AbstractSegmentor):
             u_clusters.append(new_cluster)
             
         seg_ll = self.segmentation_ll(u_clusters)[0]
-        if self.use_dur_prior:
-            seg_ll += self.segmentation_log_prior(u_clusters)
-            
         return seg_ll, u_clusters
         
-    def accept_move(self, move_u_clusters, move_seg_ll, best_seg_ll):
+    def accept_move(self, move_seg_ll, best_seg_ll):
         uniform_draw = np.random.uniform(0,1)
         ratio = move_seg_ll/best_seg_ll
         if uniform_draw < ratio:
@@ -105,7 +96,7 @@ class MultiDocMCMCSegV2(AbstractSegmentor):
             doc_i_move = self.data.get_doc_i(u_move)
             if doc_i_move > 0:
                 u_move = u_move-self.data.docs_index[doc_i_move-1]
-            
+            self.n_samples[doc_i_move][u_move] += 1
             current_k, u_begin, u_end = self.get_u_segment(doc_i_move, u_move, best_u_clusters)
             rho_u = doc_i_rho[doc_i_move][u_move]
             
@@ -181,61 +172,37 @@ class MultiDocMCMCSegV2(AbstractSegmentor):
             
                 move_u_clusters = u_clusters_merge
                 move_seg_ll = self.segmentation_ll(u_clusters_merge)[0]
-                if self.use_dur_prior:
-                    move_seg_ll += self.segmentation_log_prior(u_clusters_merge)
                     
-            accept = self.accept_move(move_u_clusters, move_seg_ll, best_seg_ll)
+            accept = self.accept_move(move_seg_ll, best_seg_ll)
             if accept:
+                self.total_accepts += 1
                 best_u_clusters = move_u_clusters
                 best_seg_ll = move_seg_ll
-                k_final = k_move
-                self.add_sample(doc_i_move, u_move, k_move)
                 f.write("ll: %.3f\n"%best_seg_ll)
                 for doc_i in range(self.data.n_docs):
                     f.write("GS: "+str(self.data.docs_rho_gs[doc_i].tolist())+"\n"+\
                             "HYP "+str(self.get_segmentation(doc_i, best_u_clusters))+"\n"+\
                             "K:  "+str(self.get_seg_with_topics(doc_i, best_u_clusters))+"\n\n")
                 f.write("===============\n")
-            else:
-                k_final = current_k
-            self.add_sample(doc_i_move, u_move, k_final)
                     
         self.best_segmentation[-1] = [(best_seg_ll, best_u_clusters)]
         return best_u_clusters
         #print("\nBest found ll: %f\nGS move_seg_ll: %f\n" % (cached_segs[0][0], self.segmentation_ll(self.data.get_rho_u_clusters())))
         
-    def samples_decoder(self):
-        final_segmentation = []
-        for doc_i in range(self.data.n_docs):
-            for u in range(self.data.doc_len(doc_i)):
-                max_votes = -1
-                k_final = -1
-                possible_k = self.get_valid_insert_clusters(doc_i, final_segmentation) #TODO: get a better fix for not repeating topics
-                for k in possible_k:
-                    votes = self.samples_dict[doc_i][u][k]
-                    if votes > max_votes:
-                        max_votes = votes
-                        k_final = k
-                k_cluster = self.get_k_cluster(k_final, final_segmentation)
-                if k_cluster is None:
-                    k_cluster = SentenceCluster(u, u, [doc_i], k_final)
-                    final_segmentation.append(k_cluster)
-                else:
-                    k_cluster.add_sents(u, u, doc_i)
-                    
-        seg_ll = self.segmentation_ll(final_segmentation)[0]
-        return [(seg_ll, final_segmentation)]
-    
     def segment_docs(self):
+        iters = 500000
         self.set_gl_data(self.data)
         u_clusters = self.rnd_init_seg()
         self.best_segmentation[-1] = [(-np.inf, u_clusters)]
-        t = trange(10000, desc='', leave=True)
+        t = trange(iters, desc='', leave=True)
         for i in t:
             t.set_description("Iter %d" % i)
             if i == 4:
                 a = 0
             u_clusters = self.mcmc_segmentation_step(u_clusters)
-        self.best_segmentation[-1] = self.samples_decoder()
+        print("#accepts: %d #rejects: %d" % (self.total_accepts, iters-self.total_accepts))
+        for doc_i in self.n_samples:
+            print("doc_%d u_sampled: %s" %(doc_i, str(self.n_samples[doc_i])))
+        #self.best_segmentation[-1] = self.samples_decoder()
         #print("GS ll: %.3f" % self.segmentation_ll(self.data.get_rho_u_clusters()))
         
