@@ -15,6 +15,7 @@ import os
 import ray
 import itertools
 import multiprocessing
+from operator import attrgetter
 
 class MultiDocGreedySeg(AbstractSegmentor):
     
@@ -29,6 +30,9 @@ class MultiDocGreedySeg(AbstractSegmentor):
         self.check_cache_flag = seg_config["check_cache_flag"]
         self.log_flag = seg_config["log_flag"]
         self.flush_cache_flag = seg_config["flush_cache_flag"]
+        self.slack_flag = seg_config["slack_flag"]
+        self.topic_slack = seg_config["topic_slack"]
+        
         if "u_order" not in seg_config or seg_config["u_order"] is None:
             self.u_order = None
         elif seg_config["u_order"] == "window":
@@ -121,9 +125,14 @@ class MultiDocGreedySeg(AbstractSegmentor):
                     else:
                         test_clusters.append(k_poss)
             else:
+                if self.slack_flag:
+                    n_doc_i_only_clusters = self.get_doci_only_clusters(doc_i, cached_u_clusters)
+                    if n_doc_i_only_clusters < self.topic_slack:
+                        max_k = max(cached_u_clusters, key=attrgetter('k'))
+                        possible_clusters.append(max_k+1)
                 test_clusters = possible_clusters
-            merge_move_clusters = list(set(range(0, self.max_topics))-possible_clusters)
-            test_clusters = test_clusters+merge_move_clusters
+            #merge_move_clusters = list(set(range(0, self.max_topics))-possible_clusters)
+            #test_clusters = test_clusters+merge_move_clusters
                 
             for k in test_clusters:
                 current_u_clusters = copy.deepcopy(cached_u_clusters)
@@ -375,6 +384,11 @@ def compute_seg_ll_parallel(segmentor, cached_segs, doc_i, u):
                 else:
                     test_clusters.append(k_poss)
         else:
+            if segmentor.slack_flag:
+                n_doc_i_only_clusters = segmentor.get_doci_only_clusters(doc_i, cached_u_clusters)
+                if n_doc_i_only_clusters < segmentor.topic_slack:
+                    max_k = max(cached_u_clusters, key=attrgetter('k'))
+                    possible_clusters.append(max_k+1)
             test_clusters = possible_clusters
         #merge_move_clusters = list(set(range(0, segmentor.max_topics))-set(possible_clusters))
         #test_clusters = test_clusters+merge_move_clusters

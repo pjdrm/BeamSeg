@@ -528,12 +528,12 @@ def real_dataset_tests():
                          "alpha_tt_t0": 4,\
                          "phi_log_dir": "../logs/phi"}
     
-    greedy_seg_config = {"max_topics": doc_col.max_topics+3,
+    greedy_seg_config = {"max_topics": doc_col.max_topics,
                          "max_cache": 50,
                          "beta": np.array([0.8]*doc_col.W),
                          "use_dur_prior": True,
                          "seg_dur_prior": doc_col.seg_dur_prior,
-                         "seg_func": SEG_BL,
+                         "seg_func": SEG_TT,
                          "u_order": "window",
                          "cache_prune": "topn_cache_prune",
                          "window_size": 3,
@@ -541,6 +541,8 @@ def real_dataset_tests():
                          "check_cache_flag": False,
                          "log_flag": True,
                          "flush_cache_flag": True,
+                         "slack_flag": True,
+                         "topic_slack": 3,
                          "phi_log_dir": "../logs/phi",
                          "seg_type": "seg_skip_k"}
     if greedy_seg_config["run_parallel"]:
@@ -549,10 +551,10 @@ def real_dataset_tests():
     #single_docs = doc_col.get_single_docs()
     models = []
     models_names = []
-    betas = [0.8]
-    windows = [60]
-    run_MD = False
-    run_SD = True
+    betas = [8]
+    windows = [100]
+    run_MD = True
+    run_SD = False
     for beta in betas:
         for window in windows:
             if run_MD:

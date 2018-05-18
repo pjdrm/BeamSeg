@@ -316,7 +316,7 @@ class MultiDocument(Document):
     def prepare_multi_doc(self, doc_dir, doc_tmp_path):
         str_cat_files = ""
         doc_offset = 0
-        docs_file_names = ['L03_7_processed_annotated_html.txt', 'L03_13_processed_annotated_html.txt', 'L03_270_processed_annotated_pdf.txt', 'L03_323_processed_annotated_pdf.txt', 'L03_342_processed_annotated_pdf.txt', 'L03_365_processed_annotated_pdf.txt', 'L03_401_processed_annotated_ppt.txt', 'L03_402_processed_annotated_ppt.txt', 'L03_48_processed_annotated_html.txt', 'L03_174_processed_annotated_html.txt', 'L03_185_processed_annotated_html.txt', 'L03_203_processed_annotated_html.txt', 'L03_213_processed_annotated_html.txt', 'L03_239_processed_annotated_html.txt', 'L03_v19_cap_man_processed_annotated.txt', 'L03_v22_cap_man_processed_annotated.txt', 'L03_vref_cap_man_processed_annotated.txt', 'L03_399_processed_annotated_ppt.txt']
+        docs_file_names = ['L02_vref_cap_man_processed_annotated.txt', 'L02_86_processed_annotated_html.txt']
         #sorted(docs_file_names)
         for doc in docs_file_names:
             self.doc_names.append(doc)

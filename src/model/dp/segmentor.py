@@ -248,8 +248,16 @@ class AbstractSegmentor(object):
         for u_cluster in u_clusters:
             if u_cluster.has_doc(doc_i):
                 k_list.append(u_cluster.k)
-        return k_list     
+        return k_list
     
+    def get_doci_only_clusters(self, doc_i, u_clusters):
+        c = 0
+        for u_cluster in u_clusters:
+            docs = u_cluster.get_docs()
+            if len(docs) == 1 and docs[0] == doc_i:
+                c += 1
+        return c
+            
     def assign_target_k(self, u_begin, u_end, doc_i, k_target, possible_clusters, u_clusters):
         u_k_target_cluster = self.get_k_cluster(k_target, u_clusters)
         if u_k_target_cluster is not None:
