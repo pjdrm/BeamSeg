@@ -253,7 +253,7 @@ class AbstractSegmentor(object):
     def get_doci_only_clusters(self, doc_i, u_clusters):
         c = 0
         for u_cluster in u_clusters:
-            docs = u_cluster.get_docs()
+            docs = list(u_cluster.get_docs())
             if len(docs) == 1 and docs[0] == doc_i:
                 c += 1
         return c

@@ -25,6 +25,7 @@ from eval.eval_tools import wd_evaluator, f_measure, accuracy
 from dataset.real_doc import MultiDocument
 import dirichlet
 from itertools import chain
+from sklearn.cluster import spectral_clustering
 
 def hyper_param_opt(data, n=10):
     dir_samples = []
@@ -131,7 +132,57 @@ def plot_prior(prior, data):
     axes.y.ticks.labels.angle = -90
     
     toyplot.browser.show(canvas)
+
+def gaussianSimGraph(cluster_elms):
+    def gaussianSim(xi, xj):
+        var = 100
+        return np.exp((-1 * np.linalg.norm(xi - xj) ** 2) / (2 * var))
     
+    sim_graph = np.zeros([cluster_elms.shape[0], cluster_elms.shape[0]])
+    for i, j in np.ndindex(sim_graph.shape):
+        sim = gaussianSim(cluster_elms[i], cluster_elms[j])
+        if sim >= 0:
+            sim_graph[i, j] = sim
+    return sim_graph
+
+def eval_pipeline_linking(hyp_topic_seqs):
+    #Copy paste here values from the logs
+    hyp_topic_seqs = []
+    config_file = "../dataset/physics_test.json"
+    with open(config_file) as data_file:    
+        config = json.load(data_file)
+    doc_col = MultiDocument(config)
+    data = Data(doc_col)
+    num_clusters = doc_col.max_topics
+    
+    clustering_points = []
+    seg_lens = []
+    start = 0
+    end = 0
+    for topic_seq in hyp_topic_seqs:
+        k_prev = topic_seq[0]
+        for k in topic_seq:
+            if k_prev != k:
+                seg_lens.append(end-start+1)
+                clustering_points.append(data.U_W_counts[start:end])
+                start = end
+                k_prev = k
+            end += 1
+    sim_graph = gaussianSimGraph(clustering_points)
+    labels = spectral_clustering(sim_graph, n_clusters=num_clusters, eigen_solver='arpack')
+    hyp_topics = []
+    for seg_len, label in zip(seg_lens, labels):
+        hyp_topics += [label]*seg_len
+        
+    gs_topics = []
+    for doc_i in range(data.n_docs):
+        gs_topics += data.doc_rho_topics[doc_i]
+        
+    f1_score = f_measure(gs_topics, hyp_topics)
+    acc = accuracy(gs_topics, hyp_topics)
+    print("Pipeline linking Spectral Clustering F1: %f Acc %f" % (f1_score, acc))
+    
+        
 def md_eval(doc_synth, models, models_desc):
     seg_times = []
     for model in models:
@@ -170,7 +221,7 @@ def md_eval(doc_synth, models, models_desc):
             gs_topics += model.data.doc_rho_topics[doc_i]
         f1_score = f_measure(gs_topics, hyp_topics)
         acc = accuracy(gs_topics, hyp_topics)
-        print("%s F1: %f Acc %f" % (str(models_desc[i]), f1_score, acc))
+        print("%s F1: %f Acc %f\nHyp Topics: %s" % (str(models_desc[i]), f1_score, acc, str(hyp_topics)))
     
 def single_vs_md_eval(doc_synth, alpha, md_all_combs=True, md_fast=True, print_flag=False):
     '''
@@ -541,7 +592,7 @@ def real_dataset_tests():
                          "check_cache_flag": False,
                          "log_flag": True,
                          "flush_cache_flag": True,
-                         "slack_flag": True,
+                         "slack_flag": False,
                          "topic_slack": 3,
                          "phi_log_dir": "../logs/phi",
                          "seg_type": "seg_skip_k"}
@@ -551,8 +602,8 @@ def real_dataset_tests():
     #single_docs = doc_col.get_single_docs()
     models = []
     models_names = []
-    betas = [8]
-    windows = [100]
+    betas = [.8,2,8]
+    windows = [50,100,120]
     run_MD = True
     run_SD = False
     for beta in betas:

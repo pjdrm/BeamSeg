@@ -277,8 +277,11 @@ class MultiDocument(Document):
             topic_dict[dir_name] = i
             
         for doc_name in self.doc_names:
-            doc_name_split = doc_name.split("_")
-            doc_name = doc_name_split[0]+"_"+doc_name_split[1]+"_"
+            if "processed" in doc_name:
+                doc_name_split = doc_name.split("_")
+                doc_name = doc_name_split[0]+"_"+doc_name_split[1]+"_"
+            else:
+                doc_name = doc_name[:-4]
             topic_seq = []
             topic_seq_dict = {}
             for dir_name in os.listdir(links_dir):
@@ -290,7 +293,7 @@ class MultiDocument(Document):
                 topic_seq.append(topic_seq_dict[i])
             docs_topic_seq.append(topic_seq)
         
-        self.find_target_docs(self.doc_names, docs_topic_seq)
+        #self.find_target_docs(self.doc_names, docs_topic_seq)
         doc_i = 0
         doc_rho_topics = []
         doc_i_rho_topics = []
@@ -316,7 +319,7 @@ class MultiDocument(Document):
     def prepare_multi_doc(self, doc_dir, doc_tmp_path):
         str_cat_files = ""
         doc_offset = 0
-        docs_file_names = ['L02_vref_cap_man_processed_annotated.txt', 'L02_86_processed_annotated_html.txt']
+        docs_file_names = os.listdir(doc_dir)
         #sorted(docs_file_names)
         for doc in docs_file_names:
             self.doc_names.append(doc)
