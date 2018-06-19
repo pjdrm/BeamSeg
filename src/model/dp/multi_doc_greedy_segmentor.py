@@ -32,6 +32,7 @@ class MultiDocGreedySeg(AbstractSegmentor):
         self.flush_cache_flag = seg_config["flush_cache_flag"]
         self.slack_flag = seg_config["slack_flag"]
         self.topic_slack = seg_config["topic_slack"]
+        self.max_seg_len = 20
         
         if "u_order" not in seg_config or seg_config["u_order"] is None:
             self.u_order = None
@@ -97,6 +98,19 @@ class MultiDocGreedySeg(AbstractSegmentor):
         hyp_seg = self.get_segmentation(doc_i, u_clusters)
         return hyp_seg
     
+    def check_seg_max_len(self, test_k, doc_i, u_clusters):
+        final_test_k = []
+        for k in test_k:
+            u_k_cluster = self.get_k_cluster(k, u_clusters)
+            if u_k_cluster is None or not u_k_cluster.has_doc(doc_i):
+                final_test_k.append(k)
+                continue
+            u_begin, u_end = u_k_cluster.get_segment(doc_i)
+            seg_len = u_end-u_begin+1
+            if seg_len+1 <= self.max_seg_len: #+1 because the current utterance is not yet assigned to the clusters
+                final_test_k.append(k)
+        return final_test_k        
+    
     def compute_seg_ll_seq(self, cached_segs, doc_i, u):
         '''
         Computes in sequentially the segmentation likelihood of assigning u to
@@ -133,7 +147,7 @@ class MultiDocGreedySeg(AbstractSegmentor):
                 test_clusters = possible_clusters
             #merge_move_clusters = list(set(range(0, self.max_topics))-possible_clusters)
             #test_clusters = test_clusters+merge_move_clusters
-                
+            test_clusters = self.check_seg_max_len(test_clusters, doc_i, cached_u_clusters) 
             for k in test_clusters:
                 current_u_clusters = copy.deepcopy(cached_u_clusters)
                 current_u_clusters = self.assign_target_k(u, u, doc_i, k, possible_clusters, current_u_clusters)
@@ -392,7 +406,7 @@ def compute_seg_ll_parallel(segmentor, cached_segs, doc_i, u):
             test_clusters = possible_clusters
         #merge_move_clusters = list(set(range(0, segmentor.max_topics))-set(possible_clusters))
         #test_clusters = test_clusters+merge_move_clusters
-                
+        test_clusters = segmentor.check_seg_max_len(test_clusters, doc_i, cached_u_clusters) 
         for k in test_clusters:
             current_u_clusters = copy.deepcopy(cached_u_clusters)
             current_u_clusters = segmentor.assign_target_k(u, u, doc_i, k, possible_clusters, current_u_clusters)

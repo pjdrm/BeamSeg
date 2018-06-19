@@ -319,6 +319,17 @@ class MultiDocument(Document):
     def prepare_multi_doc(self, doc_dir, doc_tmp_path):
         str_cat_files = ""
         doc_offset = 0
+        '''
+        docs_file_names = os.listdir(doc_dir)
+        order_docs = []
+        target_order = ["1", "0", "3", "2"]
+        for i in target_order:
+            for doc_name in docs_file_names:
+                if i in doc_name:
+                    order_docs.append(doc_name)
+                    break
+        docs_file_names = order_docs
+        '''
         docs_file_names = ['L03_7_processed_annotated_html.txt',
                             'L03_342_processed_annotated_pdf.txt',
                             'L03_48_processed_annotated_html.txt',

@@ -26,6 +26,7 @@ from dataset.real_doc import MultiDocument
 import dirichlet
 from itertools import chain
 from sklearn.cluster import spectral_clustering
+import os
 
 def hyper_param_opt(data, n=10):
     dir_samples = []
@@ -145,42 +146,70 @@ def gaussianSimGraph(cluster_elms):
             sim_graph[i, j] = sim
     return sim_graph
 
-def eval_pipeline_linking():
-    #Copy paste here values from the logs
-    hyp_topic_seqs = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 0, 0, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10]
-    config_file = "../dataset/physics_test.json"
-    with open(config_file) as data_file:    
-        config = json.load(data_file)
-    doc_col = MultiDocument(config)
-    data = Data(doc_col)
-    num_clusters = doc_col.max_topics
+def load_segs_link(seg_results_dir):
+    segs_dict = {}
+    for res_file in os.listdir(seg_results_dir):
+        with open(seg_results_dir+res_file) as f:
+            lins = f.readlines()
+        domain = eval(lins[-1])[0][:-5]
+        seg = eval(lins[-2].replace("Hyp Topics: ", ""))
+        segs_dict[domain] = seg
+    return segs_dict
     
-    clustering_points = []
-    seg_lens = []
-    start = 0
-    end = 0
-    k_prev = hyp_topic_seqs[0]
-    for k in hyp_topic_seqs:
-        if k_prev != k:
-            seg_lens.append(end-start+1)
-            clustering_points.append(np.sum(doc_col.U_W_counts[start:end], axis=0))
-            start = end
-            k_prev = k
-        end += 1
+def eval_pipeline_linking(seg_results_dir, configs_dir):
+    print("Spectral Clustering link evaluation")
+    all_segs = load_segs_link(seg_results_dir)
+    results_dict = {}
+    for config in os.listdir(configs_dir):
         
-    sim_graph = gaussianSimGraph(np.array(clustering_points))
-    labels = spectral_clustering(sim_graph, n_clusters=num_clusters, eigen_solver='arpack')
-    hyp_topics = []
-    for seg_len, label in zip(seg_lens, labels):
-        hyp_topics += [label]*seg_len
+        config_file = configs_dir+config #"../dataset/physics_test.json"
+        with open(config_file) as data_file:    
+            config = json.load(data_file)
+        domain = os.listdir(config["real_data"]["docs_dir"])[0][:-5]
+        hyp_topic_seqs = all_segs[domain]
+        doc_col = MultiDocument(config)
+        data = Data(doc_col)
+        num_clusters = doc_col.max_topics
         
-    gs_topics = []
-    for doc_i in range(data.n_docs):
-        gs_topics += data.doc_rho_topics[doc_i]
-        
-    f1_score = f_measure(gs_topics, hyp_topics)
-    acc = accuracy(gs_topics, hyp_topics)
-    print("Pipeline linking Spectral Clustering F1: %f Acc %f" % (f1_score, acc))
+        clustering_points = []
+        seg_lens = []
+        start = 0
+        end = 0
+        k_prev = hyp_topic_seqs[0]
+        for k in hyp_topic_seqs:
+            if k_prev != k:
+                seg_lens.append(end-start)
+                clustering_points.append(np.sum(doc_col.U_W_counts[start:end], axis=0))
+                start = end
+                k_prev = k
+            end += 1
+        clustering_points.append(np.sum(doc_col.U_W_counts[start:end], axis=0))
+        seg_lens.append(end-start)
+        if num_clusters >= len(seg_lens):
+            num_clusters = len(seg_lens)-3
+        if len(seg_lens) == 1:
+            hyp_topics = hyp_topic_seqs
+        else:
+            sim_graph = gaussianSimGraph(np.array(clustering_points))
+            labels = spectral_clustering(sim_graph, n_clusters=num_clusters, eigen_solver='arpack')
+            hyp_topics = []
+            for seg_len, label in zip(seg_lens, labels):
+                hyp_topics += [label]*seg_len
+            
+        gs_topics = []
+        for doc_i in range(data.n_docs):
+            gs_topics += data.doc_rho_topics[doc_i]
+            
+        f1_score = f_measure(gs_topics, hyp_topics)
+        acc = accuracy(gs_topics, hyp_topics)
+        print("%s\n Ref:%s\nHyp:%s" % (domain, str(gs_topics), str(hyp_topics)))
+        results_dict[domain] = {"F1": f1_score, "Acc": acc}
+    
+    ids = list(results_dict.keys())
+    ids.sort()
+    print("Domain\tF1\tAcc")
+    for domain in ids: 
+        print("%s\t%f\t%f" % (domain, results_dict[domain]["F1"], results_dict[domain]["Acc"]))
     
         
 def md_eval(doc_synth, models, models_desc):
@@ -561,8 +590,8 @@ def skip_topics_incremental_test():
     for doc_i in range(n_docs):
         print("doc_%d %s" % (doc_i, str(results_dict[doc_i])))
         
-def real_dataset_tests():
-    config_file = "../dataset/physics_test.json"
+def real_dataset_tests(config_file):
+    #config_file = "../dataset/physics_test.json"
     with open(config_file) as data_file:    
         config = json.load(data_file)
     doc_col = MultiDocument(config)
@@ -573,7 +602,7 @@ def real_dataset_tests():
                          "max_cache": 10,
                          "seg_type": None,
                          "beta": np.array([0.8]*doc_col.W),\
-                         "use_dur_prior": True,
+                         "use_dur_prior": False,
                          "seg_dur_prior": doc_col.seg_dur_prior,\
                          "seg_func": SEG_BL,\
                          "alpha_tt_t0": 4,\
@@ -590,8 +619,8 @@ def real_dataset_tests():
                          "window_size": 3,
                          "run_parallel": True,
                          "check_cache_flag": False,
-                         "log_flag": True,
-                         "flush_cache_flag": True,
+                         "log_flag": False,
+                         "flush_cache_flag": False,
                          "slack_flag": False,
                          "topic_slack": 3,
                          "phi_log_dir": "../logs/phi",
@@ -602,8 +631,8 @@ def real_dataset_tests():
     #single_docs = doc_col.get_single_docs()
     models = []
     models_names = []
-    betas = [.8,2,8]
-    windows = [50,100,120]
+    betas = [.8]
+    windows = [50]
     run_MD = True
     run_SD = False
     for beta in betas:
@@ -629,7 +658,11 @@ def real_dataset_tests():
     print(doc_col.doc_names)
     #plot_topics(models[1].best_segmentation[-1][0][1], doc_col.inv_vocab)
         
-    
-#skip_topics_test()
-#real_dataset_tests()
-eval_pipeline_linking()
+if __name__ == "__main__":
+    if len(sys.argv) == 1:
+        config_file = "../dataset/physics_test.json"
+    else:
+        config_file = sys.argv[1]
+    #skip_topics_test()
+    real_dataset_tests(config_file)
+    #eval_pipeline_linking("/home/pjdrm/eclipse-workspace/SegmentationScripts/all_results/", "/home/pjdrm/eclipse-workspace/SegmentationScripts/configs/")
