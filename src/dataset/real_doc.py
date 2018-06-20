@@ -196,7 +196,11 @@ class Document(object):
             for b_gl in boundary_ghost_lines:
                 if b_gl-1 in boundary_ghost_lines:
                     print("WARNING: Oh no another boundary ghost line...")
+                
+                while b_gl-1 in self.ghost_lines:
+                    b_gl -= 1
                 self.rho[b_gl-1] = 1
+                    
         
         self.n_sents -= len(self.ghost_lines)
         self.U_W_counts = np.delete(self.U_W_counts, self.ghost_lines, axis=0)
@@ -330,16 +334,7 @@ class MultiDocument(Document):
                     break
         docs_file_names = order_docs
         '''
-        docs_file_names = ['L03_7_processed_annotated_html.txt',
-                            'L03_342_processed_annotated_pdf.txt',
-                            'L03_48_processed_annotated_html.txt',
-                            'L03_365_processed_annotated_pdf.txt',
-                            'L03_185_processed_annotated_html.txt',
-                            'L03_402_processed_annotated_ppt.txt',
-                            'L03_v19_cap_man_processed_annotated.txt',
-                            'L03_239_processed_annotated_html.txt',
-                            'L03_213_processed_annotated_html.txt',
-                            'L03_vref_cap_man_processed_annotated.txt']
+        docs_file_names = ['L03_7_processed_annotated_html.txt']
         #sorted(docs_file_names)
         for doc in docs_file_names:
             self.doc_names.append(doc)

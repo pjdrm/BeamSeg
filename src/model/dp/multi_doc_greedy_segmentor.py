@@ -32,7 +32,7 @@ class MultiDocGreedySeg(AbstractSegmentor):
         self.flush_cache_flag = seg_config["flush_cache_flag"]
         self.slack_flag = seg_config["slack_flag"]
         self.topic_slack = seg_config["topic_slack"]
-        self.max_seg_len = 20
+        self.max_seg_len = seg_config["max_seg_len"]
         
         if "u_order" not in seg_config or seg_config["u_order"] is None:
             self.u_order = None

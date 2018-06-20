@@ -609,6 +609,7 @@ def real_dataset_tests(config_file):
                          "phi_log_dir": "../logs/phi"}
     
     greedy_seg_config = {"max_topics": doc_col.max_topics,
+                         "max_seg_len": 1000000, #TODO: there is a corner case where we reached max seg len and run oput of topics also
                          "max_cache": 50,
                          "beta": np.array([0.8]*doc_col.W),
                          "use_dur_prior": True,
