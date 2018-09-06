@@ -24,9 +24,11 @@ import sys
 from eval.eval_tools import wd_evaluator, f_measure, accuracy
 from dataset.real_doc import MultiDocument
 import dirichlet
-from itertools import chain
+from itertools import chain, product
 from sklearn.cluster import spectral_clustering
 import os
+from random import shuffle
+import cProfile, pstats, io
 
 def hyper_param_opt(data, n=10):
     dir_samples = []
@@ -211,7 +213,22 @@ def eval_pipeline_linking(seg_results_dir, configs_dir):
     for domain in ids: 
         print("%s\t%f\t%f" % (domain, results_dict[domain]["F1"], results_dict[domain]["Acc"]))
     
-        
+def gen_rnd_baseline(seg):
+    shuffle(seg)
+    shuffle(seg)
+    shuffle(seg)
+    return seg.tolist()
+
+def get_topics_baseline(hyp_topics):
+    bl_topics = []
+    new_k = 0
+    k_prev = hyp_topics[0]
+    for k in hyp_topics:
+        if k != k_prev:
+            new_k += 1
+        bl_topics.append(new_k)
+    return bl_topics
+
 def md_eval(doc_synth, models, models_desc):
     seg_times = []
     for model in models:
@@ -230,8 +247,16 @@ def md_eval(doc_synth, models, models_desc):
             md_segs[i].append(model.get_final_segmentation(doc_i))
             
     gs_segs = []
+    rnd_baselines = [[] for i in range(100)]
+    no_segs_baseline = []
     for gs_doc in models[0].data.docs_rho_gs:
-        gs_segs.append(gs_doc)
+        gs_doc_copy = copy.deepcopy(gs_doc)
+        gs_segs.append(gs_doc_copy)
+        no_segs_baseline += [0]*len(gs_doc_copy)
+        for i in range(len(rnd_baselines)):
+            gs_doc_copy = copy.deepcopy(gs_doc)
+            rnd_baselines[i] += gen_rnd_baseline(gs_doc_copy)
+        
         
     for j, gs_seg in enumerate(gs_segs):
         print("GS:\n" + str(gs_seg.tolist()))
@@ -241,16 +266,37 @@ def md_eval(doc_synth, models, models_desc):
         
     for i, model in enumerate(models):
         print(str(models_desc[i])+" WD: "+str(wd_evaluator(model.get_all_segmentations(), doc_synth)))
-        
+    
+    print("Baseline NO segs WD: "+str(wd_evaluator(no_segs_baseline, doc_synth)))
+    avg_wd_rnd_bl = np.zeros(models[0].data.n_docs)
+    for rnd_baseline in rnd_baselines:
+        avg_wd_rnd_bl += np.array(wd_evaluator(rnd_baseline, doc_synth))
+    
+    avg_wd_rnd_bl = avg_wd_rnd_bl/len(rnd_baselines)
+    print("Baseline RND segs WD: "+str(avg_wd_rnd_bl.tolist()))
+    
     for i, model in enumerate(models):
         hyp_topics = []
         gs_topics = []
+        hyp_topics_print = []
+        gs_topics_print = []
         for doc_i in range(model.data.n_docs):
             hyp_topics += model.get_seg_with_topics(doc_i, model.best_segmentation[-1][0][1])
+            hyp_topics_print.append(model.get_seg_with_topics(doc_i, model.best_segmentation[-1][0][1]))
             gs_topics += model.data.doc_rho_topics[doc_i]
+            gs_topics_print.append(model.data.doc_rho_topics[doc_i])
         f1_score = f_measure(gs_topics, hyp_topics)
         acc = accuracy(gs_topics, hyp_topics)
-        print("%s F1: %f Acc %f\nHyp Topics: %s" % (str(models_desc[i]), f1_score, acc, str(hyp_topics)))
+        
+        hyp_all_dif_topics = get_topics_baseline(hyp_topics)
+        f1_score_bl = f_measure(gs_topics, hyp_all_dif_topics)
+        acc_bl = accuracy(gs_topics, hyp_all_dif_topics)
+        print("%s F1: %f F1_bl: %f Acc %f Acc_bl %f\nHyp Topics: %s\nRef Topics: %s" % (str(models_desc[i]),
+                                                                                        f1_score,
+                                                                                        f1_score_bl,
+                                                                                        acc, acc_bl,
+                                                                                        str(hyp_topics_print),
+                                                                                        str(gs_topics_print)))
     
 def single_vs_md_eval(doc_synth, alpha, md_all_combs=True, md_fast=True, print_flag=False):
     '''
@@ -590,11 +636,63 @@ def skip_topics_incremental_test():
     for doc_i in range(n_docs):
         print("doc_%d %s" % (doc_i, str(results_dict[doc_i])))
         
-def real_dataset_tests(config_file):
-    #config_file = "../dataset/physics_test.json"
-    with open(config_file) as data_file:    
-        config = json.load(data_file)
-    doc_col = MultiDocument(config)
+def profile(fnc):
+    
+    """A decorator that uses cProfile to profile a function"""
+    
+    def inner(*args, **kwargs):
+        
+        pr = cProfile.Profile()
+        pr.enable()
+        retval = fnc(*args, **kwargs)
+        pr.disable()
+        s = io.StringIO()
+        sortby = 'cumulative'
+        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+        ps.print_stats()
+        print(s.getvalue())
+        return retval
+
+    return inner
+
+def get_seg_desc(config_inst):    
+    desc = "sf: "+str(config_inst["seg_func"])+\
+           " mt: "+str(config_inst["max_topics"])+\
+           " beta: "+str(config_inst["beta"][0])+\
+           " msl: "+str(config_inst["max_seg_len"])+\
+           " ws: "+str(config_inst["window_size"])+\
+           " mc: "+str(config_inst["max_cache"])+\
+           " cp: "+str(config_inst["cache_prune"])+\
+           " fc: "+str(config_inst["flush_cache_flag"])+\
+           " sf: "+str(config_inst["slack_flag"])+\
+           " ts: "+str(config_inst["topic_slack"])+\
+           " pt: "+'"'+str(config_inst["prior_type"])+'"'
+    if "config" == config_inst["prior_type"]:
+        desc += " vals: "+str(config_inst["dur_prior_vals"])
+    return desc
+
+def get_all_greedy_configs(base_config):
+    expand_keys = []
+    expand_values = []
+    all_configs = []
+    for key in base_config:
+        if isinstance(base_config[key],(list,)): 
+            expand_keys.append(key)
+            expand_values.append(base_config[key])
+    
+    if len(expand_keys) == 0:
+        return [base_config]
+    
+    for val_comb in list(product(*expand_values)):
+        config_instance = copy.deepcopy(base_config)
+        for i, key in enumerate(expand_keys):
+            config_instance[key] = val_comb[i]
+        all_configs.append(config_instance)
+    return all_configs
+
+#@profile
+def real_dataset_tests(data_config, greedy_seg_config):
+    doc_col = MultiDocument(data_config)
     data = Data(doc_col)
     single_docs = doc_col.get_single_docs()
     alpha_tt_t0_test = [0.2, 3, 8, 10, 20, 80, 100]
@@ -603,29 +701,11 @@ def real_dataset_tests(config_file):
                          "seg_type": None,
                          "beta": np.array([0.8]*doc_col.W),\
                          "use_dur_prior": False,
-                         "seg_dur_prior": doc_col.seg_dur_prior,\
+                         "seg_dur_prior": "indv",\
                          "seg_func": SEG_BL,\
                          "alpha_tt_t0": 4,\
                          "phi_log_dir": "../logs/phi"}
-    
-    greedy_seg_config = {"max_topics": doc_col.max_topics,
-                         "max_seg_len": 1000000, #TODO: there is a corner case where we reached max seg len and run oput of topics also
-                         "max_cache": 50,
-                         "beta": np.array([0.8]*doc_col.W),
-                         "use_dur_prior": True,
-                         "seg_dur_prior": doc_col.seg_dur_prior,
-                         "seg_func": SEG_TT,
-                         "u_order": "window",
-                         "cache_prune": "topn_cache_prune",
-                         "window_size": 3,
-                         "run_parallel": True,
-                         "check_cache_flag": False,
-                         "log_flag": False,
-                         "flush_cache_flag": False,
-                         "slack_flag": False,
-                         "topic_slack": 3,
-                         "phi_log_dir": "../logs/phi",
-                         "seg_type": "seg_skip_k"}
+    all_configs = get_all_greedy_configs(greedy_seg_config)
     if greedy_seg_config["run_parallel"]:
         import ray
         ray.init(redirect_output=True)
@@ -636,34 +716,45 @@ def real_dataset_tests(config_file):
     windows = [50]
     run_MD = True
     run_SD = False
-    for beta in betas:
-        for window in windows:
-            if run_MD:
-                if greedy_seg_config["seg_func"] == SEG_TT:
-                    greedy_seg_config["beta"] = np.array([beta]*doc_col.W)
-                else:
-                    greedy_seg_config["beta"] = hyper_param_opt(doc_col, n=beta) #np.array([beta]*doc_col.W)
-                greedy_seg_config["window_size"] = window
-                greedy_model = greedy_seg.MultiDocGreedySeg(data, seg_config=greedy_seg_config)
-                #greedy_model = dp_seg.MultiDocDPSeg(data, greedy_seg_config)
-                #greedy_model = mcmc_seg_v2.MultiDocMCMCSegV2(data, greedy_seg_config)
-                prior_desc = str(beta)+"_"+str(window)
-                models_names.append(greedy_model.desc+"_" + greedy_seg_config["u_order"]+"_"+prior_desc)
-                models.append(greedy_model)
-            if run_SD:
-                sd_seg_config["beta"] = np.array([beta]*doc_col.W)#hyper_param_opt(doc_col, n=beta)
-                sd_model = sd_seg.SingleDocDPSeg(single_docs, data, seg_config=sd_seg_config)
-                models_names += [sd_model.desc+str(beta)]
-                models += [sd_model]
+    for config_inst in all_configs:
+        beta = config_inst["beta"]
+        config_inst["max_topics"] += doc_col.max_topics
+        if run_MD:
+            if config_inst["seg_func"] == SEG_TT:
+                config_inst["beta"] = np.array([beta]*doc_col.W)
+            else:
+                config_inst["beta"] = np.array([beta]*doc_col.W)#hyper_param_opt(doc_col, n=beta)
+            greedy_model = greedy_seg.MultiDocGreedySeg(data, seg_config=config_inst)
+            #greedy_model = dp_seg.MultiDocDPSeg(data, greedy_seg_config)
+            #greedy_model = mcmc_seg_v2.MultiDocMCMCSegV2(data, greedy_seg_config)
+            seg_desc = get_seg_desc(config_inst)
+            models_names.append(seg_desc)
+            models.append(greedy_model)
+        '''
+        if run_SD:
+            sd_seg_config["beta"] = np.array([beta]*doc_col.W)#hyper_param_opt(doc_col, n=beta)
+            sd_model = sd_seg.SingleDocDPSeg(single_docs, data, seg_config=sd_seg_config)
+            models_names += [sd_model.desc+str(beta)]
+            models += [sd_model]
+        '''
     md_eval(doc_col, models, models_names)
     print(doc_col.doc_names)
     #plot_topics(models[1].best_segmentation[-1][0][1], doc_col.inv_vocab)
         
 if __name__ == "__main__":
     if len(sys.argv) == 1:
-        config_file = "../dataset/physics_test.json"
+        data_config = "../config/physics_test.json"
+        greedy_seg_config = "../config/greedy_config.json"
     else:
-        config_file = sys.argv[1]
+        data_config = sys.argv[1]
+        greedy_seg_config = sys.argv[2]
+    with open(data_config) as data_file:    
+        data_config = json.load(data_file)
+        
+    with open(greedy_seg_config) as seg_file:    
+        greedy_seg_config = json.load(seg_file)
+        
     #skip_topics_test()
-    real_dataset_tests(config_file)
+    real_dataset_tests(data_config, greedy_seg_config)
     #eval_pipeline_linking("/home/pjdrm/eclipse-workspace/SegmentationScripts/all_results/", "/home/pjdrm/eclipse-workspace/SegmentationScripts/configs/")
+
