@@ -666,10 +666,7 @@ def get_seg_desc(config_inst):
            " fc: "+str(config_inst["flush_cache_flag"])+\
            " sf: "+str(config_inst["slack_flag"])+\
            " ts: "+str(config_inst["topic_slack"])+\
-           " pc: "+'"'+str(config_inst["prior_class"])+'"'+\
-           " pt: "+'"'+str(config_inst["prior_type"])+'"'
-    if "config" == config_inst["prior_type"]:
-        desc += " vals: "+str(config_inst["dur_prior_vals"])
+           " pc: "+'"'+str(config_inst["seg_dur_prior_config"])+'"'
     return desc
 
 def get_all_greedy_configs(base_config):
@@ -680,6 +677,13 @@ def get_all_greedy_configs(base_config):
         if isinstance(base_config[key],(list,)): 
             expand_keys.append(key)
             expand_values.append(base_config[key])
+        elif isinstance(base_config[key],(dict,)): 
+            expand_keys.append(key)
+            ex_vals = []
+            for key_dict_val in base_config[key]:
+                for val in base_config[key][key_dict_val]:
+                    ex_vals.append([key_dict_val, val])
+            expand_values.append(ex_vals)
     
     if len(expand_keys) == 0:
         return [base_config]

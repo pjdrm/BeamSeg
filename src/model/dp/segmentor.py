@@ -720,13 +720,6 @@ class SentenceCluster(object):
         u_end = seg_bound[1]
         return u_begin, u_end
     
-    def get_n_sents(self): #TODO: improve efficiency
-        n_sents = 0
-        for doc_i in self.doc_segs_dict:
-            u_begin, u_end = self.get_segment(doc_i)
-            n_sents += u_end-u_begin+1
-        return n_sents
-        
     def has_start_doc(self):
         for doc_i in self.doc_segs_dict:
             if self.doc_segs_dict[doc_i][0] == 0:

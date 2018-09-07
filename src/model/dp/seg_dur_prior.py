@@ -4,6 +4,7 @@ Created on Sep 6, 2018
 @author: root
 '''
 import numpy as np
+from scipy.special import gammaln
 
 class SegDurPrior(object):
     '''
@@ -13,10 +14,14 @@ class SegDurPrior(object):
         self.hyper_params = None
         self.segmentation_log_prior = None
         self.dataset_len = data.total_sents
+        self.n_docs = data.n_docs
         
-        if config["prior_class"] == "normal":
+        prior_desc = config["seg_dur_prior_config"][0].split("-")
+        prior_dist = prior_desc[0]
+        prior_type = prior_desc[1]
+        hyper_params_raw = config["seg_dur_prior_config"][1]
+        if prior_dist == "normal":
             self.segmentation_log_prior = self.segmentation_normal_log_prior
-            prior_type = config["prior_type"]
             if prior_type == "indv":
                 self.hyper_params = data.seg_dur_prior_indv
             elif prior_type == "dataset":
@@ -24,19 +29,18 @@ class SegDurPrior(object):
             elif prior_type == "modality":
                 self.hyper_params = data.seg_dur_prior_modality
             elif prior_type == "config":
-                self.hyper_params = [config["dur_prior_vals"]]*data.n_docs
+                self.hyper_params = [hyper_params_raw]*data.n_docs
             else:
                 print("ERROR: unknown prior tyoe %s"%prior_type)
-        elif config["prior_class"] == "beta_bern":
+        elif prior_dist == "beta_bern":
             self.segmentation_log_prior = self.segmentation_beta_bern_log_prior
-            self.hyper_params = config["dur_prior_vals"]
-        elif config["prior_class"] == "gamma_poisson":
+            self.hyper_params = hyper_params_raw
+        elif prior_dist == "gamma_poisson":
             self.segmentation_log_prior = self.segmentation_gamma_poisson_log_prior
-            raw_params = config["dur_prior_vals"]
-            lambda_hp = raw_params[0]
-            interval = raw_params[1]
-            alpha = raw_params[2]
-            beta = raw_params[3]
+            lambda_hp = hyper_params_raw[0]
+            interval = hyper_params_raw[1]
+            alpha = hyper_params_raw[2]
+            beta = hyper_params_raw[3]
             lambda_adjusted = float(self.dataset_len)*float(lambda_hp)/float(interval)
             self.hyper_params = [alpha, beta, lambda_adjusted]
                 
@@ -56,13 +60,22 @@ class SegDurPrior(object):
         return log_prior
     
     def segmentation_beta_bern_log_prior(self, u_clusters):
-        n_rho1 = 0
-        n_rho0 = 0
+        f1 = np.zeros(self.n_docs)
+        f2 = np.zeros(self.n_docs)
+        denom = np.zeros(self.n_docs)
         for u_cluster in u_clusters:
-            n_rho1 += len(u_cluster.get_docs())
-            n_rho0 += u_cluster.get_n_sents()
-        n_rho0 = n_rho0-n_rho1
-        log_prior = np.log(self.hyper_params**n_rho1)+np.log((1.0-self.hyper_params))*n_rho0
+            for doc_i in u_cluster.get_docs():
+                u_begin, u_end = u_cluster.get_segment(doc_i)
+                seg_len = u_end-u_begin+1
+                f1[doc_i] += 1.0
+                f2[doc_i] += seg_len
+                denom[doc_i] += seg_len
+                
+        f2 -= f1
+        f1 += self.hyper_params
+        f2 += self.hyper_params
+        denom += 2*self.hyper_params
+        log_prior = np.sum(gammaln(f1)+gammaln(f2)-gammaln(denom))
         return log_prior
     
     def segmentation_gamma_poisson_log_prior(self, u_clusters): #TODO: I need to rescale everytime. I forgot segmentation is incremental
