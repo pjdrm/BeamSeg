@@ -6,7 +6,11 @@ Created on Apr 12, 2018
 import numpy as np
 import toyplot
 import toyplot.browser
+import toyplot.pdf
+import toyplot.png
+import toyplot.svg
 import scipy.special as scipy
+from click.termui import style
 
 def draw_theta_topics(beta_t, theta_t_mean, K):
     theta_t = []
@@ -61,7 +65,7 @@ if use_seed:
 n_draws = 100
 W = 10
 K = 5
-n_chunks = 20
+n_chunks = 10
 base_prior = 10.0
 
 alpha_base = 10
@@ -104,12 +108,14 @@ rnd_topics = []
 for t in range(n_chunks):
     rnd_topics.append(np.random.dirichlet([base_prior]*K))
     
-canvas = toyplot.Canvas(width=1500, height=500)
-axes = canvas.cartesian(label="Random Topics", margin=100)
+canvas = toyplot.Canvas(width=350, height=250)
+axes = canvas.cartesian(xlabel="Topics", ylabel="Word Probabilities")
 axes.bars(rnd_topics)
 #toyplot.browser.show(canvas)
+toyplot.svg.render(canvas, "independent_prior.svg")
 
-canvas = toyplot.Canvas(width=1500, height=500)
-axes = canvas.cartesian(label="Dynamic Topics", margin=100)
+canvas = toyplot.Canvas(width=350, height=250)
+axes = canvas.cartesian(xlabel="Topics", ylabel="Word Probabilities")
 axes.bars(all_topic_prop_draws[1:])
-toyplot.browser.show(canvas)
+#toyplot.browser.show(canvas)
+toyplot.pdf.render(canvas, "dynamic_prior.pdf")
