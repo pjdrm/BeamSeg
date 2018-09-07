@@ -666,6 +666,7 @@ def get_seg_desc(config_inst):
            " fc: "+str(config_inst["flush_cache_flag"])+\
            " sf: "+str(config_inst["slack_flag"])+\
            " ts: "+str(config_inst["topic_slack"])+\
+           " pc: "+'"'+str(config_inst["prior_class"])+'"'+\
            " pt: "+'"'+str(config_inst["prior_type"])+'"'
     if "config" == config_inst["prior_type"]:
         desc += " vals: "+str(config_inst["dur_prior_vals"])

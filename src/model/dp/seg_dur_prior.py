@@ -57,13 +57,15 @@ class SegDurPrior(object):
     
     def segmentation_beta_bern_log_prior(self, u_clusters):
         n_rho1 = 0
+        n_rho0 = 0
         for u_cluster in u_clusters:
             n_rho1 += len(u_cluster.get_docs())
-        n_rho0 = self.dataset_len-n_rho1
+            n_rho0 += u_cluster.get_n_sents()
+        n_rho0 = n_rho0-n_rho1
         log_prior = np.log(self.hyper_params**n_rho1)+np.log((1.0-self.hyper_params))*n_rho0
         return log_prior
     
-    def segmentation_gamma_poisson_log_prior(self, u_clusters):
+    def segmentation_gamma_poisson_log_prior(self, u_clusters): #TODO: I need to rescale everytime. I forgot segmentation is incremental
         n_rho1 = 0
         for u_cluster in u_clusters:
             n_rho1 += len(u_cluster.get_docs())
