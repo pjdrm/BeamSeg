@@ -221,7 +221,9 @@ class MultiDocument(Document):
         os.remove(doc_path)
         self.isMD = True
         self.doc_topic_seq, self.doc_rho_topics, self.max_topics = self.load_doc_topic_seq(configs["real_data"]["doc_links_dir"])
-        self.seg_dur_prior = self.get_prior()
+        self.seg_dur_prior_indv = self.get_prior_indv()
+        self.seg_dur_prior_dataset = self.get_prior_dataset()
+        self.seg_dur_prior_modality = self.get_prior_modality()
         self.print_processed_docs(configs["real_data"]["docs_processed_dir"])
         
     def print_processed_docs(self, out_dir):
@@ -239,7 +241,7 @@ class MultiDocument(Document):
             with open(out_dir+doc_name, "w+") as f:
                 f.write(doc_i_str)
         
-    def get_prior(self):
+    def get_prior_indv(self):
         prior_docs = []
         seg_lens = []
         seg_len = 0
@@ -254,6 +256,56 @@ class MultiDocument(Document):
             if u+1 in self.docs_index:
                 prior_docs.append([np.average(seg_lens), np.std(seg_lens)])
                 seg_lens = []
+        return prior_docs
+    
+    def get_prior_dataset(self):
+        seg_lens = []
+        seg_len = 0
+        cp_rho = copy.deepcopy(self.rho)
+        cp_rho[-1] = 1
+        for u, rho in enumerate(cp_rho):
+            seg_len += 1
+            if rho == 1:
+                seg_lens.append(seg_len)
+                seg_len = 0
+        
+        prior_docs = [[np.average(seg_lens), np.std(seg_lens)]]*self.n_docs
+        return prior_docs
+    
+    def get_prior_modality(self):
+        def get_doc_modality(doc_name):
+            if "html" in doc_name:
+                return "html"
+            elif "ppt" in doc_name:
+                return "ppt"
+            elif "pdf" in doc_name:
+                return "pdf"
+            else:
+                return "video"
+            
+        modality_seg_lens = {"html":[], "ppt": [], "video": [], "pdf": []}
+        seg_lens = []
+        seg_len = 0
+        cp_rho = copy.deepcopy(self.rho)
+        cp_rho[-1] = 1
+        doc_modality = get_doc_modality(self.doc_names[0])
+        doc_i = 0
+        for u, rho in enumerate(cp_rho):
+            seg_len += 1
+            if rho == 1:
+                modality_seg_lens[doc_modality].append(seg_len)
+                seg_len = 0
+                
+            if u+1 in self.docs_index:
+                doc_i += 1
+                if doc_i < len(self.doc_names): 
+                    doc_modality = get_doc_modality(self.doc_names[doc_i])
+        
+        prior_docs = []
+        for doc_name in self.doc_names:
+            modality = get_doc_modality(doc_name)
+            seg_lens = modality_seg_lens[modality]
+            prior_docs.append([np.average(seg_lens), np.std(seg_lens)])
         return prior_docs
         
     def find_target_docs(self, doc_names, docs_topic_seq):
@@ -334,8 +386,8 @@ class MultiDocument(Document):
                     break
         docs_file_names = order_docs
         '''
-        docs_file_names = ['L03_7_processed_annotated_html.txt']
-        #sorted(docs_file_names)
+        docs_file_names = os.listdir(doc_dir)
+        docs_file_names = sorted(docs_file_names)
         for doc in docs_file_names:
             self.doc_names.append(doc)
             with open(os.path.join(doc_dir, doc), encoding="utf-8", errors='ignore') as f:

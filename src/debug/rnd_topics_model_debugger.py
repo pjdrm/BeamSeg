@@ -204,10 +204,10 @@ def syn_ditto_doc_test():
 
 if __name__ == '__main__':
     if len(sys.argv) == 1:
-        config_file = 'config.json'
+        data_config = 'config.json'
     else:
-        config_file = sys.argv[1]
-    with open(config_file) as data_file:    
+        data_config = sys.argv[1]
+    with open(data_config) as data_file:    
         config = json.load(data_file)
         
     test_func = locals()[config["test"]]

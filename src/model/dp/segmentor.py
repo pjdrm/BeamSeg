@@ -9,7 +9,6 @@ from scipy.special import gammaln
 from scipy.special import digamma
 import os
 import collections
-from scipy.stats import norm
 import dirichlet
 
 GL_DATA = None
@@ -28,7 +27,7 @@ class AbstractSegmentor(object):
         self.first_beta = seg_config["beta"]
         self.use_dur_prior = seg_config["use_dur_prior"]
         if self.use_dur_prior:
-            self.seg_dur_prior = seg_config["seg_dur_prior"] #this is the prior regarding segment length
+            self.seg_dur_prior = self.init_prior(seg_config) #this is the prior regarding segment length
         self.max_topics = self.data.max_doc_len if seg_config["max_topics"] is None else seg_config["max_topics"]
         self.desc = desc
         self.log_dir = log_dir
@@ -53,6 +52,20 @@ class AbstractSegmentor(object):
         
         os.remove(self.log_dir+"dp_tracker_"+self.desc+".txt") if os.path.exists(self.log_dir+"dp_tracker_"+self.desc+".txt") else None
 
+    def init_prior(self, seg_config):
+        prior_type = seg_config["prior_type"]
+        if prior_type == "indv":
+            return self.data.seg_dur_prior_indv
+        elif prior_type == "dataset":
+            return self.data.seg_dur_prior_dataset
+        elif prior_type == "modality":
+            return self.data.seg_dur_prior_modality
+        elif prior_type == "config":
+            return [seg_config["dur_prior_vals"]]*self.data.n_docs
+        else:
+            print("ERROR: unknown prior tyoe %s"%prior_type)
+            return None
+        
     def set_gl_data(self, data):
         global GL_DATA
         GL_DATA = data
@@ -298,12 +311,12 @@ class AbstractSegmentor(object):
         return is_cached
     
     def segment_log_prior(self, seg_size, doc_i):
-        seg_dur = self.seg_dur_prior[doc_i][0]
+        mean = self.seg_dur_prior[doc_i][0]
         std = self.seg_dur_prior[doc_i][1]
-        seg_prob = norm(seg_dur, std).pdf(seg_size)
-        return np.log(seg_prob)
+        norm_logpdf = -np.log((np.sqrt(2*np.pi*(std**2))))-(seg_size-mean)**2/(2*(std**2))
+        return norm_logpdf
         
-    def segmentation_log_prior(self, u_clusters): #TODO: this seems to slow down computation a lot, make more efficient
+    def segmentation_log_prior(self, u_clusters):
         log_prior = 0.0
         for u_cluster in u_clusters:
             for doc_i in u_cluster.get_docs():
@@ -504,6 +517,9 @@ class Data(object):
         for doc_i in range(self.n_docs):
             self.total_words += np.sum(self.doc_word_counts(doc_i))
             self.total_sents += self.doc_len(doc_i)
+        self.seg_dur_prior_indv = docs.seg_dur_prior_indv
+        self.seg_dur_prior_dataset = docs.seg_dur_prior_dataset
+        self.seg_dur_prior_modality = docs.seg_dur_prior_modality
         
     def multi_doc_slicer(self, docs):
         doc_begin = 0
