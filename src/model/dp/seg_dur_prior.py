@@ -37,12 +37,7 @@ class SegDurPrior(object):
             self.hyper_params = hyper_params_raw
         elif prior_dist == "gamma_poisson":
             self.segmentation_log_prior = self.segmentation_gamma_poisson_log_prior
-            lambda_hp = hyper_params_raw[0]
-            interval = hyper_params_raw[1]
-            alpha = hyper_params_raw[2]
-            beta = hyper_params_raw[3]
-            lambda_adjusted = float(self.dataset_len)*float(lambda_hp)/float(interval)
-            self.hyper_params = [alpha, beta, lambda_adjusted]
+            self.hyper_params = hyper_params_raw
                 
     def normal_log_prior(self, seg_size, doc_i):
         mean = self.hyper_params[doc_i][0]
@@ -79,15 +74,25 @@ class SegDurPrior(object):
         return log_prior
     
     def segmentation_gamma_poisson_log_prior(self, u_clusters): #TODO: I need to rescale everytime. I forgot segmentation is incremental
-        n_rho1 = 0
+        #[alpha, beta, lambda_hp, interval]
+        doc_lens = np.zeros(self.n_docs)
+        n_rho1 = np.zeros(self.n_docs)
         for u_cluster in u_clusters:
-            n_rho1 += len(u_cluster.get_docs())
-            
+            for doc_i in u_cluster.get_docs():
+                u_begin, u_end = u_cluster.get_segment(doc_i)
+                seg_len = u_end-u_begin+1
+                doc_lens[doc_i] += seg_len
+                n_rho1[doc_i] += 1.0
+                
         alpha = self.hyper_params[0]
         beta = self.hyper_params[1]
-        lambda_hp = self.hyper_params[2]
+        lambda_hp = np.array([self.hyper_params[2]]*self.n_docs)
+        interval = np.array([self.hyper_params[3]]*self.n_docs)
         n = 1
-         
-        log_prior = (n_rho1+alpha-1.0)*np.log(lambda_hp)-(n+beta)*lambda_hp
+        
+        lambda_adjusted = doc_lens*lambda_hp/interval
+        f1 = (n_rho1+alpha-1)*np.log(lambda_adjusted)
+        f2 = -lambda_adjusted*(n+beta)
+        log_prior = np.sum(f1+f2)
         return log_prior
                 
