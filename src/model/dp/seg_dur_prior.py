@@ -12,7 +12,7 @@ class SegDurPrior(object):
     def __init__(self, config, data):
         self.hyper_params = None
         self.segmentation_log_prior = None
-        self.dataset_len = data.n_sents
+        self.dataset_len = data.total_sents
         
         if config["prior_class"] == "normal":
             self.segmentation_log_prior = self.segmentation_normal_log_prior

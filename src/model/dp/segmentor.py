@@ -10,6 +10,7 @@ from scipy.special import digamma
 import os
 import collections
 import dirichlet
+import model.dp.seg_dur_prior as sdp
 
 GL_DATA = None
 SEG_BL = "seg_bl" #as in base line segmentation
@@ -27,7 +28,7 @@ class AbstractSegmentor(object):
         self.first_beta = seg_config["beta"]
         self.use_dur_prior = seg_config["use_dur_prior"]
         if self.use_dur_prior:
-            self.seg_dur_prior = self.init_prior(seg_config) #this is the prior regarding segment length
+            self.prior_class = sdp.SegDurPrior(seg_config, self.data)
         self.max_topics = self.data.max_doc_len if seg_config["max_topics"] is None else seg_config["max_topics"]
         self.desc = desc
         self.log_dir = log_dir
@@ -310,19 +311,8 @@ class AbstractSegmentor(object):
                 break
         return is_cached
     
-    def segment_log_prior(self, seg_size, doc_i):
-        mean = self.seg_dur_prior[doc_i][0]
-        std = self.seg_dur_prior[doc_i][1]
-        norm_logpdf = -np.log((np.sqrt(2*np.pi*(std**2))))-(seg_size-mean)**2/(2*(std**2))
-        return norm_logpdf
-        
     def segmentation_log_prior(self, u_clusters):
-        log_prior = 0.0
-        for u_cluster in u_clusters:
-            for doc_i in u_cluster.get_docs():
-                u_begin, u_end = u_cluster.get_segment(doc_i)
-                seg_size = u_end-u_begin+1
-                log_prior += self.segment_log_prior(seg_size, doc_i)
+        log_prior = self.prior_class.segmentation_log_prior(u_clusters)
         return log_prior
     
     def segment_ll(self, word_counts):
