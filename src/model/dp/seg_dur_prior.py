@@ -73,7 +73,7 @@ class SegDurPrior(object):
         log_prior = np.sum(gammaln(f1)+gammaln(f2)-gammaln(denom))
         return log_prior
     
-    def segmentation_gamma_poisson_log_prior(self, u_clusters): #TODO: I need to rescale everytime. I forgot segmentation is incremental
+    def segmentation_gamma_poisson_log_prior(self, u_clusters):
         #[alpha, beta, lambda_hp, interval]
         doc_lens = np.zeros(self.n_docs)
         n_rho1 = np.zeros(self.n_docs)
@@ -92,6 +92,7 @@ class SegDurPrior(object):
         
         lambda_adjusted = doc_lens*lambda_hp/interval
         f1 = (n_rho1+alpha-1)*np.log(lambda_adjusted)
+        f1[f1 == np.NINF] = 0.0 #in the greedy algorithm we might not have reached a document yet, which results in doc:len 0
         f2 = -lambda_adjusted*(n+beta)
         log_prior = np.sum(f1+f2)
         return log_prior
