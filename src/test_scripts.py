@@ -669,6 +669,17 @@ def get_seg_desc(config_inst):
            " pc: "+'"'+str(config_inst["seg_dur_prior_config"])+'"'
     return desc
 
+def expand_list_of_lists(ll):
+    import itertools
+    expansion = list(itertools.product(ll[0], ll[1]))
+    for val_l in ll[2:]:
+        expansion = list(itertools.product(expansion, val_l))
+        flat_exp = []
+        for e in expansion:
+            flat_exp.append(list(e[0])+[e[1]])
+        expansion = flat_exp
+    return expansion
+    
 def get_all_greedy_configs(base_config):
     expand_keys = []
     expand_values = []
@@ -682,7 +693,12 @@ def get_all_greedy_configs(base_config):
             ex_vals = []
             for key_dict_val in base_config[key]:
                 for val in base_config[key][key_dict_val]:
-                    ex_vals.append([key_dict_val, val])
+                    if isinstance(val[0],(list,)):
+                        nested_vals = expand_list_of_lists(val)
+                        for v in nested_vals:
+                            ex_vals.append([key_dict_val, v])
+                    else:
+                        ex_vals.append([key_dict_val, val])
             expand_values.append(ex_vals)
     
     if len(expand_keys) == 0:
