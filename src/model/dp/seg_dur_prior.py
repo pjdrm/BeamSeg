@@ -5,6 +5,7 @@ Created on Sep 6, 2018
 '''
 import numpy as np
 from scipy.special import gammaln
+from scipy import stats
 
 class SegDurPrior(object):
     '''
@@ -57,7 +58,7 @@ class SegDurPrior(object):
                 log_prior += self.normal_log_prior(seg_size, doc_i)
         return log_prior
     
-    def segmentation_beta_bern_log_prior(self, u_clusters):
+    def segmentation_beta_bern_log_prior(self, u_clusters): #TODO: make this document dependent
         f1 = np.zeros(self.n_docs)
         f2 = np.zeros(self.n_docs)
         denom = np.zeros(self.n_docs)
@@ -79,6 +80,7 @@ class SegDurPrior(object):
         return log_prior
     
     def segmentation_gamma_poisson_log_prior(self, u_clusters):
+        '''
         #[alpha, beta, lambda_hp, interval]
         doc_lens = np.zeros(self.n_docs)
         n_rho1 = np.zeros(self.n_docs)
@@ -100,5 +102,21 @@ class SegDurPrior(object):
         f1[f1 == np.NINF] = 0.0 #in the greedy algorithm we might not have reached a document yet, which results in doc:len 0
         f2 = -lambda_adjusted*(n+beta)
         log_prior = np.sum(f1+f2)
+        '''
+        
+        n_rho1 = 0.0 #TODO: make this document dependent
+        n = 0.0
+        for u_cluster in u_clusters:
+            for doc_i in u_cluster.get_docs():
+                u_begin, u_end = u_cluster.get_segment(doc_i)
+                seg_len = u_end-u_begin+1
+                n_rho1 += 1.0
+                n += seg_len
+                
+        alpha = self.hyper_params[0]
+        beta = self.hyper_params[1]
+        f1 = gammaln(n_rho1+alpha)
+        f2 = (n_rho1+alpha)*np.log(n-beta)
+        log_prior = f1-f2
         return log_prior
                 
