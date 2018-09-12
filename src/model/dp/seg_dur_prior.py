@@ -34,7 +34,10 @@ class SegDurPrior(object):
                 print("ERROR: unknown prior tyoe %s"%prior_type)
         elif prior_dist == "beta_bern":
             self.segmentation_log_prior = self.segmentation_beta_bern_log_prior
-            self.hyper_params = hyper_params_raw
+            if not isinstance(hyper_params_raw,(list,)):
+                self.hyper_params = [hyper_params_raw, hyper_params_raw]
+            else:
+                self.hyper_params = hyper_params_raw
         elif prior_dist == "gamma_poisson":
             self.segmentation_log_prior = self.segmentation_gamma_poisson_log_prior
             self.hyper_params = hyper_params_raw
@@ -65,11 +68,13 @@ class SegDurPrior(object):
                 f1[doc_i] += 1.0
                 f2[doc_i] += seg_len
                 denom[doc_i] += seg_len
-                
+        
+        alpha = self.hyper_params[0]
+        beta = self.hyper_params[1]
         f2 -= f1
-        f1 += self.hyper_params
-        f2 += self.hyper_params
-        denom += 2*self.hyper_params
+        f1 += alpha
+        f2 += beta
+        denom += alpha+beta
         log_prior = np.sum(gammaln(f1)+gammaln(f2)-gammaln(denom))
         return log_prior
     

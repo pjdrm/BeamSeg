@@ -289,7 +289,10 @@ def md_eval(doc_synth, models, models_desc):
         acc = accuracy(gs_topics, hyp_topics)
         
         hyp_all_dif_topics = get_topics_baseline(hyp_topics)
-        f1_score_bl = f_measure(gs_topics, hyp_all_dif_topics)
+        try:
+            f1_score_bl = f_measure(gs_topics, hyp_all_dif_topics)
+        except:
+            f1_score_bl = -1.0
         acc_bl = accuracy(gs_topics, hyp_all_dif_topics)
         print("%s F1: %f F1_bl: %f Acc %f Acc_bl %f\nHyp Topics: %s\nRef Topics: %s" % (str(models_desc[i]),
                                                                                         f1_score,
@@ -672,6 +675,7 @@ def get_seg_desc(config_inst):
 def expand_list_of_lists(ll):
     import itertools
     expansion = list(itertools.product(ll[0], ll[1]))
+    expansion[0] = list(expansion[0])
     for val_l in ll[2:]:
         expansion = list(itertools.product(expansion, val_l))
         flat_exp = []
@@ -693,12 +697,12 @@ def get_all_greedy_configs(base_config):
             ex_vals = []
             for key_dict_val in base_config[key]:
                 for val in base_config[key][key_dict_val]:
-                    if isinstance(val[0],(list,)):
+                    if not isinstance(val,(list,)):
+                        ex_vals.append([key_dict_val, val])
+                    else:
                         nested_vals = expand_list_of_lists(val)
                         for v in nested_vals:
                             ex_vals.append([key_dict_val, v])
-                    else:
-                        ex_vals.append([key_dict_val, val])
             expand_values.append(ex_vals)
     
     if len(expand_keys) == 0:

@@ -311,7 +311,7 @@ class MultiDocGreedySeg(AbstractSegmentor):
             for i in t:
                 u = u_order[i][0]
                 doc_i = u_order[i][1]
-                if i == 80:
+                if i == 2:
                     print()
                 if self.flush_cache_flag and u % 215 == 0:
                     cached_segs = cached_segs[:int(self.max_cache/3)]
