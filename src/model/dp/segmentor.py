@@ -491,6 +491,7 @@ class Data(object):
     '''
     def __init__(self, docs):
         self.doc_synth = docs
+        self.doc_names = docs.doc_names
         self.docs_rho_gs = [doc.rho for doc in docs.get_single_docs()]
         self.doc_rho_topics = docs.doc_rho_topics
         self.docs_index = docs.docs_index

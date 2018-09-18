@@ -675,7 +675,10 @@ def get_seg_desc(config_inst):
 def expand_list_of_lists(ll):
     import itertools
     expansion = list(itertools.product(ll[0], ll[1]))
-    expansion[0] = list(expansion[0])
+    expansion_l = []
+    for e in expansion:
+        expansion_l.append(list(e))
+    expansion = expansion_l
     for val_l in ll[2:]:
         expansion = list(itertools.product(expansion, val_l))
         flat_exp = []
@@ -696,13 +699,28 @@ def get_all_greedy_configs(base_config):
             expand_keys.append(key)
             ex_vals = []
             for key_dict_val in base_config[key]:
-                for val in base_config[key][key_dict_val]:
-                    if not isinstance(val,(list,)):
-                        ex_vals.append([key_dict_val, val])
-                    else:
-                        nested_vals = expand_list_of_lists(val)
-                        for v in nested_vals:
-                            ex_vals.append([key_dict_val, v])
+                if isinstance(base_config[key][key_dict_val],(dict,)):
+                    ll_evals = []
+                    for k in base_config[key][key_dict_val]:
+                        ll_evals.append(expand_list_of_lists(base_config[key][key_dict_val][k]))
+                    
+                    ll_evals = expand_list_of_lists(ll_evals)
+                    dict_params = []
+                    for ll_e in ll_evals:
+                        dict_param = {}
+                        for i, k in enumerate(base_config[key][key_dict_val]):
+                            dict_param[k] = ll_e[i]
+                        dict_params.append(dict_param)
+                    for dict_p in dict_params:
+                        ex_vals.append([key_dict_val, dict_p])
+                else:
+                    for val in base_config[key][key_dict_val]:
+                        if not isinstance(val,(list,)):
+                            ex_vals.append([key_dict_val, val])
+                        else:
+                            nested_vals = expand_list_of_lists(val)
+                            for v in nested_vals:
+                                ex_vals.append([key_dict_val, v])
             expand_values.append(ex_vals)
     
     if len(expand_keys) == 0:

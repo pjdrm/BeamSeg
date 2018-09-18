@@ -16,10 +16,35 @@ class SegDurPrior(object):
         self.segmentation_log_prior = None
         self.dataset_len = data.total_sents
         self.n_docs = data.n_docs
+        self.docs_hyper_params = [[] for i in range(self.n_docs)]
         
+        hyper_params_raw = config["seg_dur_prior_config"][1]
         prior_desc = config["seg_dur_prior_config"][0].split("-")
         prior_dist = prior_desc[0]
         prior_type = prior_desc[1]
+        
+        if prior_type == "config_modality":
+            for i, doc_name in enumerate(data.doc_names):
+                modality = self.get_doc_modality(doc_name)
+                self.docs_hyper_params[i] = hyper_params_raw[modality]
+        elif prior_type == "config_dataset":
+            for i, doc_name in enumerate(data.doc_names):
+                self.docs_hyper_params[i] = hyper_params_raw
+        elif prior_type == "indv":
+            self.docs_hyper_params = data.seg_dur_prior_indv
+        elif prior_type == "dataset": #TODO: now this only works for gaussion prior
+                self.docs_hyper_params = data.seg_dur_prior_dataset
+        elif prior_type == "modality": #TODO: now this only works for gaussion prior
+            self.docs_hyper_params = data.seg_dur_prior_modality
+        self.docs_hyper_params = self.unpack_hyper_params(self.docs_hyper_params)
+        
+        if prior_dist == "normal":
+            self.segmentation_log_prior = self.segmentation_normal_log_prior
+        elif prior_dist == "beta_bern":
+            self.segmentation_log_prior = self.segmentation_beta_bern_log_prior
+        elif prior_dist == "gamma_poisson":
+            self.segmentation_log_prior = self.segmentation_gamma_poisson_log_prior
+        """
         hyper_params_raw = config["seg_dur_prior_config"][1]
         if prior_dist == "normal":
             self.segmentation_log_prior = self.segmentation_normal_log_prior
@@ -42,10 +67,28 @@ class SegDurPrior(object):
         elif prior_dist == "gamma_poisson":
             self.segmentation_log_prior = self.segmentation_gamma_poisson_log_prior
             self.hyper_params = hyper_params_raw
-                
+        """
+    
+    def get_doc_modality(self, doc_name):
+            if "html" in doc_name:
+                return "html"
+            elif "ppt" in doc_name:
+                return "ppt"
+            elif "pdf" in doc_name:
+                return "pdf"
+            else:
+                return "video"
+            
+    def unpack_hyper_params(self, docs_hyper_params):
+        unpacked_params = [[] for i in range(len(docs_hyper_params[0]))]
+        for hp in docs_hyper_params:
+            for i, val in enumerate(hp):
+                unpacked_params[i].append(val)
+        return np.array(unpacked_params)
+                  
     def normal_log_prior(self, seg_size, doc_i):
-        mean = self.hyper_params[doc_i][0]
-        std = self.hyper_params[doc_i][1]
+        mean = self.docs_hyper_params[doc_i][0]
+        std = self.docs_hyper_params[doc_i][1]
         norm_logpdf = -np.log((np.sqrt(2*np.pi*(std**2))))-(seg_size-mean)**2/(2*(std**2))
         return norm_logpdf
         
@@ -58,7 +101,7 @@ class SegDurPrior(object):
                 log_prior += self.normal_log_prior(seg_size, doc_i)
         return log_prior
     
-    def segmentation_beta_bern_log_prior(self, u_clusters): #TODO: make this document dependent
+    def segmentation_beta_bern_log_prior(self, u_clusters):
         f1 = np.zeros(self.n_docs)
         f2 = np.zeros(self.n_docs)
         denom = np.zeros(self.n_docs)
@@ -70,8 +113,8 @@ class SegDurPrior(object):
                 f2[doc_i] += seg_len
                 denom[doc_i] += seg_len
         
-        alpha = self.hyper_params[0]
-        beta = self.hyper_params[1]
+        alpha = self.docs_hyper_params[0]
+        beta = self.docs_hyper_params[1]
         f2 -= f1
         f1 += alpha
         f2 += beta
@@ -104,19 +147,19 @@ class SegDurPrior(object):
         log_prior = np.sum(f1+f2)
         '''
         
-        n_rho1 = 0.0 #TODO: make this document dependent
-        n = 0.0
+        n_rho1 = np.zeros(self.n_docs)
+        n = np.zeros(self.n_docs)
         for u_cluster in u_clusters:
             for doc_i in u_cluster.get_docs():
                 u_begin, u_end = u_cluster.get_segment(doc_i)
                 seg_len = u_end-u_begin+1
-                n_rho1 += 1.0
-                n += seg_len
+                n_rho1[doc_i] += 1.0
+                n[doc_i] += seg_len
                 
-        alpha = self.hyper_params[0]
-        beta = self.hyper_params[1]
+        alpha = self.docs_hyper_params[0]
+        beta = self.docs_hyper_params[1]
         f1 = gammaln(n_rho1+alpha)
         f2 = (n_rho1+alpha)*np.log(n-beta)
-        log_prior = f1-f2
+        log_prior = np.sum(f1-f2)
         return log_prior
                 
