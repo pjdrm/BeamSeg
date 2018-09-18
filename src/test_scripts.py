@@ -673,6 +673,8 @@ def get_seg_desc(config_inst):
     return desc
 
 def expand_list_of_lists(ll):
+    if len(ll) == 1:
+        return ll
     import itertools
     expansion = list(itertools.product(ll[0], ll[1]))
     expansion_l = []
