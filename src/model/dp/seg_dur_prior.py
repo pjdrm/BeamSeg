@@ -32,9 +32,9 @@ class SegDurPrior(object):
                 self.docs_hyper_params[i] = hyper_params_raw
         elif prior_type == "indv":
             self.docs_hyper_params = data.seg_dur_prior_indv
-        elif prior_type == "dataset": #TODO: now this only works for gaussion prior
+        elif prior_type == "dataset": #TODO: now this only works for gaussian prior
                 self.docs_hyper_params = data.seg_dur_prior_dataset
-        elif prior_type == "modality": #TODO: now this only works for gaussion prior
+        elif prior_type == "modality": #TODO: now this only works for gaussian prior
             self.docs_hyper_params = data.seg_dur_prior_modality
         self.docs_hyper_params = self.unpack_hyper_params(self.docs_hyper_params)
         
@@ -87,8 +87,8 @@ class SegDurPrior(object):
         return np.array(unpacked_params)
                   
     def normal_log_prior(self, seg_size, doc_i):
-        mean = self.docs_hyper_params[doc_i][0]
-        std = self.docs_hyper_params[doc_i][1]
+        mean = self.docs_hyper_params[0][doc_i]
+        std = self.docs_hyper_params[1][doc_i]
         norm_logpdf = -np.log((np.sqrt(2*np.pi*(std**2))))-(seg_size-mean)**2/(2*(std**2))
         return norm_logpdf
         
