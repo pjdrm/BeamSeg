@@ -159,7 +159,7 @@ class SegDurPrior(object):
         alpha = self.docs_hyper_params[0]
         beta = self.docs_hyper_params[1]
         f1 = gammaln(n_rho1+alpha)
-        f2 = (n_rho1+alpha)*np.log(n-beta)
+        f2 = (n_rho1+alpha)*np.log(n+beta)
         log_prior = np.sum(f1-f2)
         return log_prior
                 
