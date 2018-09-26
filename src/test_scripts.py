@@ -29,6 +29,8 @@ from sklearn.cluster import spectral_clustering
 import os
 from random import shuffle
 import cProfile, pstats, io
+import shutil
+
 
 def hyper_param_opt(data, n=10):
     dir_samples = []
@@ -785,6 +787,50 @@ def real_dataset_tests(data_config, greedy_seg_config):
     md_eval(doc_col, models, models_names)
     print(doc_col.doc_names)
     #plot_topics(models[1].best_segmentation[-1][0][1], doc_col.inv_vocab)
+    
+def real_dataset_split_tests(data_config, greedy_seg_config):
+    sys.stdout = open('my_stdout', 'w+')
+
+    batch_size = data_config["real_data"]["batch_size"]
+    docs_dir = data_config["real_data"]["docs_dir"]
+    doc_paths = [docs_dir+"/"+dp for dp in os.listdir(docs_dir)]
+    n_parts = int(len(doc_paths)/batch_size)
+    data_parts_paths = []
+    docs_proce_parts_paths = []
+    for part_i in range(n_parts):
+        data_parts_path = docs_dir+"/data_partition_"+str(part_i)
+        os.makedirs(data_parts_path)
+        data_parts_paths.append(data_parts_path)
+        
+        docs_proce_parts_path = docs_dir+"/docs_processed_partition_"+str(part_i)+"/"
+        os.makedirs(docs_proce_parts_path)
+        docs_proce_parts_paths.append(docs_proce_parts_path)
+    
+    i = 0
+    for doc_path in doc_paths:
+        shutil.copy2(doc_path, data_parts_paths[i])
+        i += 1
+        if i == n_parts:
+            i = 0
+            
+    all_data_configs = []
+    for docs_dir, docs_processed in zip(data_parts_paths, docs_proce_parts_paths):
+        new_data_config = copy.deepcopy(data_config)
+        new_data_config["real_data"]["docs_dir"] = docs_dir
+        new_data_config["real_data"]["docs_processed_dir"] = docs_processed 
+        all_data_configs.append(new_data_config)
+        
+    for d_config in all_data_configs:
+        real_dataset_tests(d_config, greedy_seg_config)
+        
+    sys.stdout = sys.__stdout__
+    #TODOs:
+    #- parse my_stdout to merge the different partition run results
+    #- clean up partitions dirs after running
+    #- distribute docs into partitions based on modality
+    #- introduce randomness in the partitions
+    #- make dedicated top partitions dir to make running the same code safe
+        
         
 if __name__ == "__main__":
     if len(sys.argv) == 1:
@@ -796,10 +842,11 @@ if __name__ == "__main__":
     with open(data_config) as data_file:    
         data_config = json.load(data_file)
         
-    with open(greedy_seg_config) as seg_file:    
+    with open(greedy_seg_config) as seg_file:
         greedy_seg_config = json.load(seg_file)
         
     #skip_topics_test()
-    real_dataset_tests(data_config, greedy_seg_config)
+    #real_dataset_tests(data_config, greedy_seg_config)
+    real_dataset_split_tests(data_config, greedy_seg_config)
     #eval_pipeline_linking("/home/pjdrm/eclipse-workspace/SegmentationScripts/all_results/", "/home/pjdrm/eclipse-workspace/SegmentationScripts/configs/")
 
