@@ -30,6 +30,7 @@ import os
 from random import shuffle
 import cProfile, pstats, io
 import shutil
+import re
 
 
 def hyper_param_opt(data, n=10):
@@ -788,13 +789,91 @@ def real_dataset_tests(data_config, greedy_seg_config):
     print(doc_col.doc_names)
     #plot_topics(models[1].best_segmentation[-1][0][1], doc_col.inv_vocab)
     
+def merge_results(std_out_file):
+    with open(std_out_file) as f:
+        lins = f.readlines()
+    
+    gs_results = ""
+    topic_id_results = ""
+    wd_results = {}
+    params_order = []
+    docs_l = []
+    wd_flag = False
+    i = 0  
+    while i < len(lins):
+        if lins[i].startswith("GS:"):
+            while lins[i] != "\n":
+                gs_results += lins[i]
+                i += 1
+            gs_results += "\n"
+        elif " WD: " in lins[i]:
+            while " WD: " in lins[i]:
+                lin_split = lins[i].split(" WD: " )
+                wd_result = float(lin_split[1][1:-2])
+                params = lin_split[0]
+                if not params.startswith("Baseline"):
+                    params = re.sub(' mt: [0-9]*', '', params)
+                if not wd_flag:
+                    params_order.append(params)
+                if params not in wd_results:
+                    wd_results[params] = []
+                wd_results[params].append(wd_result)
+                i += 1
+            wd_flag = True
+        elif "F1" in lins[i]:
+            while not lins[i].startswith("['"):
+                topic_id_results += lins[i]
+                i += 1
+            docs_l.append(lins[i][:-1])
+            i += 1
+        i += 1
+        
+    print(gs_results)
+    for params in params_order:
+        print(params+ " WD: "+str(wd_results[params]))
+    print("\n"+topic_id_results)
+    print("\n"+str(docs_l))
+            
+def get_file_index(dir_path, base_name):
+    index = -1
+    for file_name in os.listdir(dir_path):
+        if base_name in file_name:
+            n = int(file_name.replace(base_name, ""))
+            if n >= index:
+                index = n+1
+    if index == -1:
+        index = 0
+    return index
+    
 def real_dataset_split_tests(data_config, greedy_seg_config):
-    sys.stdout = open('my_stdout', 'w+')
+    std_out_file = 'my_stdout'+str(get_file_index(".", "my_stdout"))
+    sys.stdout = open(std_out_file, 'w+')
 
     batch_size = data_config["real_data"]["batch_size"]
     docs_dir = data_config["real_data"]["docs_dir"]
-    doc_paths = [docs_dir+"/"+dp for dp in os.listdir(docs_dir)]
-    n_parts = int(len(doc_paths)/batch_size)
+    doc_paths = [[], [], [], []]
+    n_docs = 0
+    for dp in os.listdir(docs_dir):
+        if "run" not in dp:
+            n_docs += 1
+            if "html" in dp:
+                i = 0
+            elif "ppt" in dp:
+                i = 1
+            elif "pdf" in dp:
+                i = 2
+            else:
+                i = 3
+            doc_paths[i].append(docs_dir+"/"+dp)
+            
+    for dp_l in doc_paths:
+        shuffle(dp_l)
+            
+    n_parts = int(n_docs/batch_size)
+    base_run_dir = "/run"+str(get_file_index(docs_dir, "run"))
+    docs_dir += base_run_dir
+    os.makedirs(docs_dir)
+    
     data_parts_paths = []
     docs_proce_parts_paths = []
     for part_i in range(n_parts):
@@ -807,16 +886,17 @@ def real_dataset_split_tests(data_config, greedy_seg_config):
         docs_proce_parts_paths.append(docs_proce_parts_path)
     
     i = 0
-    for doc_path in doc_paths:
-        shutil.copy2(doc_path, data_parts_paths[i])
-        i += 1
-        if i == n_parts:
-            i = 0
+    for doc_path_l in doc_paths:
+        for doc_path in doc_path_l:
+            shutil.copy2(doc_path, data_parts_paths[i])
+            i += 1
+            if i == n_parts:
+                i = 0
             
     all_data_configs = []
-    for docs_dir, docs_processed in zip(data_parts_paths, docs_proce_parts_paths):
+    for d_dir, docs_processed in zip(data_parts_paths, docs_proce_parts_paths):
         new_data_config = copy.deepcopy(data_config)
-        new_data_config["real_data"]["docs_dir"] = docs_dir
+        new_data_config["real_data"]["docs_dir"] = d_dir
         new_data_config["real_data"]["docs_processed_dir"] = docs_processed 
         all_data_configs.append(new_data_config)
         
@@ -824,12 +904,13 @@ def real_dataset_split_tests(data_config, greedy_seg_config):
         real_dataset_tests(d_config, greedy_seg_config)
         
     sys.stdout = sys.__stdout__
+    merge_results(std_out_file)
+    os.remove(std_out_file)
+    shutil.rmtree(docs_dir)
+    
     #TODOs:
-    #- parse my_stdout to merge the different partition run results
-    #- clean up partitions dirs after running
     #- distribute docs into partitions based on modality
     #- introduce randomness in the partitions
-    #- make dedicated top partitions dir to make running the same code safe
         
         
 if __name__ == "__main__":
@@ -844,9 +925,12 @@ if __name__ == "__main__":
         
     with open(greedy_seg_config) as seg_file:
         greedy_seg_config = json.load(seg_file)
+    
+    if data_config["real_data"]["test_partitions"]:
+        real_dataset_split_tests(data_config, greedy_seg_config)
+    else:
+        real_dataset_tests(data_config, greedy_seg_config)
         
     #skip_topics_test()
-    #real_dataset_tests(data_config, greedy_seg_config)
-    real_dataset_split_tests(data_config, greedy_seg_config)
     #eval_pipeline_linking("/home/pjdrm/eclipse-workspace/SegmentationScripts/all_results/", "/home/pjdrm/eclipse-workspace/SegmentationScripts/configs/")
 
