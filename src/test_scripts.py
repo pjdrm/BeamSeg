@@ -809,7 +809,7 @@ def merge_results(std_out_file):
         elif " WD: " in lins[i]:
             while " WD: " in lins[i]:
                 lin_split = lins[i].split(" WD: " )
-                wd_result = float(lin_split[1][1:-2])
+                wd_res = eval(lin_split[1][:-1])
                 params = lin_split[0]
                 if not params.startswith("Baseline"):
                     params = re.sub(' mt: [0-9]*', '', params)
@@ -817,7 +817,7 @@ def merge_results(std_out_file):
                     params_order.append(params)
                 if params not in wd_results:
                     wd_results[params] = []
-                wd_results[params].append(wd_result)
+                wd_results[params] += wd_res
                 i += 1
             wd_flag = True
         elif "F1" in lins[i]:
@@ -870,6 +870,8 @@ def real_dataset_split_tests(data_config, greedy_seg_config):
         shuffle(dp_l)
             
     n_parts = int(n_docs/batch_size)
+    if n_parts == 0:
+        n_parts = 1
     base_run_dir = "/run"+str(get_file_index(docs_dir, "run"))
     docs_dir += base_run_dir
     os.makedirs(docs_dir)
