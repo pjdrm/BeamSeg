@@ -109,6 +109,8 @@ class MultiDocGreedySeg(AbstractSegmentor):
             seg_len = u_end-u_begin+1
             if seg_len+1 <= self.max_seg_len: #+1 because the current utterance is not yet assigned to the clusters
                 final_test_k.append(k)
+        if len(final_test_k) == 0:
+            final_test_k = test_k #if we dont find any segment respecting the limit we just return what we had
         return final_test_k        
     
     def compute_seg_ll_seq(self, cached_segs, doc_i, u):
