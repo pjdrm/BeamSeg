@@ -11,6 +11,7 @@ import os
 import collections
 import dirichlet
 import model.dp.seg_dur_prior as sdp
+from utils.fast_digamma import digamma_cython_d, digamma_cython_np
 
 GL_DATA = None
 SEG_BL = "seg_bl" #as in base line segmentation
@@ -51,6 +52,13 @@ class AbstractSegmentor(object):
                 self.phi_tt_t0 = (self.phi_tt_t0+alpha_smooth)/(np.sum(self.phi_tt_t0*1.0)+alpha_smooth*self.data.W)
             '''
         
+        if seg_config["fast_digamma"]:
+            self.digamma_np = digamma_cython_np
+            self.digamma_d = digamma_cython_d
+        else:
+            self.digamma_np = digamma
+            self.digamma_d = digamma
+            
         os.remove(self.log_dir+"dp_tracker_"+self.desc+".txt") if os.path.exists(self.log_dir+"dp_tracker_"+self.desc+".txt") else None
 
     def init_prior(self, seg_config):
@@ -396,8 +404,8 @@ class AbstractSegmentor(object):
         for t, u_cluster in enumerate(u_clusters):
             word_counts = u_cluster.get_word_counts()
             #update alpha
-            num_alpha_update = np.sum(phi[t]*(digamma(word_counts+alpha_t*phi[t])-digamma(alpha_t*phi[t])))
-            denom_alpha_update = digamma(np.sum(word_counts)+alpha_t)-digamma(alpha_t)
+            num_alpha_update = np.sum(phi[t]*(self.digamma_np(word_counts+alpha_t*phi[t])-self.digamma_np(alpha_t*phi[t])))
+            denom_alpha_update = self.digamma_d(np.sum(word_counts)+alpha_t)-self.digamma_d(alpha_t)
             alpha_t_update= alpha_t*(num_alpha_update/denom_alpha_update)
             #alpha_t = self.fix_point_est_alpha(phi[t], word_counts)
             alpha.append(alpha_t_update)
