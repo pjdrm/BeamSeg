@@ -151,7 +151,8 @@ class MultiDocGreedySeg(AbstractSegmentor):
             #test_clusters = test_clusters+merge_move_clusters
             test_clusters = self.check_seg_max_len(test_clusters, doc_i, cached_u_clusters) 
             for k in test_clusters:
-                current_u_clusters = copy.deepcopy(cached_u_clusters)
+                #current_u_clusters = copy.deepcopy(cached_u_clusters)
+                current_u_clusters = copy.copy(cached_u_clusters)
                 current_u_clusters = self.assign_target_k(u, u, doc_i, k, possible_clusters, current_u_clusters)
                 phi_tt = None
                 if self.seg_func_desc == SEG_TT:

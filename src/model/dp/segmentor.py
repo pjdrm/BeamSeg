@@ -249,6 +249,12 @@ class AbstractSegmentor(object):
                 return u_cluster
         return None
     
+    def get_k_cluster_index(self, k, u_clusters):
+        for i, u_cluster in enumerate(u_clusters):
+            if u_cluster.k == k:
+                return i
+        return None
+    
     def get_next_cluster(self, k, doc_i, u_clusters):
         cluster_order = self.get_cluster_order(doc_i, u_clusters)
         for i, k2 in enumerate(cluster_order):
@@ -281,8 +287,11 @@ class AbstractSegmentor(object):
         return c
             
     def assign_target_k(self, u_begin, u_end, doc_i, k_target, possible_clusters, u_clusters):
-        u_k_target_cluster = self.get_k_cluster(k_target, u_clusters)
-        if u_k_target_cluster is not None:
+        i = self.get_k_cluster_index(k_target, u_clusters)
+        if i is not None:
+            u_k_target_cluster = u_clusters[i]
+            u_k_target_cluster = copy.deepcopy(u_k_target_cluster)
+            u_clusters[i] = u_k_target_cluster
             u_k_target_cluster.add_sents(u_begin, u_end, doc_i)
             if k_target not in possible_clusters:
                 u_begin_k_target, u_end_k_target = u_k_target_cluster.get_segment(doc_i)
