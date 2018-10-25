@@ -610,11 +610,12 @@ class SentenceCluster(object):
     Class to keep track of a set of sentences (possibly from different documents)
     that belong to the same segment.
     '''
-    def __init__(self, u_begin, u_end, docs, k):
+    def __init__(self, u_begin, u_end, docs, k, track_words=False):
         self.k = k
         self.doc_segs_dict = {}
         global GL_DATA
         self.word_counts = np.zeros(GL_DATA.W)
+        self.track_words = track_words
         
         for doc_i in docs:
             doc_i_len = GL_DATA.doc_len(doc_i)
@@ -627,6 +628,7 @@ class SentenceCluster(object):
             else:
                 u_end_true = u_end
             self.doc_segs_dict[doc_i] = [u_begin, u_end_true]
+            
             self.word_counts += np.sum(GL_DATA.doc_word_counts(doc_i)[u_begin:u_end_true+1], axis=0)
         
         self.wi_list = []
@@ -639,9 +641,10 @@ class SentenceCluster(object):
                 true_u_end = doc_i_len-1
             else:
                 true_u_end = u_end
-            for u in range(u_begin, true_u_end+1):
-                d_u_words = GL_DATA.d_u_wi_indexes[doc_i][u]
-                self.wi_list += d_u_words
+            if self.track_words:
+                for u in range(u_begin, true_u_end+1):
+                    d_u_words = GL_DATA.d_u_wi_indexes[doc_i][u]
+                    self.wi_list += d_u_words
                     
     def set_k(self, k):
         self.k = k
@@ -674,14 +677,16 @@ class SentenceCluster(object):
         seg = list(range(u_begin, u_end+1))
         self.word_counts += np.sum(GL_DATA.doc_word_counts(doc_i)[u_begin:u_end+1], axis=0)
         
-        for u in seg:
-            d_u_words = GL_DATA.d_u_wi_indexes[doc_i][u]
-            self.wi_list += d_u_words
+        if self.track_words:
+            for u in seg:
+                d_u_words = GL_DATA.d_u_wi_indexes[doc_i][u]
+                self.wi_list += d_u_words                                                           
             
     def remove_doc(self, doc_i, doc_i_word_counts):
         self.word_counts -= doc_i_word_counts
-        for doc_w_i in self.get_doc_words(doc_i):
-            self.wi_list.remove(doc_w_i)
+        if self.track_words:
+            for doc_w_i in self.get_doc_words(doc_i):
+                self.wi_list.remove(doc_w_i)
             
         self.doc_segs_dict.pop(doc_i)
         
@@ -699,8 +704,9 @@ class SentenceCluster(object):
         seg = list(range(u_begin, u+1))
         for u in seg:
             d_u_words = GL_DATA.d_u_wi_indexes[doc_i][u]
-            for doc_w_i in d_u_words:
-                self.wi_list.remove(doc_w_i)
+            if self.track_words:
+                for doc_w_i in d_u_words:
+                    self.wi_list.remove(doc_w_i)
             
     def get_docs(self):
         return self.doc_segs_dict.keys()
