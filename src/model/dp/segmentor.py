@@ -291,6 +291,7 @@ class AbstractSegmentor(object):
         if i is not None:
             u_k_target_cluster = u_clusters[i]
             u_k_target_cluster = copy.deepcopy(u_k_target_cluster)
+            u_k_target_cluster.set_cluster_ll(None)
             u_clusters[i] = u_k_target_cluster
             u_k_target_cluster.add_sents(u_begin, u_end, doc_i)
             if k_target not in possible_clusters:
@@ -352,8 +353,15 @@ class AbstractSegmentor(object):
         
         segmentation_ll = 0.0
         for u_cluster in u_clusters:
-            word_counts = u_cluster.get_word_counts()
-            segmentation_ll += self.segment_ll(word_counts)
+            cached_ll = u_cluster.get_cluster_ll()
+            if cached_ll is not None:
+                cluster_ll = cached_ll
+            else:
+                word_counts = u_cluster.get_word_counts()
+                cluster_ll = self.segment_ll(word_counts)
+                u_cluster.set_cluster_ll(cluster_ll)
+            
+            segmentation_ll += cluster_ll
             
         if self.use_dur_prior:
             segmentation_ll += self.segmentation_log_prior(u_clusters)
@@ -616,6 +624,7 @@ class SentenceCluster(object):
         global GL_DATA
         self.word_counts = np.zeros(GL_DATA.W)
         self.track_words = track_words
+        self.cluster_ll = None
         
         for doc_i in docs:
             doc_i_len = GL_DATA.doc_len(doc_i)
@@ -713,6 +722,12 @@ class SentenceCluster(object):
         
     def get_word_counts(self):
         return self.word_counts
+    
+    def get_cluster_ll(self):
+        return self.cluster_ll
+    
+    def set_cluster_ll(self, ll):
+        self.cluster_ll = ll
         
     def get_words(self):
         return self.wi_list
