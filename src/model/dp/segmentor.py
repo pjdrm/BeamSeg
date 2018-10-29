@@ -418,19 +418,36 @@ class AbstractSegmentor(object):
         phi = [self.phi_tt_t0]
         alpha_t = self.alpha_tt_t0
         alpha = []
+        broke_chain = False
         for t, u_cluster in enumerate(u_clusters):
-            word_counts = u_cluster.get_word_counts()
-            #update alpha
-            num_alpha_update = np.sum(phi[t]*(self.digamma_np(word_counts+alpha_t*phi[t])-self.digamma_np(alpha_t*phi[t])))
-            denom_alpha_update = self.digamma_d(np.sum(word_counts)+alpha_t)-self.digamma_d(alpha_t)
-            alpha_t_update= alpha_t*(num_alpha_update/denom_alpha_update)
-            #alpha_t = self.fix_point_est_alpha(phi[t], word_counts)
+            cluster_ll = u_cluster.get_cluster_ll()
+            alpha_t_update = None
+            phi_t_update = None
+            if cluster_ll is None or broke_chain:
+                if cluster_ll is not None:
+                    u_cluster = copy.deepcopy(u_cluster)
+                    u_clusters[t] = u_cluster
+                word_counts = u_cluster.get_word_counts()
+                #update alpha
+                num_alpha_update = np.sum(phi[t]*(self.digamma_np(word_counts+alpha_t*phi[t])-self.digamma_np(alpha_t*phi[t])))
+                denom_alpha_update = self.digamma_d(np.sum(word_counts)+alpha_t)-self.digamma_d(alpha_t)
+                alpha_t_update= alpha_t*(num_alpha_update/denom_alpha_update)
+                #alpha_t = self.fix_point_est_alpha(phi[t], word_counts)
+                
+                #current phi estimation
+                num_phi_tt = word_counts+alpha_t_update*phi[t] #NOTE: I was using alpha_t before
+                denom_phi_tt = np.sum(word_counts)+alpha_t_update
+                phi_t_update = num_phi_tt/denom_phi_tt
+                broke_chain = True
+                u_cluster.set_cluster_ll(None)
+                u_cluster.set_alpha_tt(alpha_t_update)
+                u_cluster.set_phi_tt(phi_t_update)
+            else:
+                alpha_t_update = u_cluster.get_alpha_tt()
+                phi_t_update = u_cluster.get_phi_tt()
+                
             alpha.append(alpha_t_update)
-            
-            #current phi estimation
-            num_phi_tt = word_counts+alpha_t_update*phi[t] #NOTE: I was using alpha_t before
-            denom_phi_tt = np.sum(word_counts)+alpha_t_update
-            phi.append(num_phi_tt/denom_phi_tt)
+            phi.append(phi_t_update)
             
         return alpha, phi
     
@@ -469,11 +486,15 @@ class AbstractSegmentor(object):
         #u_clusters = self.order_cluster(u_clusters)
         alpha, phi_tt = self.get_topic_tracking_prior(u_clusters)
         for alpha_t, phi_t, u_cluster in zip(alpha, phi_tt[:-1], u_clusters):
-            word_counts = u_cluster.get_word_counts()
-            f1 = gammaln(word_counts+alpha_t*phi_t).sum()
-            f2 = gammaln(word_counts.sum()+alpha_t)
-            C = gammaln(alpha_t)-gammaln(alpha_t*phi_t).sum()
-            segmentation_ll += C+f1-f2
+            cluster_ll = u_cluster.get_cluster_ll()
+            if cluster_ll is None:
+                word_counts = u_cluster.get_word_counts()
+                f1 = gammaln(word_counts+alpha_t*phi_t).sum()
+                f2 = gammaln(word_counts.sum()+alpha_t)
+                C = gammaln(alpha_t)-gammaln(alpha_t*phi_t).sum()
+                cluster_ll = C+f1-f2
+                u_cluster.set_cluster_ll(cluster_ll)
+            segmentation_ll += cluster_ll
             
         if self.use_dur_prior: #this is the prior on segment duration
             segmentation_ll += self.segmentation_log_prior(u_clusters)
@@ -622,9 +643,11 @@ class SentenceCluster(object):
         self.k = k
         self.doc_segs_dict = {}
         global GL_DATA
-        self.word_counts = np.zeros(GL_DATA.W)
+        #self.word_counts = np.zeros(GL_DATA.W)
         self.track_words = track_words
         self.cluster_ll = None
+        self.phi_tt = None
+        self.alpha_tt = None
         
         for doc_i in docs:
             doc_i_len = GL_DATA.doc_len(doc_i)
@@ -638,7 +661,7 @@ class SentenceCluster(object):
                 u_end_true = u_end
             self.doc_segs_dict[doc_i] = [u_begin, u_end_true]
             
-            self.word_counts += np.sum(GL_DATA.doc_word_counts(doc_i)[u_begin:u_end_true+1], axis=0)
+            #self.word_counts += np.sum(GL_DATA.doc_word_counts(doc_i)[u_begin:u_end_true+1], axis=0)
         
         self.wi_list = []
         for doc_i in docs:
@@ -684,7 +707,7 @@ class SentenceCluster(object):
             self.doc_segs_dict[doc_i] = [u_begin, u_end]
             
         seg = list(range(u_begin, u_end+1))
-        self.word_counts += np.sum(GL_DATA.doc_word_counts(doc_i)[u_begin:u_end+1], axis=0)
+        #self.word_counts += np.sum(GL_DATA.doc_word_counts(doc_i)[u_begin:u_end+1], axis=0)
         
         if self.track_words:
             for u in seg:
@@ -692,7 +715,7 @@ class SentenceCluster(object):
                 self.wi_list += d_u_words                                                           
             
     def remove_doc(self, doc_i, doc_i_word_counts):
-        self.word_counts -= doc_i_word_counts
+        #self.word_counts -= doc_i_word_counts
         if self.track_words:
             for doc_w_i in self.get_doc_words(doc_i):
                 self.wi_list.remove(doc_w_i)
@@ -709,7 +732,7 @@ class SentenceCluster(object):
             else:
                 self.doc_segs_dict[doc_i] = [current_seg[0], u_begin-1]
             
-        self.word_counts -= np.sum(GL_DATA.doc_word_counts(doc_i)[u_begin:u+1], axis=0)
+        #self.word_counts -= np.sum(GL_DATA.doc_word_counts(doc_i)[u_begin:u+1], axis=0)
         seg = list(range(u_begin, u+1))
         for u in seg:
             d_u_words = GL_DATA.d_u_wi_indexes[doc_i][u]
@@ -721,13 +744,45 @@ class SentenceCluster(object):
         return self.doc_segs_dict.keys()
         
     def get_word_counts(self):
-        return self.word_counts
+        '''
+        word_counts = np.zeros(GL_DATA.W)
+        for doc_i in self.get_docs():
+            u_begin, u_end = self.get_segment(doc_i)
+            word_counts += np.sum(GL_DATA.doc_word_counts(doc_i)[u_begin:u_end+1], axis=0)
+        return word_counts
+        '''
+        u_indexes = []
+        for doc_i in self.get_docs():
+            if doc_i > 0:
+                doc_carry = GL_DATA.docs_index[doc_i-1]
+            else:
+                doc_carry = 0
+            u_begin, u_end = self.get_segment(doc_i)
+            u_begin += doc_carry
+            u_end += doc_carry+1
+            u_indexes += list(range(u_begin, u_end))
+            
+        word_counts = np.sum(GL_DATA.doc_synth.U_W_counts[u_indexes], axis=0)
+        return word_counts
+        #return self.word_counts
     
     def get_cluster_ll(self):
         return self.cluster_ll
     
     def set_cluster_ll(self, ll):
         self.cluster_ll = ll
+        
+    def get_alpha_tt(self):
+        return self.alpha_tt
+    
+    def set_alpha_tt(self, alpha_tt):
+        self.alpha_tt = alpha_tt
+        
+    def get_phi_tt(self):
+        return self.phi_tt
+    
+    def set_phi_tt(self, phi_tt):
+        self.phi_tt = phi_tt
         
     def get_words(self):
         return self.wi_list
