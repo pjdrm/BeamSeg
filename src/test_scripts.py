@@ -935,4 +935,3 @@ if __name__ == "__main__":
         
     #skip_topics_test()
     #eval_pipeline_linking("/home/pjdrm/eclipse-workspace/SegmentationScripts/all_results/", "/home/pjdrm/eclipse-workspace/SegmentationScripts/configs/")
-

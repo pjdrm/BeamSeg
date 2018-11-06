@@ -129,6 +129,8 @@ class AbstractSegmentor(object):
     def get_free_clusters(self, u_clusters):
         free_clusters = list(range(self.max_topics))
         for u_cluster in u_clusters:
+            if u_cluster.k >= self.max_topics: #we can get here if using topic_slack
+                continue
             free_clusters.remove(u_cluster.k)
         return free_clusters
     
