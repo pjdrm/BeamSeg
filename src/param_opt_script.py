@@ -142,10 +142,10 @@ def opt_model_params(data_config, greedy_seg_config, log_file_path="../logs/opt_
                 best_cfg = new_cfg
                 any_impr = True
         with open(log_file_path, "a+") as log_f:
-            print("best wd_avg: %f\nbest cfg: %s\nbeta: %f\n----Loop %d end------" % (n_loops,
-                                                                                       np.average(best_wd),
+            print("best wd_avg: %f\nbest cfg: %s\nbeta: %f\n----Loop %d end------" % ( np.average(best_wd),
                                                                                        best_cfg["seg_dur_prior_config"],
-                                                                                       best_cfg["beta"][0]), file=log_f)
+                                                                                       best_cfg["beta"][0],
+                                                                                       n_loops), file=log_f)
         if cum_time > max_time:
             print("Time's up!")
             times_up = False
