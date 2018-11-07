@@ -17,13 +17,17 @@ import time
 
 def opt_step(data, doc_col, best_cfg, param_key, param_key2, param_index, learning_rate, sign):
     new_cfg = copy.deepcopy(best_cfg)
-    if param_index is not None:
+    if param_key == "beta":
+        new_cfg[param_key] += learning_rate*sign
+        if new_cfg[param_key][0] < 0:
+            return None, None
+    elif param_key2 is not None:
         new_cfg[param_key][1][param_key2][param_index] += learning_rate*sign
         if new_cfg[param_key][1][param_key2][param_index] < 0:
             return None, None
     else:
-        new_cfg[param_key] += learning_rate*sign
-        if new_cfg[param_key][0] < 0:
+        new_cfg[param_key][1][param_index] += learning_rate*sign
+        if new_cfg[param_key][1][param_index] < 0:
             return None, None
         
     seg_model = greedy_seg.MultiDocGreedySeg(data, seg_config=new_cfg)
@@ -83,12 +87,15 @@ def opt_param(data,
     
 def get_params_opt(cfg):
     params_list = []
-    for key in cfg["seg_dur_prior_config"][1]:
-        for i in range(len(cfg["seg_dur_prior_config"][1][key])):
-            params_list.append(["seg_dur_prior_config", key, i])
+    if type(cfg["seg_dur_prior_config"][1]) is dict:
+        for key in cfg["seg_dur_prior_config"][1]:
+            for i in range(len(cfg["seg_dur_prior_config"][1][key])):
+                params_list.append(["seg_dur_prior_config", key, i])
+    else:
+        params_list += [["seg_dur_prior_config", None, 0], ["seg_dur_prior_config", None, 1]]
     return params_list
     
-def opt_model_params(data_config, greedy_seg_config, log_file_path="../logs/opt_params_log.txt"):
+def opt_model_params(data_config, greedy_seg_config, log_file_path):
     if os.path.exists(log_file_path): os.remove(log_file_path)
     doc_col = MultiDocument(data_config)
     data = Data(doc_col)
@@ -107,11 +114,15 @@ def opt_model_params(data_config, greedy_seg_config, log_file_path="../logs/opt_
     
     best_cfg = config_inst
     param_list = [["beta", None, None]]
-    param_list += [["seg_dur_prior_config", "html", 0], ["seg_dur_prior_config", "html", 1]]#get_params_opt(best_cfg)
+    param_list += get_params_opt(best_cfg) #[["seg_dur_prior_config", "html", 0], ["seg_dur_prior_config", "html", 1]]
     seg_model = greedy_seg.MultiDocGreedySeg(data, seg_config=config_inst)
     seg_model.segment_docs()
     wd_begin = wd_evaluator(seg_model.get_all_segmentations(), doc_col)
     best_wd = wd_begin
+    beta_base_learning_rate = 0.1
+    beta_learning_rate = beta_base_learning_rate
+    beta_learning_rate_step = 0.5
+    
     base_learning_rate = 0.5
     learning_rate = base_learning_rate
     learning_rate_step = 3.0
@@ -124,6 +135,10 @@ def opt_model_params(data_config, greedy_seg_config, log_file_path="../logs/opt_
         if n_loops == 0:
             break
         for param_key, param_key2, param_index in param_list:
+            if param_key == "beta":
+                lr = beta_learning_rate
+            else:
+                lr = learning_rate
             start = time.time()
             improved, new_cfg, new_wd = opt_param(data,
                                                     doc_col,
@@ -132,7 +147,7 @@ def opt_model_params(data_config, greedy_seg_config, log_file_path="../logs/opt_
                                                     param_key,
                                                     param_key2,
                                                     param_index,
-                                                    learning_rate,
+                                                    lr,
                                                     log_file_path)
             end = time.time()
             run_time = (end - start)
@@ -156,8 +171,10 @@ def opt_model_params(data_config, greedy_seg_config, log_file_path="../logs/opt_
         
         if not any_impr:
             learning_rate += learning_rate_step
+            beta_learning_rate += beta_learning_rate_step
         else:
             learning_rate = base_learning_rate
+            beta_learning_rate = beta_base_learning_rate
         any_impr = False
             
     best_cfg["beta"] = best_cfg["beta"][0]
@@ -168,13 +185,16 @@ if __name__ == "__main__":
     if len(sys.argv) == 1:
         data_config = "../config/physics_test.json"
         greedy_seg_config = "../config/greedy_config.json"
+        log_file_path = "../logs/opt_params_log.txt"
     else:
         data_config = sys.argv[1]
         greedy_seg_config = sys.argv[2]
+        log_file_path = sys.argv[3]
+        
     with open(data_config) as data_file:    
         data_config = json.load(data_file)
         
     with open(greedy_seg_config) as seg_file:
         greedy_seg_config = json.load(seg_file)
 
-    opt_model_params(data_config, greedy_seg_config)
+    opt_model_params(data_config, greedy_seg_config, log_file_path)
