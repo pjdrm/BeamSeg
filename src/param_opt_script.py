@@ -112,11 +112,14 @@ def opt_model_params(data_config, greedy_seg_config, log_file_path="../logs/opt_
     seg_model.segment_docs()
     wd_begin = wd_evaluator(seg_model.get_all_segmentations(), doc_col)
     best_wd = wd_begin
-    learning_rate = 0.5
+    base_learning_rate = 0.5
+    learning_rate = base_learning_rate
+    learning_rate_step = 3.0
     any_impr = False
     n_loops = 15
-    max_time = 60
+    max_time = 6000
     cum_time = 0
+    times_up = False
     while True:
         if n_loops == 0:
             break
@@ -132,25 +135,31 @@ def opt_model_params(data_config, greedy_seg_config, log_file_path="../logs/opt_
                                                     learning_rate,
                                                     log_file_path)
             end = time.time()
-            cum_time += end
+            run_time = (end - start)
+            cum_time += run_time
             if improved:
                 best_wd = new_wd
                 best_cfg = new_cfg
                 any_impr = True
         with open(log_file_path, "a+") as log_f:
-            print("----Loop %d end------\nbest wd_avg: %f\nbest cfg: %s\nbeta: %f" % (n_loops,
+            print("best wd_avg: %f\nbest cfg: %s\nbeta: %f\n----Loop %d end------" % (n_loops,
                                                                                        np.average(best_wd),
                                                                                        best_cfg["seg_dur_prior_config"],
                                                                                        best_cfg["beta"][0]), file=log_f)
         if cum_time > max_time:
             print("Time's up!")
-            any_impr = False
+            times_up = False
             break
         n_loops -= 1
-        if any_impr:
-            any_impr = False
-        else:
+        if times_up:
             break
+        
+        if not any_impr:
+            learning_rate += learning_rate_step
+        else:
+            learning_rate = base_learning_rate
+        any_impr = False
+            
     best_cfg["beta"] = best_cfg["beta"][0]
     with open(log_file_path, "a+") as log_f:
         print("wd start: %s wd end: %s\nbest cfg:\n%s" % (str(wd_begin), str(best_wd), best_cfg), file=log_f)
