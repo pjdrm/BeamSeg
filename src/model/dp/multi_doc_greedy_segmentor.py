@@ -144,8 +144,8 @@ class MultiDocGreedySeg(AbstractSegmentor):
                 if self.slack_flag:
                     n_doc_i_only_clusters = self.get_doci_only_clusters(doc_i, cached_u_clusters)
                     if n_doc_i_only_clusters < self.topic_slack:
-                        max_k = max(cached_u_clusters, key=attrgetter('k'))
-                        possible_clusters.append(max_k+1)
+                        max_k_cluster = max(cached_u_clusters, key=attrgetter('k'))
+                        possible_clusters.append(max_k_cluster.k+1)
                 test_clusters = possible_clusters
             #merge_move_clusters = list(set(range(0, self.max_topics))-possible_clusters)
             #test_clusters = test_clusters+merge_move_clusters
@@ -282,11 +282,10 @@ class MultiDocGreedySeg(AbstractSegmentor):
         b = 0
         doc_i_segs = []
         k_segs_dict = {}
-        for k in range(self.max_topics):
-            k_segs_dict[k] = []
-            
         for cached_seg in cached_segs:
             k = cached_seg[3]
+            if k not in k_segs_dict:
+                k_segs_dict[k] = []
             k_segs_dict[k].append(cached_seg)
             
         for k in k_segs_dict:
@@ -314,8 +313,6 @@ class MultiDocGreedySeg(AbstractSegmentor):
             for i in t:
                 u = u_order[i][0]
                 doc_i = u_order[i][1]
-                if doc_i == 1:
-                    print()
                 if self.flush_cache_flag and u % 215 == 0:
                     cached_segs = cached_segs[:int(self.max_cache/3)]
                 prev_doc = doc_i
