@@ -19,15 +19,15 @@ def opt_step(data, doc_col, best_cfg, param_key, param_key2, param_index, learni
     new_cfg = copy.deepcopy(best_cfg)
     if param_key == "beta":
         new_cfg[param_key] += learning_rate*sign
-        if new_cfg[param_key][0] < 0:
+        if new_cfg[param_key][0] <= 0:
             return None, None
     elif param_key2 is not None:
         new_cfg[param_key][1][param_key2][param_index] += learning_rate*sign
-        if new_cfg[param_key][1][param_key2][param_index] < 0:
+        if new_cfg[param_key][1][param_key2][param_index] <= 0:
             return None, None
     else:
         new_cfg[param_key][1][param_index] += learning_rate*sign
-        if new_cfg[param_key][1][param_index] < 0:
+        if new_cfg[param_key][1][param_index] <= 0:
             return None, None
         
     seg_model = greedy_seg.MultiDocGreedySeg(data, seg_config=new_cfg)

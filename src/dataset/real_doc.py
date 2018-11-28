@@ -214,7 +214,12 @@ class MultiDocument(Document):
     def __init__(self, configs):
         self.doc_names = []
         self.docs_index =[]
-        doc_path = "tmp_docs.txt"
+        i = 0
+        doc_path = "tmp_docs0.txt"
+        while os.path.isfile(doc_path):
+            i += 1
+            doc_path = "tmp_docs"+str(i)+".txt"
+        
         self.prepare_multi_doc(configs["real_data"]["docs_dir"], doc_path)
         Document.__init__(self, doc_path, configs)
         self.update_doc_index()
