@@ -97,15 +97,17 @@ def get_results_summary(results_dict):
             for domain in domain_results[seg_priorapp][prior_type]:
                 c = domain_results[seg_priorapp][prior_type][domain]
                 if domain not in domain_results_counts:
-                    domain_results_counts[domain] = [c, [seg_priorapp, prior_type]]
+                    domain_results_counts[domain] = [[c, [seg_priorapp, prior_type]]]
                 else:
-                    best_c = domain_results_counts[domain][0]
+                    best_c = domain_results_counts[domain][0][0]
+                    if c == best_c:
+                        domain_results_counts[domain].append([c, [seg_priorapp, prior_type]])
                     if c > best_c:
-                        domain_results_counts[domain] = [c, [seg_priorapp, prior_type]]
+                        domain_results_counts[domain] = [[c, [seg_priorapp, prior_type]]]
                         
     for domain in domain_results_counts:
-        res = domain_results_counts[domain]
-        domain_results_processed[res[1][0]][res[1][1]] += res[0]
+        for res in domain_results_counts[domain]:
+            domain_results_processed[res[1][0]][res[1][1]] += res[0]
         
     return all_docs_results, domain_results_processed
 
