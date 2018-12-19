@@ -68,13 +68,15 @@ def get_results_summary(results_dict):
                 domain_results[seg_priorapp][prior_type][domain] = 0
     
     domain_results_processed = copy.deepcopy(all_docs_results)
+    avg_wd_results = copy.deepcopy(all_docs_results)
     
     for domain in results_dict:
         for seg_priorapp in results_dict[domain]:
                 for prior_type in results_dict[domain][seg_priorapp]:
                     n_docs = len(results_dict[domain][seg_priorapp][prior_type]["wd"])
-                    break
-                break
+                    if avg_wd_results[seg_priorapp][prior_type] == 0:
+                        avg_wd_results[seg_priorapp][prior_type] = []
+                    avg_wd_results[seg_priorapp][prior_type] += results_dict[domain][seg_priorapp][prior_type]["wd"]
             
         for i in range(n_docs):
             best_models = None
@@ -108,8 +110,12 @@ def get_results_summary(results_dict):
     for domain in domain_results_counts:
         for res in domain_results_counts[domain]:
             domain_results_processed[res[1][0]][res[1][1]] += res[0]
+            
+    for seg_priorapp in results_dict[domain]:
+        for prior_type in results_dict[domain][seg_priorapp]:
+            avg_wd_results[seg_priorapp][prior_type] = np.average(avg_wd_results[seg_priorapp][prior_type])
         
-    return all_docs_results, domain_results_processed
+    return all_docs_results, domain_results_processed, avg_wd_results
 
 def print_domain_results(results_dict):
     incomplete_domains = []
@@ -189,13 +195,14 @@ def print_domain_results(results_dict):
         
         print_str += "\n"
         header = True
-    res_summary_alldocs, res_summary_domain = get_results_summary(results_dict)
+    res_summary_alldocs, res_summary_domain, avg_wd_results = get_results_summary(results_dict)
     print_str += "\nResults Summary\n\n"
     for seg_type in res_summary_alldocs:
-        print_str += seg_type+"\nPrior Type\t#Best Results (all docs)\t#Best Results (domain)\n"
+        print_str += seg_type+"\nPrior Type\t#Best Results (all docs)\t#Best Results (domain)\tWD avg (all docs)\n"
         for prior_type in res_summary_alldocs[seg_type]:
             print_str += prior_type+"\t"+str(res_summary_alldocs[seg_type][prior_type])+"\t"
-            print_str += str(res_summary_domain[seg_type][prior_type])+"\n"
+            print_str += str(res_summary_domain[seg_type][prior_type])+"\t"
+            print_str += str(avg_wd_results[seg_type][prior_type])+"\n"
         print_str += "\n"
     print(print_str)
     print(set(incomplete_domains))
