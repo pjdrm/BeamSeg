@@ -77,16 +77,19 @@ def get_results_summary(results_dict):
                 break
             
         for i in range(n_docs):
-            best_model = None
+            best_models = None
             best_wd = 1.1
             for seg_priorapp in results_dict[domain]:
                 for prior_type in results_dict[domain][seg_priorapp]:
                     wd = results_dict[domain][seg_priorapp][prior_type]["wd"][i]
+                    if wd == best_wd:
+                        best_models.append([seg_priorapp, prior_type])
                     if wd < best_wd:
                         best_wd = wd
-                        best_model = [seg_priorapp, prior_type]
-            all_docs_results[best_model[0]][best_model[1]] += 1
-            domain_results[best_model[0]][best_model[1]][domain] += 1
+                        best_models = [[seg_priorapp, prior_type]]
+            for best_model in best_models:
+                all_docs_results[best_model[0]][best_model[1]] += 1
+                domain_results[best_model[0]][best_model[1]][domain] += 1
     
     domain_results_counts = {}
     for seg_priorapp in domain_results:
@@ -112,12 +115,12 @@ def print_domain_results(results_dict):
     prior_type_order = ["norm", "bb", "gp"]
     header = True
     domains_sort = sorted(results_dict.keys())
-    if "segtt_dataset" in results_dict[domains_sort[0]]:
-        headers = results_dict[domains_sort[0]]["segtt_dataset"]["gp"]
-    else:
-        headers = results_dict[domains_sort[0]]["segtt_modality"]["gp"]
     for sub_domain in domains_sort:
         if header:
+            if "segtt_dataset" in results_dict[domains_sort[0]]:
+                headers = results_dict[sub_domain]["segtt_dataset"]["gp"]
+            else:
+                headers = results_dict[sub_domain]["segtt_modality"]["gp"]
             print_str += sub_domain+"\t"
             for doc in headers["doc_names"]:
                 print_str += doc+"\t"
