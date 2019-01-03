@@ -126,7 +126,7 @@ def get_results_summary(results_dict):
                         
     for domain in domain_results_counts:
         for res in domain_results_counts[domain]:
-            domain_results_processed[res[1][0]][res[1][1]] += res[0]
+            domain_results_processed[res[1][0]][res[1][1]] += 1
             
     for seg_priorapp in results_dict[domain]:
         for prior_type in results_dict[domain][seg_priorapp]:
@@ -215,6 +215,13 @@ def print_domain_results(results_dict):
         print_str += "\n"
         header = True
     res_summary_alldocs, res_summary_domain, avg_wd_results, baseline_nosegs_results, baseline_rnd_results, bl_avg_wd_results = get_results_summary(results_dict)
+    n_docs = 0
+    for domain in results_dict:
+        for seg_type in results_dict[domain]:
+            for prior_type in results_dict[domain][seg_type]:
+                n_docs += len(results_dict[domain][seg_type][prior_type]["wd"])
+                break
+            break
     print_str += "\nResults Summary\n\n"
     for seg_type in res_summary_alldocs:
         print_str += seg_type+"\nPrior Type\t#Best Results (all docs)\t#Best Results (domain)\tWD avg (all docs)\t#Wins vs BL no segs\t#Wins vs BL rnd segs\n"
@@ -222,10 +229,11 @@ def print_domain_results(results_dict):
             print_str += prior_type+"\t"+str(res_summary_alldocs[seg_type][prior_type])+"\t"
             print_str += str(res_summary_domain[seg_type][prior_type])+"\t"
             print_str += str(avg_wd_results[seg_type][prior_type])+"\t"
-            print_str += str(baseline_nosegs_results[seg_type][prior_type])+"\t"
-            print_str += str(baseline_rnd_results[seg_type][prior_type])+"\n"
+            print_str += str(baseline_nosegs_results[seg_type][prior_type])+"/"+str(n_docs)+"\t"
+            print_str += str(baseline_rnd_results[seg_type][prior_type])+"/"+str(n_docs)+"\n"
         print_str += "\n"
     print_str += "\nBaseline WD avg results\nRND\tNo segs\n"
+        
     for seg_type in bl_avg_wd_results["rnd"]:
         for prior_type in prior_type_order:
             print_str += str(bl_avg_wd_results["rnd"][seg_type][prior_type])+"\t"
@@ -236,6 +244,6 @@ def print_domain_results(results_dict):
     print(print_str)
     print(set(incomplete_domains))
     
-results_dict = get_domain_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/final_results", "news")
+results_dict = get_domain_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/final_results", "bio")
 print_domain_results(results_dict)
 #print(json.dumps(results_dict, sort_keys=True, indent=4))
