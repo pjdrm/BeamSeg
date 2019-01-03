@@ -154,9 +154,12 @@ def print_domain_results(results_dict):
             print_str += "Average\nRND Segs\t"
             for wd in headers["wd_rnd_segs"]:
                 print_str += str(wd)+"\t"
+            print_str += str(np.average(headers["wd_rnd_segs"]))
+            
             print_str += "\nNO segs\t"
             for wd in headers["wd_bl_no_segs"]:
                 print_str += str(wd)+"\t"
+            print_str += str(np.average(headers["wd_bl_no_segs"]))
             print_str += "\n\n"
             header = False
         
@@ -244,6 +247,6 @@ def print_domain_results(results_dict):
     print(print_str)
     print(set(incomplete_domains))
     
-results_dict = get_domain_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/final_results", "bio")
+results_dict = get_domain_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/final_results", "lectures")
 print_domain_results(results_dict)
 #print(json.dumps(results_dict, sort_keys=True, indent=4))
