@@ -71,6 +71,7 @@ def get_results_summary(results_dict):
     avg_wd_results = copy.deepcopy(all_docs_results)
     bl_avg_wd_results = {"rnd": copy.deepcopy(all_docs_results), "no_segs": copy.deepcopy(all_docs_results)}
     baseline_nosegs_results = copy.deepcopy(all_docs_results)
+    baseline_nosegs_ties_results = copy.deepcopy(all_docs_results)
     baseline_rnd_results = copy.deepcopy(all_docs_results)
     
     for domain in results_dict:
@@ -96,6 +97,9 @@ def get_results_summary(results_dict):
                     
                     if wd < wd_no_segs_bl:
                         baseline_nosegs_results[seg_priorapp][prior_type] += 1
+                    
+                    if wd == wd_no_segs_bl:
+                        baseline_nosegs_ties_results[seg_priorapp][prior_type] += 1
                         
                     if wd < wd_rnd_bl:
                         baseline_rnd_results[seg_priorapp][prior_type] += 1
@@ -134,7 +138,7 @@ def get_results_summary(results_dict):
             bl_avg_wd_results["rnd"][seg_priorapp][prior_type] = np.average(bl_avg_wd_results["rnd"][seg_priorapp][prior_type])
             bl_avg_wd_results["no_segs"][seg_priorapp][prior_type] = np.average(bl_avg_wd_results["no_segs"][seg_priorapp][prior_type])
         
-    return all_docs_results, domain_results_processed, avg_wd_results, baseline_nosegs_results, baseline_rnd_results, bl_avg_wd_results
+    return all_docs_results, domain_results_processed, avg_wd_results, baseline_nosegs_results, baseline_nosegs_ties_results, baseline_rnd_results, bl_avg_wd_results
 
 def print_domain_results(results_dict):
     incomplete_domains = []
@@ -217,7 +221,7 @@ def print_domain_results(results_dict):
         
         print_str += "\n"
         header = True
-    res_summary_alldocs, res_summary_domain, avg_wd_results, baseline_nosegs_results, baseline_rnd_results, bl_avg_wd_results = get_results_summary(results_dict)
+    res_summary_alldocs, res_summary_domain, avg_wd_results, baseline_nosegs_results, baseline_nosegs_ties_results, baseline_rnd_results, bl_avg_wd_results = get_results_summary(results_dict)
     n_docs = 0
     for domain in results_dict:
         for seg_type in results_dict[domain]:
@@ -227,12 +231,13 @@ def print_domain_results(results_dict):
             break
     print_str += "\nResults Summary\n\n"
     for seg_type in res_summary_alldocs:
-        print_str += seg_type+"\nPrior Type\t#Best Results (all docs)\t#Best Results (domain)\tWD avg (all docs)\t#Wins vs BL no segs\t#Wins vs BL rnd segs\n"
+        print_str += seg_type+"\nPrior Type\t#Best Results (all docs)\t#Best Results (domain)\tWD avg (all docs)\t#Wins vs BL no segs\t#Ties vs BL no segs\t#Wins vs BL rnd segs\n"
         for prior_type in prior_type_order:
             print_str += prior_type+"\t"+str(res_summary_alldocs[seg_type][prior_type])+"\t"
             print_str += str(res_summary_domain[seg_type][prior_type])+"\t"
             print_str += str(avg_wd_results[seg_type][prior_type])+"\t"
             print_str += str(baseline_nosegs_results[seg_type][prior_type])+"/"+str(n_docs)+"\t"
+            print_str += str(baseline_nosegs_ties_results[seg_type][prior_type])+"/"+str(n_docs)+"\t"
             print_str += str(baseline_rnd_results[seg_type][prior_type])+"/"+str(n_docs)+"\n"
         print_str += "\n"
     print_str += "\nBaseline WD avg results\nRND\tNo segs\n"
@@ -247,6 +252,6 @@ def print_domain_results(results_dict):
     print(print_str)
     print(set(incomplete_domains))
     
-results_dict = get_domain_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/final_results", "lectures")
+results_dict = get_domain_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/final_results", "news")
 print_domain_results(results_dict)
 #print(json.dumps(results_dict, sort_keys=True, indent=4))
