@@ -148,10 +148,9 @@ def print_domain_results(results_dict):
     domains_sort = sorted(results_dict.keys())
     for sub_domain in domains_sort:
         if header:
-            if "segtt_dataset" in results_dict[domains_sort[0]]:
-                headers = results_dict[sub_domain]["segtt_dataset"]["gp"]
-            else:
-                headers = results_dict[sub_domain]["segtt_modality"]["gp"]
+            seg_type = list(results_dict[sub_domain].keys())[0]
+            prior_type = list(results_dict[sub_domain][seg_type].keys())[0]
+            headers = results_dict[sub_domain][seg_type][prior_type]
             print_str += sub_domain+"\t"
             for doc in headers["doc_names"]:
                 print_str += doc+"\t"
@@ -167,12 +166,13 @@ def print_domain_results(results_dict):
             print_str += "\n\n"
             header = False
         
-        if "segbl_modality" in results_dict[sub_domain]:
-            print_str += "segbl_modality\n"
+        seg_types_sorted = sorted(results_dict[sub_domain].keys())
+        for seg_type in seg_types_sorted:
+            print_str += seg_type+"\n"
             for prior_type in prior_type_order:
                 print_str += prior_type + "\t"
-                if "wd" in results_dict[sub_domain]["segbl_modality"][prior_type]:
-                    wds = results_dict[sub_domain]["segbl_modality"][prior_type]["wd"]
+                if "wd" in results_dict[sub_domain][seg_type][prior_type]:
+                    wds = results_dict[sub_domain][seg_type][prior_type]["wd"]
                     for wd in wds:
                         print_str += str(wd)+"\t"
                     print_str += str(np.average(wds))
@@ -181,44 +181,6 @@ def print_domain_results(results_dict):
                 print_str += "\n"
             print_str += "\n"
             
-            print_str += "segtt_modality\n"
-            for prior_type in prior_type_order:
-                print_str += prior_type + "\t"
-                if "wd" in results_dict[sub_domain]["segtt_modality"][prior_type]:
-                    wds = results_dict[sub_domain]["segtt_modality"][prior_type]["wd"]
-                    for wd in wds:
-                        print_str += str(wd)+"\t"
-                    print_str += str(np.average(wds))
-                else:
-                    incomplete_domains.append(sub_domain)
-                print_str += "\n"
-            
-        if "segtt_dataset" in results_dict[sub_domain]:
-            print_str += "\nsegbl_dataset\n"
-            for prior_type in prior_type_order:
-                print_str += prior_type + "\t"
-                if "wd" in results_dict[sub_domain]["segbl_dataset"][prior_type]:
-                    wds = results_dict[sub_domain]["segbl_dataset"][prior_type]["wd"]
-                    for wd in wds:
-                        print_str += str(wd)+"\t"
-                    print_str += str(np.average(wds))
-                else:
-                    incomplete_domains.append(sub_domain)
-                print_str += "\n"
-            print_str += "\n"
-            
-            print_str += "segtt_dataset\n"
-            for prior_type in prior_type_order:
-                print_str += prior_type + "\t"
-                if "wd" in results_dict[sub_domain]["segtt_dataset"][prior_type]:
-                    wds = results_dict[sub_domain]["segtt_dataset"][prior_type]["wd"]
-                    for wd in wds:
-                        print_str += str(wd)+"\t"
-                    print_str += str(np.average(wds))
-                else:
-                    incomplete_domains.append(sub_domain)
-                print_str += "\n"        
-        
         print_str += "\n"
         header = True
     res_summary_alldocs, res_summary_domain, avg_wd_results, baseline_nosegs_results, baseline_nosegs_ties_results, baseline_rnd_results, bl_avg_wd_results = get_results_summary(results_dict)
