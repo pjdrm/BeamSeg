@@ -30,29 +30,45 @@ def get_results(file_path):
             resuls_dict["doc_names"] = eval(lins[-1])
     return resuls_dict
 
-def get_bayesseg_results(dir, domain, beamseg_res):
+def get_bayesseg_subdomain(res_fp, lin, beamseg_res):
+    if res_fp.startswith("results_l"):
+        doc_name = lin.replace("docId: ", "").split(" ")[0]
+        sub_domain = doc_name.split("_")[0]
+        return sub_domain, doc_name
+    elif "news" in res_fp:
+        doc_name = lin.replace("docId: ", "").split(" ")[0].replace(".ref", "").replace(".", "")+".txt"
+        sub_domain = "news"
+        for bs_subdomain in beamseg_res:
+            seg_type = list(beamseg_res[bs_subdomain].keys())[0]
+            prior = list(beamseg_res[bs_subdomain][seg_type].keys())[0]
+            beamseg_doc_names = beamseg_res[bs_subdomain][seg_type][prior]["doc_names"]
+            if doc_name in beamseg_doc_names:
+                return bs_subdomain, doc_name
+    
+def get_bayesseg_results(dir, beamseg_res):
     results_dict = {}
-    for res_dir in os.listdir(dir):
-        if res_dir.startswith(domain):
-            seg_type = list(beamseg_res[res_dir].keys())[0]
-            prior = list(beamseg_res[res_dir][seg_type].keys())[0]
-            beamseg_doc_names = beamseg_res[res_dir][seg_type][prior]["doc_names"]
-            rnd_bl = beamseg_res[res_dir][seg_type][prior]["wd_rnd_segs"]
-            no_segs_bl = beamseg_res[res_dir][seg_type][prior]["wd_bl_no_segs"]
-            results_dict[res_dir] = {"bayesseg": {"": {"doc_names": [], "wd": [], "wd_bl_no_segs": [], "wd_rnd_segs": []}}}
-            for res_fp in os.listdir(dir+"/"+res_dir):
-                with open(dir+"/"+res_dir+"/"+res_fp) as res_f:
-                    lins = res_f.readlines()
-                for lin in lins:
-                    if "docId" in lin:
-                        str_split = lin.replace("docId: ", "").split(" ")
-                        doc_name = str_split[0]
-                        wd = float(str_split[-1])
-                        results_dict[res_dir]["bayesseg"][""]["doc_names"].append(doc_name)
-                        results_dict[res_dir]["bayesseg"][""]["wd"].append(wd)
-                        i = beamseg_doc_names.index(doc_name)
-                        results_dict[res_dir]["bayesseg"][""]["wd_bl_no_segs"].append(no_segs_bl[i])
-                        results_dict[res_dir]["bayesseg"][""]["wd_rnd_segs"].append(rnd_bl[i])
+    for res_fp in os.listdir(dir):
+        with open(dir+"/"+res_fp) as res_f:
+            lins = res_f.readlines()
+        for lin in lins:
+            if "docId" in lin:
+                sub_domain, doc_name = get_bayesseg_subdomain(res_fp, lin, beamseg_res)
+                str_split = lin.replace("docId: ", "").split(" ")
+                wd = float(str_split[-1])
+                if sub_domain not in results_dict:
+                    results_dict[sub_domain] = {"bayesseg": {"": {"doc_names": [], "wd": [], "wd_bl_no_segs": [], "wd_rnd_segs": []}}}
+                results_dict[sub_domain]["bayesseg"][""]["doc_names"].append(doc_name)
+                results_dict[sub_domain]["bayesseg"][""]["wd"].append(wd)
+                
+                seg_type = list(beamseg_res[sub_domain].keys())[0]
+                prior = list(beamseg_res[sub_domain][seg_type].keys())[0]
+                beamseg_doc_names = beamseg_res[sub_domain][seg_type][prior]["doc_names"]
+                rnd_bl = beamseg_res[sub_domain][seg_type][prior]["wd_rnd_segs"]
+                no_segs_bl = beamseg_res[sub_domain][seg_type][prior]["wd_bl_no_segs"]
+                
+                i = beamseg_doc_names.index(doc_name)
+                results_dict[sub_domain]["bayesseg"][""]["wd_bl_no_segs"].append(no_segs_bl[i])
+                results_dict[sub_domain]["bayesseg"][""]["wd_rnd_segs"].append(rnd_bl[i])
     return results_dict
                 
 def get_beamseg_results(dir, domain):
@@ -240,7 +256,7 @@ def print_domain_results(results_dict):
     print(print_str)
     print(set(incomplete_domains))
     
-results_beamseg = get_beamseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/final_results", "L")
-#results_bayesseg =  get_bayesseg_results("/home/pjdrm/Desktop/thesis_exp_bayesseg", "L", results_beamseg)
-print_domain_results(results_beamseg)
+results_beamseg = get_beamseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/final_results", "news")
+results_bayesseg =  get_bayesseg_results("/home/pjdrm/Desktop/thesis_exp_bayesseg/mw_news", results_beamseg)
+print_domain_results(results_bayesseg)
 #print(json.dumps(results_dict, sort_keys=True, indent=4))
