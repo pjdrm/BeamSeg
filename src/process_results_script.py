@@ -30,7 +30,32 @@ def get_results(file_path):
             resuls_dict["doc_names"] = eval(lins[-1])
     return resuls_dict
 
-def get_domain_results(dir, domain):
+def get_bayesseg_results(dir, domain, beamseg_res):
+    results_dict = {}
+    for res_dir in os.listdir(dir):
+        if res_dir.startswith(domain):
+            seg_type = list(beamseg_res[res_dir].keys())[0]
+            prior = list(beamseg_res[res_dir][seg_type].keys())[0]
+            beamseg_doc_names = beamseg_res[res_dir][seg_type][prior]["doc_names"]
+            rnd_bl = beamseg_res[res_dir][seg_type][prior]["wd_rnd_segs"]
+            no_segs_bl = beamseg_res[res_dir][seg_type][prior]["wd_bl_no_segs"]
+            results_dict[res_dir] = {"bayesseg": {"": {"doc_names": [], "wd": [], "wd_bl_no_segs": [], "wd_rnd_segs": []}}}
+            for res_fp in os.listdir(dir+"/"+res_dir):
+                with open(dir+"/"+res_dir+"/"+res_fp) as res_f:
+                    lins = res_f.readlines()
+                for lin in lins:
+                    if "docId" in lin:
+                        str_split = lin.replace("docId: ", "").split(" ")
+                        doc_name = str_split[0]
+                        wd = float(str_split[-1])
+                        results_dict[res_dir]["bayesseg"][""]["doc_names"].append(doc_name)
+                        results_dict[res_dir]["bayesseg"][""]["wd"].append(wd)
+                        i = beamseg_doc_names.index(doc_name)
+                        results_dict[res_dir]["bayesseg"][""]["wd_bl_no_segs"].append(no_segs_bl[i])
+                        results_dict[res_dir]["bayesseg"][""]["wd_rnd_segs"].append(rnd_bl[i])
+    return results_dict
+                
+def get_beamseg_results(dir, domain):
     results_dict = {}
     for res_f in os.listdir(dir):
         if domain in res_f:
@@ -143,9 +168,10 @@ def get_results_summary(results_dict):
 def print_domain_results(results_dict):
     incomplete_domains = []
     print_str = ""
-    prior_type_order = ["norm", "bb", "gp"]
     header = True
     domains_sort = sorted(results_dict.keys())
+    seg_type = list(results_dict[domains_sort[0]].keys())[0]
+    prior_type_order = sorted(list(results_dict[domains_sort[0]][seg_type]))
     for sub_domain in domains_sort:
         if header:
             seg_type = list(results_dict[sub_domain].keys())[0]
@@ -214,6 +240,7 @@ def print_domain_results(results_dict):
     print(print_str)
     print(set(incomplete_domains))
     
-results_dict = get_domain_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/final_results", "news")
-print_domain_results(results_dict)
+results_beamseg = get_beamseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/final_results", "L")
+#results_bayesseg =  get_bayesseg_results("/home/pjdrm/Desktop/thesis_exp_bayesseg", "L", results_beamseg)
+print_domain_results(results_beamseg)
 #print(json.dumps(results_dict, sort_keys=True, indent=4))
