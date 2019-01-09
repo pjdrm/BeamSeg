@@ -31,19 +31,31 @@ def get_results(file_path):
     return resuls_dict
 
 def get_bayesseg_subdomain(res_fp, lin, beamseg_res):
-    if res_fp.startswith("results_l"):
-        doc_name = lin.replace("docId: ", "").split(" ")[0]
-        sub_domain = doc_name.split("_")[0]
-        return sub_domain, doc_name
-    elif "news" in res_fp:
-        doc_name = lin.replace("docId: ", "").split(" ")[0].replace(".ref", "").replace(".", "")+".txt"
-        sub_domain = "news"
+    def search_sub_domain(doc_name, beamseg_res):
         for bs_subdomain in beamseg_res:
             seg_type = list(beamseg_res[bs_subdomain].keys())[0]
             prior = list(beamseg_res[bs_subdomain][seg_type].keys())[0]
             beamseg_doc_names = beamseg_res[bs_subdomain][seg_type][prior]["doc_names"]
             if doc_name in beamseg_doc_names:
-                return bs_subdomain, doc_name
+                return bs_subdomain
+        
+    if "lectures" in res_fp:
+        doc_name = lin.replace("docId: ", "").split(" ")[0]
+        sub_domain = search_sub_domain(doc_name, beamseg_res)
+    elif res_fp.startswith("results_l"):
+        doc_name = lin.replace("docId: ", "").split(" ")[0]
+        sub_domain = doc_name.split("_")[0]
+    elif "news" in res_fp:
+        doc_name = lin.replace("docId: ", "").split(" ")[0].replace(".ref", "").replace(".", "")+".txt"
+        sub_domain = search_sub_domain(doc_name, beamseg_res)
+    elif "bio" in res_fp:
+        doc_name = lin.replace("docId: ", "").split(" ")[0]
+        sub_domain = search_sub_domain(doc_name, beamseg_res)
+    elif "avl" in res_fp:
+        doc_name = lin.replace("docId: ", "").split(" ")[0]
+        sub_domain = "avl_trees"
+        
+    return sub_domain, doc_name
     
 def get_bayesseg_results(dir, beamseg_res):
     results_dict = {}
@@ -256,7 +268,7 @@ def print_domain_results(results_dict):
     print(print_str)
     print(set(incomplete_domains))
     
-results_beamseg = get_beamseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/final_results", "news")
-results_bayesseg =  get_bayesseg_results("/home/pjdrm/Desktop/thesis_exp_bayesseg/mw_news", results_beamseg)
+results_beamseg = get_beamseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/final_results", "avl")
+results_bayesseg =  get_bayesseg_results("/home/pjdrm/Desktop/thesis_exp_bayesseg/AVL", results_beamseg)
 print_domain_results(results_bayesseg)
 #print(json.dumps(results_dict, sort_keys=True, indent=4))
