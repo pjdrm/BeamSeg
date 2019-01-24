@@ -8,6 +8,12 @@ import json
 import numpy as np
 import copy
 
+def merge_results(r1, r2):
+    for subdomain in r2:
+        for seg_model in r2[subdomain]:
+            r1[subdomain][seg_model] = r2[subdomain][seg_model]
+    return r1 
+    
 def get_results(file_path):
     resuls_dict = {}
     with open(file_path) as f:
@@ -57,31 +63,37 @@ def get_bayesseg_subdomain(res_fp, lin, beamseg_res):
         
     return sub_domain, doc_name
     
-def get_bayesseg_results(dir, beamseg_res):
-    segmentor = dir.split("/")[-2]
+def get_bayesseg_results(root_dir, domain, beamseg_res):
     results_dict = {}
-    for res_fp in os.listdir(dir):
-        with open(dir+"/"+res_fp) as res_f:
-            lins = res_f.readlines()
-        for lin in lins:
-            if "docId" in lin:
-                sub_domain, doc_name = get_bayesseg_subdomain(res_fp, lin, beamseg_res)
-                str_split = lin.replace("docId: ", "").split(" ")
-                wd = float(str_split[-1])
-                if sub_domain not in results_dict:
-                    results_dict[sub_domain] = {segmentor: {"": {"doc_names": [], "wd": [], "wd_bl_no_segs": [], "wd_rnd_segs": []}}}
-                results_dict[sub_domain][segmentor][""]["doc_names"].append(doc_name)
-                results_dict[sub_domain][segmentor][""]["wd"].append(wd)
-                
-                seg_type = list(beamseg_res[sub_domain].keys())[0]
-                prior = list(beamseg_res[sub_domain][seg_type].keys())[0]
-                beamseg_doc_names = beamseg_res[sub_domain][seg_type][prior]["doc_names"]
-                rnd_bl = beamseg_res[sub_domain][seg_type][prior]["wd_rnd_segs"]
-                no_segs_bl = beamseg_res[sub_domain][seg_type][prior]["wd_bl_no_segs"]
-                
-                i = beamseg_doc_names.index(doc_name)
-                results_dict[sub_domain][segmentor][""]["wd_bl_no_segs"].append(no_segs_bl[i])
-                results_dict[sub_domain][segmentor][""]["wd_rnd_segs"].append(rnd_bl[i])
+    for dir in os.listdir(root_dir):
+        if dir == "beamseg" or dir == "aps" or dir == "ui": #APS results are just wrong. UI results output a boundary on the first sentence always.
+            continue
+        segmentor = dir
+        dir = root_dir+dir+"/"+domain
+        for res_fp in os.listdir(dir):
+            with open(dir+"/"+res_fp) as res_f:
+                lins = res_f.readlines()
+            for lin in lins:
+                if "docId" in lin:
+                    sub_domain, doc_name = get_bayesseg_subdomain(res_fp, lin, beamseg_res)
+                    str_split = lin.replace("docId: ", "").split(" ")
+                    wd = float(str_split[-1])
+                    if sub_domain not in results_dict:
+                        results_dict[sub_domain] = {}
+                    if segmentor not in results_dict[sub_domain]:
+                        results_dict[sub_domain][segmentor] = {"": {"doc_names": [], "wd": [], "wd_bl_no_segs": [], "wd_rnd_segs": []}}
+                    results_dict[sub_domain][segmentor][""]["doc_names"].append(doc_name)
+                    results_dict[sub_domain][segmentor][""]["wd"].append(wd)
+                    
+                    seg_type = list(beamseg_res[sub_domain].keys())[0]
+                    prior = list(beamseg_res[sub_domain][seg_type].keys())[0]
+                    beamseg_doc_names = beamseg_res[sub_domain][seg_type][prior]["doc_names"]
+                    rnd_bl = beamseg_res[sub_domain][seg_type][prior]["wd_rnd_segs"]
+                    no_segs_bl = beamseg_res[sub_domain][seg_type][prior]["wd_bl_no_segs"]
+                    
+                    i = beamseg_doc_names.index(doc_name)
+                    results_dict[sub_domain][segmentor][""]["wd_bl_no_segs"].append(no_segs_bl[i])
+                    results_dict[sub_domain][segmentor][""]["wd_rnd_segs"].append(rnd_bl[i])
     return results_dict
                 
 def get_beamseg_results(dir, domain):
@@ -129,9 +141,13 @@ def get_results_summary(results_dict):
     baseline_rnd_results = copy.deepcopy(all_docs_results)
     
     for domain in results_dict:
+        max_docs = -1
         for seg_priorapp in results_dict[domain]:
                 for prior_type in results_dict[domain][seg_priorapp]:
-                    n_docs = len(results_dict[domain][seg_priorapp][prior_type]["wd"])
+                    docs = results_dict[domain][seg_priorapp][prior_type]["doc_names"]
+                    if len(docs) > max_docs:
+                        max_docs = len(docs)
+                        doc_names = docs
                     if avg_wd_results[seg_priorapp][prior_type] == 0:
                         avg_wd_results[seg_priorapp][prior_type] = []
                         bl_avg_wd_results["rnd"][seg_priorapp][prior_type] = []
@@ -139,31 +155,33 @@ def get_results_summary(results_dict):
                     avg_wd_results[seg_priorapp][prior_type] += results_dict[domain][seg_priorapp][prior_type]["wd"]
                     bl_avg_wd_results["rnd"][seg_priorapp][prior_type] += results_dict[domain][seg_priorapp][prior_type]["wd_rnd_segs"]
                     bl_avg_wd_results["no_segs"][seg_priorapp][prior_type] += results_dict[domain][seg_priorapp][prior_type]["wd_bl_no_segs"]
-            
-        for i in range(n_docs):
+        
+        for doc_name in doc_names:
             best_models = None
             best_wd = 1.1
             for seg_priorapp in results_dict[domain]:
                 for prior_type in results_dict[domain][seg_priorapp]:
-                    wd = results_dict[domain][seg_priorapp][prior_type]["wd"][i]
-                    wd_no_segs_bl = results_dict[domain][seg_priorapp][prior_type]["wd_bl_no_segs"][i]
-                    wd_rnd_bl = results_dict[domain][seg_priorapp][prior_type]["wd_rnd_segs"][i]
-                    
-                    if wd < wd_no_segs_bl:
-                        baseline_nosegs_results[seg_priorapp][prior_type] += 1
-                    
-                    if wd == wd_no_segs_bl:
-                        baseline_nosegs_ties_results[seg_priorapp][prior_type] += 1
+                    if doc_name in results_dict[domain][seg_priorapp][prior_type]["doc_names"]:
+                        i = results_dict[domain][seg_priorapp][prior_type]["doc_names"].index(doc_name)
+                        wd = results_dict[domain][seg_priorapp][prior_type]["wd"][i]
+                        wd_no_segs_bl = results_dict[domain][seg_priorapp][prior_type]["wd_bl_no_segs"][i]
+                        wd_rnd_bl = results_dict[domain][seg_priorapp][prior_type]["wd_rnd_segs"][i]
                         
-                    if wd < wd_rnd_bl:
-                        baseline_rnd_results[seg_priorapp][prior_type] += 1
+                        if wd < wd_no_segs_bl:
+                            baseline_nosegs_results[seg_priorapp][prior_type] += 1
                         
-                    if wd == best_wd:
-                        best_models.append([seg_priorapp, prior_type])
-                        
-                    if wd < best_wd:
-                        best_wd = wd
-                        best_models = [[seg_priorapp, prior_type]]
+                        if wd == wd_no_segs_bl:
+                            baseline_nosegs_ties_results[seg_priorapp][prior_type] += 1
+                            
+                        if wd < wd_rnd_bl:
+                            baseline_rnd_results[seg_priorapp][prior_type] += 1
+                            
+                        if wd == best_wd:
+                            best_models.append([seg_priorapp, prior_type])
+                            
+                        if wd < best_wd:
+                            best_wd = wd
+                            best_models = [[seg_priorapp, prior_type]]
             for best_model in best_models:
                 all_docs_results[best_model[0]][best_model[1]] += 1
                 domain_results[best_model[0]][best_model[1]][domain] += 1
@@ -194,20 +212,29 @@ def get_results_summary(results_dict):
         
     return all_docs_results, domain_results_processed, avg_wd_results, baseline_nosegs_results, baseline_nosegs_ties_results, baseline_rnd_results, bl_avg_wd_results
 
+def get_subdomain_doc_names(subdomain_dict):
+    max_len = -1
+    for seg_type in subdomain_dict:
+        for prior_type in subdomain_dict[seg_type]:
+            docs = subdomain_dict[seg_type][prior_type]["doc_names"]
+            if len(docs) > max_len:
+                max_len = len(docs)
+                doc_names = docs
+    return doc_names
+
 def print_domain_results(results_dict):
     incomplete_domains = []
     print_str = ""
     header = True
     domains_sort = sorted(results_dict.keys())
-    seg_type = list(results_dict[domains_sort[0]].keys())[0]
-    prior_type_order = sorted(list(results_dict[domains_sort[0]][seg_type]))
     for sub_domain in domains_sort:
-        if header:
+        doc_names = get_subdomain_doc_names(results_dict[sub_domain])
+        if header: #TODO: make sure we get the full list of documents
             seg_type = list(results_dict[sub_domain].keys())[0]
             prior_type = list(results_dict[sub_domain][seg_type].keys())[0]
             headers = results_dict[sub_domain][seg_type][prior_type]
             print_str += sub_domain+"\t"
-            for doc in headers["doc_names"]:
+            for doc in doc_names:
                 print_str += doc+"\t"
             print_str += "Average\nRND Segs\t"
             for wd in headers["wd_rnd_segs"]:
@@ -223,16 +250,19 @@ def print_domain_results(results_dict):
         
         seg_types_sorted = sorted(results_dict[sub_domain].keys())
         for seg_type in seg_types_sorted:
+            prior_type_order = sorted(list(results_dict[sub_domain][seg_type]))
             print_str += seg_type+"\n"
             for prior_type in prior_type_order:
                 print_str += prior_type + "\t"
-                if "wd" in results_dict[sub_domain][seg_type][prior_type]:
-                    wds = results_dict[sub_domain][seg_type][prior_type]["wd"]
-                    for wd in wds:
+                for doc in doc_names:
+                    if doc in results_dict[sub_domain][seg_type][prior_type]["doc_names"]:
+                        i = results_dict[sub_domain][seg_type][prior_type]["doc_names"].index(doc)
+                        wd = results_dict[sub_domain][seg_type][prior_type]["wd"][i]
                         print_str += str(wd)+"\t"
-                    print_str += str(np.average(wds))
-                else:
-                    incomplete_domains.append(sub_domain)
+                    else:
+                        print_str += "\t"
+                wds = results_dict[sub_domain][seg_type][prior_type]["wd"]
+                print_str += str(np.average(wds))
                 print_str += "\n"
             print_str += "\n"
             
@@ -248,6 +278,7 @@ def print_domain_results(results_dict):
             break
     print_str += "\nResults Summary\n\n"
     for seg_type in res_summary_alldocs:
+        prior_type_order = sorted(list(results_dict[sub_domain][seg_type]))
         print_str += seg_type+"\nPrior Type\t#Best Results (all docs)\t#Best Results (domain)\tWD avg (all docs)\t#Wins vs BL no segs\t#Ties vs BL no segs\t#Wins vs BL rnd segs\n"
         for prior_type in prior_type_order:
             print_str += prior_type+"\t"+str(res_summary_alldocs[seg_type][prior_type])+"\t"
@@ -260,6 +291,7 @@ def print_domain_results(results_dict):
     print_str += "\nBaseline WD avg results\nRND\tNo segs\n"
         
     for seg_type in bl_avg_wd_results["rnd"]:
+        prior_type_order = sorted(list(results_dict[sub_domain][seg_type]))
         for prior_type in prior_type_order:
             print_str += str(bl_avg_wd_results["rnd"][seg_type][prior_type])+"\t"
             print_str += str(bl_avg_wd_results["no_segs"][seg_type][prior_type])
@@ -269,7 +301,8 @@ def print_domain_results(results_dict):
     print(print_str)
     print(set(incomplete_domains))
     
-results_beamseg = get_beamseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/final_results", "L")
-results_bayesseg =  get_bayesseg_results("/home/pjdrm/Desktop/thesis_exp_bayesseg/multiseg/MUSED", results_beamseg)
-print_domain_results(results_bayesseg)
+results_beamseg = get_beamseg_results("/home/pjdrm/workspace/TopicTrackingSegmentation/thesis_exp/beamseg", "bio")
+results_bayesseg =  get_bayesseg_results("/home/pjdrm/workspace/TopicTrackingSegmentation/thesis_exp/", "mw_bio", results_beamseg)
+merged_results = merge_results(results_beamseg, results_bayesseg)
+print_domain_results(merged_results)
 #print(json.dumps(results_dict, sort_keys=True, indent=4))
