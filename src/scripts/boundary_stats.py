@@ -47,5 +47,5 @@ def get_boundary_stats(fp):
             print(stats)
             
 #get_boundary_stats("/home/pjdrm/workspace/TopicTrackingSegmentation/thesis_exp/beamseg/bio_d1_segtt_modality_gp.txt")
-test_wd("/home/pjdrm/Desktop/bayesseg_segs/news")
+test_wd("/media/pjdrm/EMTEC C450/bayesseg_segs/L20")
             

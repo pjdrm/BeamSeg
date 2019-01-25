@@ -206,9 +206,17 @@ def get_results_summary(results_dict):
             
     for seg_priorapp in results_dict[domain]:
         for prior_type in results_dict[domain][seg_priorapp]:
-            avg_wd_results[seg_priorapp][prior_type] = np.average(avg_wd_results[seg_priorapp][prior_type])
-            bl_avg_wd_results["rnd"][seg_priorapp][prior_type] = np.average(bl_avg_wd_results["rnd"][seg_priorapp][prior_type])
-            bl_avg_wd_results["no_segs"][seg_priorapp][prior_type] = np.average(bl_avg_wd_results["no_segs"][seg_priorapp][prior_type])
+            avg_wd = np.average(avg_wd_results[seg_priorapp][prior_type])
+            std_wd = np.std(avg_wd_results[seg_priorapp][prior_type])
+            avg_wd_results[seg_priorapp][prior_type] = str(avg_wd)[0:5]+"+-"+str(std_wd)[0:5]
+            
+            avg_wd = np.average(bl_avg_wd_results["rnd"][seg_priorapp][prior_type])
+            std_wd = np.std(bl_avg_wd_results["rnd"][seg_priorapp][prior_type])
+            bl_avg_wd_results["rnd"][seg_priorapp][prior_type] = str(avg_wd)[0:5]+"+-"+str(std_wd)[0:5]
+            
+            avg_wd = np.average(bl_avg_wd_results["no_segs"][seg_priorapp][prior_type])
+            std_wd = np.std(bl_avg_wd_results["no_segs"][seg_priorapp][prior_type])
+            bl_avg_wd_results["no_segs"][seg_priorapp][prior_type] = str(avg_wd)[0:5]+"+-"+str(std_wd)[0:5]
         
     return all_docs_results, domain_results_processed, avg_wd_results, baseline_nosegs_results, baseline_nosegs_ties_results, baseline_rnd_results, bl_avg_wd_results
 
@@ -301,8 +309,8 @@ def print_domain_results(results_dict):
     print(print_str)
     print(set(incomplete_domains))
     
-results_beamseg = get_beamseg_results("/home/pjdrm/workspace/TopicTrackingSegmentation/thesis_exp/beamseg", "bio")
-results_bayesseg =  get_bayesseg_results("/home/pjdrm/workspace/TopicTrackingSegmentation/thesis_exp/", "mw_bio", results_beamseg)
+results_beamseg = get_beamseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/beamseg", "news")
+results_bayesseg =  get_bayesseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/", "mw_news", results_beamseg)
 merged_results = merge_results(results_beamseg, results_bayesseg)
 print_domain_results(merged_results)
 #print(json.dumps(results_dict, sort_keys=True, indent=4))
