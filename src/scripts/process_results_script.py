@@ -63,10 +63,10 @@ def get_bayesseg_subdomain(res_fp, lin, beamseg_res):
         
     return sub_domain, doc_name
     
-def get_bayesseg_results(root_dir, domain, beamseg_res):
+def get_bayesseg_results(root_dir, domain, beamseg_res, segtype_filter=["ui", "aps"]):
     results_dict = {}
     for dir in os.listdir(root_dir):
-        if dir == "beamseg" or dir == "aps" or dir == "ui": #APS results are just wrong. UI results output a boundary on the first sentence always.
+        if dir in segtype_filter: #APS results are just wrong. UI results output a boundary on the first sentence always.
             continue
         segmentor = dir
         dir = root_dir+dir+"/"+domain
@@ -205,6 +205,8 @@ def get_results_summary(results_dict):
             domain_results_processed[res[1][0]][res[1][1]] += 1
             
     for seg_priorapp in results_dict[domain]:
+        if seg_priorapp == "cvs":
+            print()
         for prior_type in results_dict[domain][seg_priorapp]:
             avg_wd = np.average(avg_wd_results[seg_priorapp][prior_type])
             std_wd = np.std(avg_wd_results[seg_priorapp][prior_type])
@@ -308,9 +310,10 @@ def print_domain_results(results_dict):
              
     print(print_str)
     print(set(incomplete_domains))
-    
-results_beamseg = get_beamseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/beamseg", "news")
-results_bayesseg =  get_bayesseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/", "mw_news", results_beamseg)
+
+segtype_filer = ["beamseg", "aps", "ui"]
+results_beamseg = get_beamseg_results("/home/pjdrm/workspace/TopicTrackingSegmentation/thesis_exp/beamseg", "news")
+results_bayesseg =  get_bayesseg_results("/home/pjdrm/workspace/TopicTrackingSegmentation/thesis_exp/", "mw_news", results_beamseg, segtype_filer)
 merged_results = merge_results(results_beamseg, results_bayesseg)
-print_domain_results(merged_results)
+print_domain_results(results_bayesseg)
 #print(json.dumps(results_dict, sort_keys=True, indent=4))
