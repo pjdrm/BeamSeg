@@ -128,7 +128,7 @@ def get_doc_types(doc_names):
             doc_types.append("ppt")
         elif "pdf" in doc:
             doc_types.append("pdf")
-        elif "_v" in doc or "Video" in doc:
+        elif "_v" in doc or "Video" in doc or "MIT1" in doc:
             doc_types.append("video")
         else:
             None
