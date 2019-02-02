@@ -119,6 +119,21 @@ def get_beamseg_results(dir, domain):
                 results_dict[domain].pop(model)
     return results_dict
 
+def get_doc_types(doc_names):
+    doc_types = []
+    for doc in doc_names:
+        if "html" in doc:
+            doc_types.append("html")
+        elif "ppt" in doc:
+            doc_types.append("ppt")
+        elif "pdf" in doc:
+            doc_types.append("pdf")
+        elif "_v" in doc:
+            doc_types.append("video")
+        else:
+            None
+    return doc_types
+
 def get_results_summary(results_dict):
     all_docs_results = {}
     domain_results = {}
@@ -135,6 +150,10 @@ def get_results_summary(results_dict):
     
     domain_results_processed = copy.deepcopy(all_docs_results)
     avg_wd_results = copy.deepcopy(all_docs_results)
+    avg_wd_html_results = copy.deepcopy(all_docs_results)
+    avg_wd_ppt_results = copy.deepcopy(all_docs_results)
+    avg_wd_pdf_results = copy.deepcopy(all_docs_results)
+    avg_wd_video_results = copy.deepcopy(all_docs_results)
     bl_avg_wd_results = {"rnd": copy.deepcopy(all_docs_results), "no_segs": copy.deepcopy(all_docs_results)}
     baseline_nosegs_results = copy.deepcopy(all_docs_results)
     baseline_nosegs_ties_results = copy.deepcopy(all_docs_results)
@@ -150,9 +169,24 @@ def get_results_summary(results_dict):
                         doc_names = docs
                     if avg_wd_results[seg_priorapp][prior_type] == 0:
                         avg_wd_results[seg_priorapp][prior_type] = []
+                        avg_wd_html_results[seg_priorapp][prior_type] = []
+                        avg_wd_ppt_results[seg_priorapp][prior_type] = []
+                        avg_wd_pdf_results[seg_priorapp][prior_type] = []
+                        avg_wd_video_results[seg_priorapp][prior_type] = []
                         bl_avg_wd_results["rnd"][seg_priorapp][prior_type] = []
                         bl_avg_wd_results["no_segs"][seg_priorapp][prior_type] = []
-                    avg_wd_results[seg_priorapp][prior_type] += results_dict[domain][seg_priorapp][prior_type]["wd"]
+                    wd_results = results_dict[domain][seg_priorapp][prior_type]["wd"]
+                    avg_wd_results[seg_priorapp][prior_type] += wd_results
+                    doc_types = get_doc_types(docs)
+                    for wd, doc_type in zip(wd_results, doc_types):
+                        if doc_type == "html":
+                            avg_wd_html_results[seg_priorapp][prior_type].append(wd)
+                        elif doc_type == "ppt":
+                            avg_wd_ppt_results[seg_priorapp][prior_type].append(wd)
+                        elif doc_type == "pdf":
+                            avg_wd_pdf_results[seg_priorapp][prior_type].append(wd)
+                        elif doc_type == "video":
+                            avg_wd_video_results[seg_priorapp][prior_type].append(wd)
                     bl_avg_wd_results["rnd"][seg_priorapp][prior_type] += results_dict[domain][seg_priorapp][prior_type]["wd_rnd_segs"]
                     bl_avg_wd_results["no_segs"][seg_priorapp][prior_type] += results_dict[domain][seg_priorapp][prior_type]["wd_bl_no_segs"]
         
@@ -203,14 +237,40 @@ def get_results_summary(results_dict):
     for domain in domain_results_counts:
         for res in domain_results_counts[domain]:
             domain_results_processed[res[1][0]][res[1][1]] += 1
-            
-    for seg_priorapp in results_dict[domain]:
-        if seg_priorapp == "cvs":
-            print()
-        for prior_type in results_dict[domain][seg_priorapp]:
+    
+    max_l = -1
+    full_domain = None
+    for domain in results_dict:
+        d_l = len(results_dict[domain])
+        if d_l > max_l:
+            max_l = d_l
+            full_domain = domain
+        
+    for seg_priorapp in results_dict[full_domain]:
+        for prior_type in results_dict[full_domain][seg_priorapp]:
             avg_wd = np.average(avg_wd_results[seg_priorapp][prior_type])
             std_wd = np.std(avg_wd_results[seg_priorapp][prior_type])
             avg_wd_results[seg_priorapp][prior_type] = str(avg_wd)[0:5]+"+-"+str(std_wd)[0:5]
+            
+            if len(avg_wd_html_results[seg_priorapp][prior_type]) > 0:
+                avg_wd = np.average(avg_wd_html_results[seg_priorapp][prior_type])
+                std_wd = np.std(avg_wd_html_results[seg_priorapp][prior_type])
+                avg_wd_html_results[seg_priorapp][prior_type] = str(avg_wd)[0:5]+"+-"+str(std_wd)[0:5]
+                
+            if len(avg_wd_ppt_results[seg_priorapp][prior_type]) > 0:
+                avg_wd = np.average(avg_wd_ppt_results[seg_priorapp][prior_type])
+                std_wd = np.std(avg_wd_ppt_results[seg_priorapp][prior_type])
+                avg_wd_ppt_results[seg_priorapp][prior_type] = str(avg_wd)[0:5]+"+-"+str(std_wd)[0:5]
+            
+            if len(avg_wd_pdf_results[seg_priorapp][prior_type]) > 0:
+                avg_wd = np.average(avg_wd_pdf_results[seg_priorapp][prior_type])
+                std_wd = np.std(avg_wd_pdf_results[seg_priorapp][prior_type])
+                avg_wd_pdf_results[seg_priorapp][prior_type] = str(avg_wd)[0:5]+"+-"+str(std_wd)[0:5]
+            
+            if len(avg_wd_video_results[seg_priorapp][prior_type]) > 0:
+                avg_wd = np.average(avg_wd_video_results[seg_priorapp][prior_type])
+                std_wd = np.std(avg_wd_video_results[seg_priorapp][prior_type])
+                avg_wd_video_results[seg_priorapp][prior_type] = str(avg_wd)[0:5]+"+-"+str(std_wd)[0:5]
             
             avg_wd = np.average(bl_avg_wd_results["rnd"][seg_priorapp][prior_type])
             std_wd = np.std(bl_avg_wd_results["rnd"][seg_priorapp][prior_type])
@@ -220,7 +280,17 @@ def get_results_summary(results_dict):
             std_wd = np.std(bl_avg_wd_results["no_segs"][seg_priorapp][prior_type])
             bl_avg_wd_results["no_segs"][seg_priorapp][prior_type] = str(avg_wd)[0:5]+"+-"+str(std_wd)[0:5]
         
-    return all_docs_results, domain_results_processed, avg_wd_results, baseline_nosegs_results, baseline_nosegs_ties_results, baseline_rnd_results, bl_avg_wd_results
+    return all_docs_results,\
+           domain_results_processed,\
+           avg_wd_results,\
+           avg_wd_html_results,\
+           avg_wd_ppt_results,\
+           avg_wd_pdf_results,\
+           avg_wd_video_results,\
+           baseline_nosegs_results,\
+           baseline_nosegs_ties_results,\
+           baseline_rnd_results,\
+           bl_avg_wd_results
 
 def get_subdomain_doc_names(subdomain_dict):
     max_len = -1
@@ -278,7 +348,18 @@ def print_domain_results(results_dict):
             
         print_str += "\n"
         header = True
-    res_summary_alldocs, res_summary_domain, avg_wd_results, baseline_nosegs_results, baseline_nosegs_ties_results, baseline_rnd_results, bl_avg_wd_results = get_results_summary(results_dict)
+    res_summary_alldocs,\
+    res_summary_domain,\
+    avg_wd_results,\
+    avg_wd_html_results,\
+    avg_wd_ppt_results,\
+    avg_wd_pdf_results,\
+    avg_wd_video_results,\
+    baseline_nosegs_results,\
+    baseline_nosegs_ties_results,\
+    baseline_rnd_results,\
+    bl_avg_wd_results = get_results_summary(results_dict)
+    
     n_docs = 0
     for domain in results_dict:
         for seg_type in results_dict[domain]:
@@ -289,14 +370,27 @@ def print_domain_results(results_dict):
     print_str += "\nResults Summary\n\n"
     for seg_type in res_summary_alldocs:
         prior_type_order = sorted(list(results_dict[sub_domain][seg_type]))
-        print_str += seg_type+"\nPrior Type\t#Best Results (all docs)\t#Best Results (domain)\tWD avg (all docs)\t#Wins vs BL no segs\t#Ties vs BL no segs\t#Wins vs BL rnd segs\n"
+        print_str += seg_type+"\nPrior Type\t#Best Results (all docs)\t#Best Results (domain)\tWD avg (all docs)\t#Wins vs BL no segs\t#Ties vs BL no segs\t#Wins vs BL rnd segs"
+        if len(avg_wd_ppt_results[seg_type][prior_type_order[0]]) > 0:
+            print_str += "\tWD avg (html)"
+            print_str += "\tWD avg (ppt)"
+            print_str += "\tWD avg (pdf)"
+            print_str += "\tWD avg (video)"
+        print_str += "\n"
+            
         for prior_type in prior_type_order:
             print_str += prior_type+"\t"+str(res_summary_alldocs[seg_type][prior_type])+"\t"
             print_str += str(res_summary_domain[seg_type][prior_type])+"\t"
             print_str += str(avg_wd_results[seg_type][prior_type])+"\t"
             print_str += str(baseline_nosegs_results[seg_type][prior_type])+"/"+str(n_docs)+"\t"
             print_str += str(baseline_nosegs_ties_results[seg_type][prior_type])+"/"+str(n_docs)+"\t"
-            print_str += str(baseline_rnd_results[seg_type][prior_type])+"/"+str(n_docs)+"\n"
+            print_str += str(baseline_rnd_results[seg_type][prior_type])+"/"+str(n_docs)
+            if len(avg_wd_ppt_results[seg_type][prior_type]) > 0:
+                print_str += "\t"+str(avg_wd_html_results[seg_type][prior_type])
+                print_str += "\t"+str(avg_wd_ppt_results[seg_type][prior_type])
+                print_str += "\t"+str(avg_wd_pdf_results[seg_type][prior_type])
+                print_str += "\t"+str(avg_wd_video_results[seg_type][prior_type])
+            print_str += "\n"
         print_str += "\n"
     print_str += "\nBaseline WD avg results\nRND\tNo segs\n"
         
@@ -311,9 +405,9 @@ def print_domain_results(results_dict):
     print(print_str)
     print(set(incomplete_domains))
 
-segtype_filer = ["beamseg", "aps", "ui"]
-results_beamseg = get_beamseg_results("/home/pjdrm/workspace/TopicTrackingSegmentation/thesis_exp/beamseg", "news")
-results_bayesseg =  get_bayesseg_results("/home/pjdrm/workspace/TopicTrackingSegmentation/thesis_exp/", "mw_news", results_beamseg, segtype_filer)
+segtype_filer = ["beamseg", "aps", "ui", "mincut"]
+results_beamseg = get_beamseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/beamseg", "bio")
+results_bayesseg =  get_bayesseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/", "mw_bio", results_beamseg, segtype_filer)
 merged_results = merge_results(results_beamseg, results_bayesseg)
 print_domain_results(results_bayesseg)
 #print(json.dumps(results_dict, sort_keys=True, indent=4))
