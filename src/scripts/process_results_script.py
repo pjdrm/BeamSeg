@@ -128,7 +128,7 @@ def get_doc_types(doc_names):
             doc_types.append("ppt")
         elif "pdf" in doc:
             doc_types.append("pdf")
-        elif "_v" in doc:
+        elif "_v" in doc or "Video" in doc:
             doc_types.append("video")
         else:
             None
@@ -374,8 +374,9 @@ def print_domain_results(results_dict):
         if len(avg_wd_ppt_results[seg_type][prior_type_order[0]]) > 0:
             print_str += "\tWD avg (html)"
             print_str += "\tWD avg (ppt)"
-            print_str += "\tWD avg (pdf)"
             print_str += "\tWD avg (video)"
+        if len(avg_wd_pdf_results[seg_type][prior_type_order[0]]) > 0:
+            print_str += "\tWD avg (pdf)"
         print_str += "\n"
             
         for prior_type in prior_type_order:
@@ -388,8 +389,9 @@ def print_domain_results(results_dict):
             if len(avg_wd_ppt_results[seg_type][prior_type]) > 0:
                 print_str += "\t"+str(avg_wd_html_results[seg_type][prior_type])
                 print_str += "\t"+str(avg_wd_ppt_results[seg_type][prior_type])
-                print_str += "\t"+str(avg_wd_pdf_results[seg_type][prior_type])
                 print_str += "\t"+str(avg_wd_video_results[seg_type][prior_type])
+            if len(avg_wd_pdf_results[seg_type][prior_type]) > 0:
+                print_str += "\t"+str(avg_wd_pdf_results[seg_type][prior_type])
             print_str += "\n"
         print_str += "\n"
     print_str += "\nBaseline WD avg results\nRND\tNo segs\n"
@@ -406,8 +408,8 @@ def print_domain_results(results_dict):
     print(set(incomplete_domains))
 
 segtype_filer = ["beamseg", "aps", "ui", "mincut"]
-results_beamseg = get_beamseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/beamseg", "bio")
-results_bayesseg =  get_bayesseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/", "mw_bio", results_beamseg, segtype_filer)
+results_beamseg = get_beamseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/beamseg", "avl")
+results_bayesseg =  get_bayesseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/", "AVL", results_beamseg, segtype_filer)
 merged_results = merge_results(results_beamseg, results_bayesseg)
 print_domain_results(results_bayesseg)
 #print(json.dumps(results_dict, sort_keys=True, indent=4))
