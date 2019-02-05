@@ -15,11 +15,11 @@ def merge_results(r1, r2):
     return r1 
     
 def get_results(file_path):
-    resuls_dict = {}
+    resuls_dict = {"boundary_counts": []}
     with open(file_path) as f:
         lins = f.readlines()
             
-        for l in lins:
+        for i, l in enumerate(lins):
             if "Baseline NO segs" in l:
                 resuls_dict["wd_bl_no_segs"] = eval(l.split("WD: ")[1])
             elif "Baseline RND segs" in l:
@@ -32,6 +32,14 @@ def get_results(file_path):
                 acc = float(l.split("Acc ")[1].split(" ")[0])
                 acc_bl = float(l.split("Acc_bl ")[1])
                 resuls_dict["ti"] = {"f1": f1, "f1_bl": f1_bl, "acc": acc, "acc_bl": acc_bl}
+            elif "GS:" in l:
+                ref_seg = np.array(eval(lins[i+1]))
+                ref_seg[-1] = 1
+                n_segs_ref = np.count_nonzero(ref_seg == 1)
+                hyp_seg = np.array(eval(lins[i+3]))
+                n_segs_hyp = np.count_nonzero(hyp_seg == 1)
+                doc_len = ref_seg.shape[0]
+                resuls_dict["boundary_counts"].append({"doc_len": doc_len, "#ref": n_segs_ref, "#hyp": n_segs_hyp})
         if len(lins[-1]) > 1:
             resuls_dict["doc_names"] = eval(lins[-1])
     return resuls_dict
@@ -62,6 +70,20 @@ def get_bayesseg_subdomain(res_fp, lin, beamseg_res):
         sub_domain = "avl_trees"
         
     return sub_domain, doc_name
+
+def norm_boundary_counts(results_dict):
+    need_norm = ["cvs", "texttilling", "c99"]
+    for sub_domain in results_dict:
+        bs_boundary_stats = results_dict[sub_domain]["bayesseg"][""]["boundary_counts"]
+        bs_doc_names = results_dict[sub_domain]["bayesseg"][""]["doc_names"]
+        for segmentor in need_norm:
+            if segmentor in results_dict[sub_domain]:
+                seg_boundary_stats = results_dict[sub_domain][segmentor][""]["boundary_counts"]
+                seg_doc_names = results_dict[sub_domain][segmentor][""]["doc_names"]
+                for i, seg_doc_name in enumerate(seg_doc_names):
+                    j = bs_doc_names.index(seg_doc_name)
+                    seg_boundary_stats[i]["#ref"] = bs_boundary_stats[j]["#ref"]
+    return results_dict
     
 def get_bayesseg_results(root_dir, domain, beamseg_res, segtype_filter=["ui", "aps"]):
     results_dict = {}
@@ -70,6 +92,8 @@ def get_bayesseg_results(root_dir, domain, beamseg_res, segtype_filter=["ui", "a
             continue
         segmentor = dir
         dir = root_dir+dir+"/"+domain
+        domain_dirs = os.listdir(root_dir+"/"+segmentor)
+        has_segs = "segmentations" in domain_dirs
         for res_fp in os.listdir(dir):
             with open(dir+"/"+res_fp) as res_f:
                 lins = res_f.readlines()
@@ -94,6 +118,61 @@ def get_bayesseg_results(root_dir, domain, beamseg_res, segtype_filter=["ui", "a
                     i = beamseg_doc_names.index(doc_name)
                     results_dict[sub_domain][segmentor][""]["wd_bl_no_segs"].append(no_segs_bl[i])
                     results_dict[sub_domain][segmentor][""]["wd_rnd_segs"].append(rnd_bl[i])
+                    
+                    if has_segs:
+                        segs_doc_name = doc_name
+                        segs_sub_domain = sub_domain
+                        if "news" in sub_domain:
+                            segs_sub_domain = "mw_news"
+                            if segmentor in ["bayesseg", "cvs", "c99", "texttilling"]:
+                                segs_doc_name = doc_name[:-5]+"."+doc_name[-5]+".ref"
+                        elif "bio" in sub_domain:
+                            segs_sub_domain = "mw_bio"
+                        elif "lectures" in sub_domain:
+                            segs_sub_domain = "mw_lectures"
+                                
+                        doc_len = None
+                        n_segs_ref = None
+                        n_segs_hyp = None
+                        if segmentor in ["cvs", "c99", "texttilling"]:
+                            with open(root_dir+segmentor+"/segmentations/"+segs_sub_domain+"/results_segmentation.txt") as f:
+                                lins = f.readlines()
+                            for l in lins:
+                                res_file_doc_name = l.split(" ")[1]
+                                if res_file_doc_name == segs_doc_name:
+                                    hyp_seg = np.array(eval("["+l.split("[")[1]))
+                                    n_segs_hyp = hyp_seg.shape[0]
+                                    doc_len = hyp_seg[-1]
+                                    n_segs_ref = None
+                                    break
+                        elif segmentor == "multiseg":
+                            with open(root_dir+segmentor+"/segmentations/"+segs_sub_domain+"/results_segmentation.txt") as f:
+                                lins = f.readlines()
+                            for l in lins:
+                                res_file_doc_name = l.split(" ")[1]
+                                if res_file_doc_name == segs_doc_name:
+                                    l_split = l.split(" Ref: ")[1].split(" Hyp: ")
+                                    ref_seg = np.array(eval(l_split[0]))
+                                    n_segs_ref = np.count_nonzero(ref_seg == 1)
+                                    hyp_seg = np.array(eval(l_split[1]))
+                                    n_segs_hyp = np.count_nonzero(hyp_seg == 1)
+                                    doc_len = hyp_seg.shape[0]                                    
+                        else:
+                            with open(root_dir+segmentor+"/segmentations/"+segs_sub_domain+"/"+segs_doc_name) as f:
+                                lins = f.readlines()
+                                
+                            ref_seg = np.array(eval(lins[0].split(": ")[-1]))
+                            n_segs_ref = ref_seg.shape[0]
+                            hyp_seg = np.array(eval(lins[1].split(": ")[-1]))
+                            n_segs_hyp = hyp_seg.shape[0]
+                            doc_len = ref_seg[-1]
+                        if n_segs_hyp is None:
+                            continue
+                            
+                        if "boundary_counts" not in results_dict[sub_domain][segmentor][""]:
+                            results_dict[sub_domain][segmentor][""]["boundary_counts"] = []
+                        results_dict[sub_domain][segmentor][""]["boundary_counts"].append({"doc_len": doc_len, "#ref": n_segs_ref, "#hyp": n_segs_hyp})
+    results_dict = norm_boundary_counts(results_dict)
     return results_dict
                 
 def get_beamseg_results(dir, domain):
@@ -158,6 +237,7 @@ def get_results_summary(results_dict):
     baseline_nosegs_results = copy.deepcopy(all_docs_results)
     baseline_nosegs_ties_results = copy.deepcopy(all_docs_results)
     baseline_rnd_results = copy.deepcopy(all_docs_results)
+    boundary_counts_results = copy.deepcopy(all_docs_results)
     
     for domain in results_dict:
         max_docs = -1
@@ -175,7 +255,11 @@ def get_results_summary(results_dict):
                         avg_wd_video_results[seg_priorapp][prior_type] = []
                         bl_avg_wd_results["rnd"][seg_priorapp][prior_type] = []
                         bl_avg_wd_results["no_segs"][seg_priorapp][prior_type] = []
+                        boundary_counts_results[seg_priorapp][prior_type] = {"ref": [], "hyp": []}
                     wd_results = results_dict[domain][seg_priorapp][prior_type]["wd"]
+                    for boundary_stats in results_dict[domain][seg_priorapp][prior_type]["boundary_counts"]:
+                        boundary_counts_results[seg_priorapp][prior_type]["ref"].append(boundary_stats["#ref"])
+                        boundary_counts_results[seg_priorapp][prior_type]["hyp"].append(boundary_stats["#hyp"])
                     avg_wd_results[seg_priorapp][prior_type] += wd_results
                     doc_types = get_doc_types(docs)
                     for wd, doc_type in zip(wd_results, doc_types):
@@ -279,6 +363,11 @@ def get_results_summary(results_dict):
             avg_wd = np.average(bl_avg_wd_results["no_segs"][seg_priorapp][prior_type])
             std_wd = np.std(bl_avg_wd_results["no_segs"][seg_priorapp][prior_type])
             bl_avg_wd_results["no_segs"][seg_priorapp][prior_type] = str(avg_wd)[0:5]+"+-"+str(std_wd)[0:5]
+            
+            n_segs_ref = np.sum(boundary_counts_results[seg_priorapp][prior_type]["ref"])
+            n_segs_hyp = np.sum(boundary_counts_results[seg_priorapp][prior_type]["hyp"])
+            boundary_counts_results[seg_priorapp][prior_type] = str(n_segs_hyp)+"/"+str(n_segs_ref)
+            
         
     return all_docs_results,\
            domain_results_processed,\
@@ -290,7 +379,8 @@ def get_results_summary(results_dict):
            baseline_nosegs_results,\
            baseline_nosegs_ties_results,\
            baseline_rnd_results,\
-           bl_avg_wd_results
+           bl_avg_wd_results,\
+           boundary_counts_results
 
 def get_subdomain_doc_names(subdomain_dict):
     max_len = -1
@@ -358,7 +448,8 @@ def print_domain_results(results_dict):
     baseline_nosegs_results,\
     baseline_nosegs_ties_results,\
     baseline_rnd_results,\
-    bl_avg_wd_results = get_results_summary(results_dict)
+    bl_avg_wd_results,\
+    avg_boundary_counts_results = get_results_summary(results_dict)
     
     n_docs = 0
     for domain in results_dict:
@@ -370,7 +461,7 @@ def print_domain_results(results_dict):
     print_str += "\nResults Summary\n\n"
     for seg_type in res_summary_alldocs:
         prior_type_order = sorted(list(results_dict[sub_domain][seg_type]))
-        print_str += seg_type+"\nPrior Type\t#Best Results (all docs)\t#Best Results (domain)\tWD avg (all docs)\t#Wins vs BL no segs\t#Ties vs BL no segs\t#Wins vs BL rnd segs"
+        print_str += seg_type+"\nPrior Type\t#Best Results (all docs)\t#Best Results (domain)\tWD avg (all docs)\t#Wins vs BL no segs\t#Ties vs BL no segs\t#Wins vs BL rnd segs\t#Segs hyp/ref"
         if len(avg_wd_ppt_results[seg_type][prior_type_order[0]]) > 0:
             print_str += "\tWD avg (html)"
             print_str += "\tWD avg (ppt)"
@@ -385,7 +476,8 @@ def print_domain_results(results_dict):
             print_str += str(avg_wd_results[seg_type][prior_type])+"\t"
             print_str += str(baseline_nosegs_results[seg_type][prior_type])+"/"+str(n_docs)+"\t"
             print_str += str(baseline_nosegs_ties_results[seg_type][prior_type])+"/"+str(n_docs)+"\t"
-            print_str += str(baseline_rnd_results[seg_type][prior_type])+"/"+str(n_docs)
+            print_str += str(baseline_rnd_results[seg_type][prior_type])+"/"+str(n_docs)+"\t"
+            print_str += str(avg_boundary_counts_results[seg_type][prior_type])
             if len(avg_wd_ppt_results[seg_type][prior_type]) > 0:
                 print_str += "\t"+str(avg_wd_html_results[seg_type][prior_type])
                 print_str += "\t"+str(avg_wd_ppt_results[seg_type][prior_type])
