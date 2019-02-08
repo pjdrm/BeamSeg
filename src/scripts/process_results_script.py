@@ -213,6 +213,25 @@ def get_doc_types(doc_names):
             None
     return doc_types
 
+def get_bound_stats(bound_res):
+    avg_seg_len_hyp = np.array(bound_res["doc_len"])/np.array(bound_res["hyp"])
+    avg_avg_seg_len_hyp = np.average(avg_seg_len_hyp)
+    std_hyp = np.std(avg_seg_len_hyp)
+    
+    avg_seg_len_ref = np.array(bound_res["doc_len"])/np.array(bound_res["ref"])
+    avg_avg_seg_len_ref = np.average(avg_seg_len_ref)
+    std_ref = np.std(avg_seg_len_ref)
+    
+    
+    bound_res = str(avg_avg_seg_len_hyp-avg_avg_seg_len_ref)#str(avg_avg_seg_len_hyp)[0:5]+"/"+str(avg_avg_seg_len_ref)[0:5]
+    '''
+    bound_diff = np.array(bound_res["hyp"])-np.array(bound_res["ref"])
+    avg_diff = np.average(bound_diff)
+    std_diff = np.std(bound_diff)
+    bound_res = str(avg_diff)[0:5]+"+-"+str(std_diff)[0:5]
+    '''
+    return bound_res
+
 def get_results_summary(results_dict):
     all_docs_results = {}
     domain_results = {}
@@ -259,16 +278,17 @@ def get_results_summary(results_dict):
                         avg_wd_video_results[seg_priorapp][prior_type] = []
                         bl_avg_wd_results["rnd"][seg_priorapp][prior_type] = []
                         bl_avg_wd_results["no_segs"][seg_priorapp][prior_type] = []
-                        boundary_counts_results[seg_priorapp][prior_type] = {"ref": [], "hyp": []}
-                        boundary_html_results[seg_priorapp][prior_type] = {"ref": [], "hyp": []}
-                        boundary_ppt_results[seg_priorapp][prior_type] = {"ref": [], "hyp": []}
-                        boundary_pdf_results[seg_priorapp][prior_type] = {"ref": [], "hyp": []}
-                        boundary_video_results[seg_priorapp][prior_type] = {"ref": [], "hyp": []}
+                        boundary_counts_results[seg_priorapp][prior_type] = {"ref": [], "hyp": [], "doc_len": []}
+                        boundary_html_results[seg_priorapp][prior_type] = {"ref": [], "hyp": [], "doc_len": []}
+                        boundary_ppt_results[seg_priorapp][prior_type] = {"ref": [], "hyp": [], "doc_len": []}
+                        boundary_pdf_results[seg_priorapp][prior_type] = {"ref": [], "hyp": [], "doc_len": []}
+                        boundary_video_results[seg_priorapp][prior_type] = {"ref": [], "hyp": [], "doc_len": []}
                         
                     wd_results = results_dict[domain][seg_priorapp][prior_type]["wd"]
                     for boundary_stats in results_dict[domain][seg_priorapp][prior_type]["boundary_counts"]:
                         boundary_counts_results[seg_priorapp][prior_type]["ref"].append(boundary_stats["#ref"])
                         boundary_counts_results[seg_priorapp][prior_type]["hyp"].append(boundary_stats["#hyp"])
+                        boundary_counts_results[seg_priorapp][prior_type]["doc_len"].append(boundary_stats["doc_len"])
                     avg_wd_results[seg_priorapp][prior_type] += wd_results
                     doc_types = get_doc_types(docs)
                     for wd, doc_type, boundary_stats in zip(wd_results, doc_types, results_dict[domain][seg_priorapp][prior_type]["boundary_counts"]):
@@ -276,18 +296,22 @@ def get_results_summary(results_dict):
                             avg_wd_html_results[seg_priorapp][prior_type].append(wd)
                             boundary_html_results[seg_priorapp][prior_type]["ref"].append(boundary_stats["#ref"])
                             boundary_html_results[seg_priorapp][prior_type]["hyp"].append(boundary_stats["#hyp"])
+                            boundary_html_results[seg_priorapp][prior_type]["doc_len"].append(boundary_stats["doc_len"])
                         elif doc_type == "ppt":
                             avg_wd_ppt_results[seg_priorapp][prior_type].append(wd)
                             boundary_ppt_results[seg_priorapp][prior_type]["ref"].append(boundary_stats["#ref"])
                             boundary_ppt_results[seg_priorapp][prior_type]["hyp"].append(boundary_stats["#hyp"])
+                            boundary_ppt_results[seg_priorapp][prior_type]["doc_len"].append(boundary_stats["doc_len"])
                         elif doc_type == "pdf":
                             avg_wd_pdf_results[seg_priorapp][prior_type].append(wd)
                             boundary_pdf_results[seg_priorapp][prior_type]["ref"].append(boundary_stats["#ref"])
                             boundary_pdf_results[seg_priorapp][prior_type]["hyp"].append(boundary_stats["#hyp"])
+                            boundary_pdf_results[seg_priorapp][prior_type]["doc_len"].append(boundary_stats["doc_len"])
                         elif doc_type == "video":
                             avg_wd_video_results[seg_priorapp][prior_type].append(wd)
                             boundary_video_results[seg_priorapp][prior_type]["ref"].append(boundary_stats["#ref"])
                             boundary_video_results[seg_priorapp][prior_type]["hyp"].append(boundary_stats["#hyp"])
+                            boundary_video_results[seg_priorapp][prior_type]["doc_len"].append(boundary_stats["doc_len"])
                     bl_avg_wd_results["rnd"][seg_priorapp][prior_type] += results_dict[domain][seg_priorapp][prior_type]["wd_rnd_segs"]
                     bl_avg_wd_results["no_segs"][seg_priorapp][prior_type] += results_dict[domain][seg_priorapp][prior_type]["wd_bl_no_segs"]
         
@@ -374,28 +398,16 @@ def get_results_summary(results_dict):
                 avg_wd_video_results[seg_priorapp][prior_type] = str(avg_wd)[0:5]+"+-"+str(std_wd)[0:5]
             
             if len(boundary_html_results[seg_priorapp][prior_type]["ref"]) > 0:
-                bound_diff = np.array(boundary_html_results[seg_priorapp][prior_type]["hyp"])-np.array(boundary_html_results[seg_priorapp][prior_type]["ref"])
-                avg_diff = np.average(bound_diff)
-                std_diff = np.std(bound_diff)
-                boundary_html_results[seg_priorapp][prior_type] = str(avg_diff)[0:5]+"+-"+str(std_diff)[0:5]
+                boundary_html_results[seg_priorapp][prior_type] = get_bound_stats(boundary_html_results[seg_priorapp][prior_type])
                 
             if len(boundary_ppt_results[seg_priorapp][prior_type]["ref"]) > 0:
-                bound_diff = np.array(boundary_ppt_results[seg_priorapp][prior_type]["hyp"])-np.array(boundary_ppt_results[seg_priorapp][prior_type]["ref"])
-                avg_diff = np.average(bound_diff)
-                std_diff = np.std(bound_diff)
-                boundary_ppt_results[seg_priorapp][prior_type] = str(avg_diff)[0:5]+"+-"+str(std_diff)[0:5]
+                boundary_ppt_results[seg_priorapp][prior_type] = get_bound_stats(boundary_ppt_results[seg_priorapp][prior_type])
                 
             if len(boundary_pdf_results[seg_priorapp][prior_type]["ref"]) > 0:
-                bound_diff = np.array(boundary_pdf_results[seg_priorapp][prior_type]["hyp"])-np.array(boundary_pdf_results[seg_priorapp][prior_type]["ref"])
-                avg_diff = np.average(bound_diff)
-                std_diff = np.std(bound_diff)
-                boundary_pdf_results[seg_priorapp][prior_type] = str(avg_diff)[0:5]+"+-"+str(std_diff)[0:5]
+                boundary_pdf_results[seg_priorapp][prior_type] = get_bound_stats(boundary_pdf_results[seg_priorapp][prior_type])
                 
             if len(boundary_video_results[seg_priorapp][prior_type]["ref"]) > 0:
-                bound_diff = np.array(boundary_video_results[seg_priorapp][prior_type]["hyp"])-np.array(boundary_video_results[seg_priorapp][prior_type]["ref"])
-                avg_diff = np.average(bound_diff)
-                std_diff = np.std(bound_diff)
-                boundary_video_results[seg_priorapp][prior_type] = str(avg_diff)[0:5]+"+-"+str(std_diff)[0:5]
+                boundary_video_results[seg_priorapp][prior_type] = get_bound_stats(boundary_video_results[seg_priorapp][prior_type])
             
             avg_wd = np.average(bl_avg_wd_results["rnd"][seg_priorapp][prior_type])
             std_wd = np.std(bl_avg_wd_results["rnd"][seg_priorapp][prior_type])
@@ -566,8 +578,8 @@ def print_domain_results(results_dict):
     print(set(incomplete_domains))
 
 segtype_filer = ["beamseg", "aps", "ui", "mincut"]
-results_beamseg = get_beamseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/beamseg", "L")
-results_bayesseg =  get_bayesseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/", "MUSED", results_beamseg, segtype_filer)
+results_beamseg = get_beamseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/beamseg", "avl")
+results_bayesseg =  get_bayesseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/", "AVL", results_beamseg, segtype_filer)
 merged_results = merge_results(results_beamseg, results_bayesseg)
 print_domain_results(results_bayesseg)
 #print(json.dumps(results_dict, sort_keys=True, indent=4))
