@@ -23,7 +23,7 @@ class RndTopicsModel(object):
             self.rt_seg_log.disabled = True
         
         self.alpha = configs["model"]["alpha"]
-        self.beta = configs["model"]["alpha"]
+        self.beta = configs["model"]["beta"]
         self.gamma = configs["model"]["gamma"]
         self.K = configs["model"]["K"]
         self.W = data.W
@@ -327,7 +327,7 @@ class RndTopicsModel(object):
             if self.rho[u] == 1:
                 Su_index += 1
 
-    def log_prob_joint_dist(self, gamma, alpha, alpha, rho_eq_1, W_K_counts, U_K_counts):
+    def log_prob_joint_dist(self, gamma, beta, alpha, rho_eq_1, W_K_counts, U_K_counts):
         n_sents = U_K_counts.shape[0]
         K = U_K_counts.shape[1]
         n1 = len(rho_eq_1)
@@ -340,8 +340,8 @@ class RndTopicsModel(object):
         log_p_c_f2 = (gammaln(n1+gamma) + gammaln(n0+gamma)) - gammaln(n_sents+2.0*gamma)
         log_p_c = log_p_c_f1 + log_p_c_f2
         
-        log_p_wz_f1 = (gammaln(W*alpha) - gammaln(alpha)*W)*K
-        log_p_wz_f2 = (np.sum(gammaln(np_W_K_counts + alpha), axis = 0) - gammaln(np.sum(np_W_K_counts, axis=0) + W*alpha)).sum()
+        log_p_wz_f1 = (gammaln(W*beta) - gammaln(beta)*W)*K
+        log_p_wz_f2 = (np.sum(gammaln(np_W_K_counts + beta), axis = 0) - gammaln(np.sum(np_W_K_counts, axis=0) + W*beta)).sum()
         log_p_wz = log_p_wz_f1 + log_p_wz_f2
         
         log_p_zc_f1 = (gammaln(K*alpha) - gammaln(alpha)*K)*n1
@@ -573,10 +573,10 @@ U_I_topics_g = None
 W_K_counts_g = None
 
 class RndTopicsParallelModel(RndTopicsModel):
-    def __init__(self, gamma, alpha, alpha, K, data,\
+    def __init__(self, gamma, alpha, beta, K, data,\
                  log_flag=False,\
                  sampler_log_file = "RndTopicsModel.log"):
-        RndTopicsModel.__init__(self, gamma, alpha, alpha, K, data,\
+        RndTopicsModel.__init__(self, gamma, alpha, beta, K, data,\
                                     log_flag,\
                                     sampler_log_file)
         self.log_flag = log_flag

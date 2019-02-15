@@ -96,7 +96,8 @@ def get_params_opt(cfg):
     return params_list
     
 def opt_model_params(data_config, greedy_seg_config, log_file_path):
-    if os.path.exists(log_file_path): os.remove(log_file_path)
+    if os.path.exists(log_file_path):
+        os.remove(log_file_path)
     doc_col = MultiDocument(data_config)
     data = Data(doc_col)
     all_configs = get_all_greedy_configs(greedy_seg_config)

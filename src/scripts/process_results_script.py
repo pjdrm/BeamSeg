@@ -215,15 +215,11 @@ def get_doc_types(doc_names):
 
 def get_bound_stats(bound_res):
     avg_seg_len_hyp = np.array(bound_res["doc_len"])/np.array(bound_res["hyp"])
-    avg_avg_seg_len_hyp = np.average(avg_seg_len_hyp)
-    std_hyp = np.std(avg_seg_len_hyp)
-    
     avg_seg_len_ref = np.array(bound_res["doc_len"])/np.array(bound_res["ref"])
-    avg_avg_seg_len_ref = np.average(avg_seg_len_ref)
-    std_ref = np.std(avg_seg_len_ref)
-    
-    
-    bound_res = str(avg_avg_seg_len_hyp-avg_avg_seg_len_ref)#str(avg_avg_seg_len_hyp)[0:5]+"/"+str(avg_avg_seg_len_ref)[0:5]
+    seg_len_diff = avg_seg_len_hyp-avg_seg_len_ref
+    avg_seg_len = np.average(seg_len_diff)
+    std_seg_len = np.std(seg_len_diff)
+    bound_res = str(avg_seg_len)[0:5]+"+-"+str(std_seg_len)[0:5]
     '''
     bound_diff = np.array(bound_res["hyp"])-np.array(bound_res["ref"])
     avg_diff = np.average(bound_diff)
@@ -537,7 +533,7 @@ def print_domain_results(results_dict):
             print_str += "\tAvg ref/hyp segs diff (html)"
             print_str += "\tAvg ref/hyp segs diff (ppt)"
             print_str += "\tAvg ref/hyp segs diff (video)"
-        if isinstance(boundary_pdf_results[seg_type][prior_type], str):
+        if isinstance(boundary_pdf_results[seg_type][prior_type_order[0]], str):
             print_str += "\tAvg ref/hyp segs diff (pdf)"
         print_str += "\n"
             
@@ -560,7 +556,7 @@ def print_domain_results(results_dict):
                 print_str += "\t"+str(boundary_html_results[seg_type][prior_type])
                 print_str += "\t"+str(boundary_ppt_results[seg_type][prior_type])
                 print_str += "\t"+str(boundary_video_results[seg_type][prior_type])
-            if isinstance(boundary_pdf_results[seg_type][prior_type], str):
+            if isinstance(boundary_pdf_results[seg_type][prior_type_order[0]], str):
                 print_str += "\t"+str(boundary_pdf_results[seg_type][prior_type])
             print_str += "\n"
         print_str += "\n"
@@ -578,8 +574,8 @@ def print_domain_results(results_dict):
     print(set(incomplete_domains))
 
 segtype_filer = ["beamseg", "aps", "ui", "mincut"]
-results_beamseg = get_beamseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/beamseg", "avl")
-results_bayesseg =  get_bayesseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/", "AVL", results_beamseg, segtype_filer)
+results_beamseg = get_beamseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/beamseg", "bio")
+results_bayesseg =  get_bayesseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/", "mw_bio", results_beamseg, segtype_filer)
 merged_results = merge_results(results_beamseg, results_bayesseg)
-print_domain_results(results_bayesseg)
+print_domain_results(merged_results)
 #print(json.dumps(results_dict, sort_keys=True, indent=4))
