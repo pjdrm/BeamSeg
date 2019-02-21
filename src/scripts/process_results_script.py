@@ -145,7 +145,7 @@ def get_bayesseg_results(root_dir, domain, beamseg_res, segtype_filter=["ui", "a
                                     doc_len = np.sum(hyp_seg)
                                     n_segs_ref = None
                                     break
-                        elif segmentor == "multiseg":
+                        elif segmentor in ["multiseg", "plda", "plda_md"]:
                             with open(root_dir+segmentor+"/segmentations/"+segs_sub_domain+"/results_segmentation.txt") as f:
                                 lins = f.readlines()
                             for l in lins:
@@ -574,8 +574,8 @@ def print_domain_results(results_dict):
     print(set(incomplete_domains))
 
 segtype_filer = ["beamseg", "aps", "ui", "mincut"]
-results_beamseg = get_beamseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/beamseg", "bio")
-results_bayesseg =  get_bayesseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/", "mw_bio", results_beamseg, segtype_filer)
+results_beamseg = get_beamseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/beamseg", "news")
+results_bayesseg =  get_bayesseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/", "mw_news", results_beamseg, segtype_filer)
 merged_results = merge_results(results_beamseg, results_bayesseg)
 print_domain_results(merged_results)
 #print(json.dumps(results_dict, sort_keys=True, indent=4))
