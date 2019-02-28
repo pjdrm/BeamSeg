@@ -108,7 +108,6 @@ def get_bayesseg_results(root_dir, domain, beamseg_res, segtype_filter=["ui", "a
                         results_dict[sub_domain][segmentor] = {"": {"doc_names": [], "wd": [], "wd_bl_no_segs": [], "wd_rnd_segs": []}}
                     results_dict[sub_domain][segmentor][""]["doc_names"].append(doc_name)
                     results_dict[sub_domain][segmentor][""]["wd"].append(wd)
-                    
                     seg_type = list(beamseg_res[sub_domain].keys())[0]
                     prior = list(beamseg_res[sub_domain][seg_type].keys())[0]
                     beamseg_doc_names = beamseg_res[sub_domain][seg_type][prior]["doc_names"]
@@ -207,7 +206,7 @@ def get_doc_types(doc_names):
             doc_types.append("ppt")
         elif "pdf" in doc:
             doc_types.append("pdf")
-        elif "_v" in doc or "Video" in doc or "MIT1" in doc:
+        elif "_v" in doc or "Video" in doc or "MIT" in doc:
             doc_types.append("video")
         else:
             None
@@ -574,8 +573,8 @@ def print_domain_results(results_dict):
     print(set(incomplete_domains))
 
 segtype_filer = ["beamseg", "aps", "ui", "mincut"]
-results_beamseg = get_beamseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/beamseg", "news")
-results_bayesseg =  get_bayesseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/", "mw_news", results_beamseg, segtype_filer)
+results_beamseg = get_beamseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/beamseg", "avl")
+results_bayesseg =  get_bayesseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/", "AVL", results_beamseg, segtype_filer)
 merged_results = merge_results(results_beamseg, results_bayesseg)
 print_domain_results(merged_results)
 #print(json.dumps(results_dict, sort_keys=True, indent=4))
