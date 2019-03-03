@@ -5,3 +5,6 @@
 /data/
 /RndTopicsModel.log
 /tt_venv/
+/config/
+/dataset/
+/logs/

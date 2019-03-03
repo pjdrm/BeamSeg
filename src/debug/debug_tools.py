@@ -443,6 +443,6 @@ def clean_debug():
     os.makedirs(rho1_prob_dir)
     
 def clean_log():
-    log_dir = "./logging/"
+    log_dir = "./logging_plda/"
     shutil.rmtree(log_dir)
     os.makedirs(log_dir)

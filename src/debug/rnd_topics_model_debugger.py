@@ -139,7 +139,7 @@ def real_multi_doc_test(configs):
             str_res += label + "\t\t"
         str_res += "\n"
         for i, doc in enumerate(doc_col.doc_names):
-            str_res += doc[:-7] + "\t\t" 
+            str_res += doc + "\t\t" 
             for j in range(len(all_wd_results)):
                 str_res += str(all_wd_results[j][i]) + "\t"
             str_res += "\n"
@@ -149,7 +149,8 @@ def real_multi_doc_test(configs):
             debug_tools.plot_iter_time(md_log_file_list, configs["plots"]["iter_time"]+"_"+str(K)+".png")
             for log_file in md_log_file_list + ind_log_file_list:
                 debug_tools.print_ref_hyp_plots(log_file, configs["plots"]["ref_hyp"], log_file.split("/")[-1][:-4])
-            
+    for i, label in enumerate(y_labels):
+        str_res += label+" WD avg: "+str(np.average(all_wd_results[i]))+"\n"
     print(str_res)                
     with open(configs["logging"]["results_file"], "a") as f:
         f.write(str_res)
