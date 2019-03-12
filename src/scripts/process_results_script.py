@@ -7,6 +7,8 @@ import os
 import json
 import numpy as np
 import copy
+from random import shuffle
+from eval.eval_tools import wd as wd_metic
 
 def merge_results(r1, r2):
     for subdomain in r2:
@@ -15,7 +17,7 @@ def merge_results(r1, r2):
     return r1 
     
 def get_results(file_path):
-    resuls_dict = {"boundary_counts": []}
+    resuls_dict = {"boundary_counts": [], "wd_rnd_segs": []}
     with open(file_path) as f:
         lins = f.readlines()
             
@@ -40,6 +42,17 @@ def get_results(file_path):
                 n_segs_hyp = np.count_nonzero(hyp_seg == 1)
                 doc_len = ref_seg.shape[0]
                 resuls_dict["boundary_counts"].append({"doc_len": doc_len, "#ref": n_segs_ref, "#hyp": n_segs_hyp})
+                
+                '''
+                rnd_seg = copy.deepcopy(ref_seg)
+                wd_rnd_bl = 0
+                n_shuffles = 100
+                for i in range(n_shuffles):
+                    shuffle(rnd_seg)
+                    wd_rnd_bl += wd_metic(rnd_seg, ref_seg)
+                resuls_dict["wd_rnd_segs"].append(wd_rnd_bl/(n_shuffles*1.0))
+                '''
+                    
         if len(lins[-1]) > 1:
             resuls_dict["doc_names"] = eval(lins[-1])
     return resuls_dict
@@ -573,8 +586,8 @@ def print_domain_results(results_dict):
     print(set(incomplete_domains))
 
 segtype_filer = ["beamseg", "aps", "ui", "mincut"]
-results_beamseg = get_beamseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/beamseg", "avl")
-results_bayesseg =  get_bayesseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/", "AVL", results_beamseg, segtype_filer)
+results_beamseg = get_beamseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/beamseg", "L")
+results_bayesseg =  get_bayesseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/", "MUSED", results_beamseg, segtype_filer)
 merged_results = merge_results(results_beamseg, results_bayesseg)
 print_domain_results(merged_results)
 #print(json.dumps(results_dict, sort_keys=True, indent=4))
