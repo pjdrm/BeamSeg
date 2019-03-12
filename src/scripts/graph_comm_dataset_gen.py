@@ -7,28 +7,31 @@ import json
 import os
 import copy
 
-def get_topic_labels(utt_topic_labels):
-    prev_label = -1
+def get_topic_labels(topic_root_dir, file_name):
     seg_labels = []
-    for utt_label in utt_topic_labels:
-        if utt_label != prev_label:
-            seg_labels.append(utt_label)
-        prev_label = utt_label
-    return seg_labels
-        
+    i = 1
+    done_flag = False
+    while not done_flag:
+        done_flag = True
+        for topic_dir in os.listdir(topic_root_dir):
+            for doc in os.listdir(topic_root_dir+topic_dir):
+                if file_name+"seg"+str(i) in doc:
+                    t_label = int(topic_dir.replace("topic", ""))
+                    seg_labels.append(t_label)
+                    i += 1
+                    done_flag = False
+                    break
+    return seg_labels                  
         
 def gen_dataset(root_dir, results_file):
-    with open(results_file) as res_f:
-        lins = res_f.readlines()
-        docs_list = eval(lins[-1])
-        ref_topics = eval(lins[-2].replace("Ref Topics: ", ""))
-        all_doc_txt = ""
-        all_segment_label = []
-        for doc_name, doc_topics in zip(docs_list, ref_topics):
-            all_segment_label += get_topic_labels(doc_topics)
-            with open(root_dir+"/"+doc_name) as f:
-                all_doc_txt += f.read()
-    all_doc_txt = all_doc_txt.replace("====================", "==========")
+    all_doc_txt = ""
+    all_segment_label = []
+    for doc_name in os.listdir(root_dir+"/doc_segs"):
+        with open(root_dir+"/doc_segs/"+doc_name) as f:
+            all_doc_txt += f.read()
+        all_segment_label += get_topic_labels(root_dir+"/doc_rels/", doc_name)
+    all_doc_txt = all_doc_txt.replace("====================", "==========")   
+    
     return all_segment_label, all_doc_txt
     
 def find_best_params(results_file):
@@ -349,7 +352,7 @@ def gen_experiment(algs_cfg, yaml_fp, domains_dir, results_dir, domain_desc, out
         else:
             domain_id = domain_dir+"_"
         result_fp = get_res_fp(domain_id, domain_desc, results_dir)
-        all_segment_label, all_doc_txt = gen_dataset(domains_dir+domain_dir+"/doc_segs", results_dir+result_fp)
+        all_segment_label, all_doc_txt = gen_dataset(domains_dir+domain_dir, result_fp)
         cfg = copy.deepcopy(algs_cfg)
         cfg["slicing_true_labels"] =  str(all_segment_label)[1:-1]
         cfg_fp = domain_desc+"_"+domain_dir+".json"
