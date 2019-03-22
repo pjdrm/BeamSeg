@@ -585,9 +585,9 @@ def print_domain_results(results_dict):
     print(print_str)
     print(set(incomplete_domains))
 
-segtype_filer = ["beamseg", "aps", "ui", "mincut"]
-results_beamseg = get_beamseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/beamseg", "L")
-results_bayesseg =  get_bayesseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/", "MUSED", results_beamseg, segtype_filer)
+segtype_filer = ["beamseg", "aps", "ui", "mincut", "bayesseg-MD", "c99", "plda", "plda_md", "texttilling"]
+results_beamseg = get_beamseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/beamseg", "news")
+results_bayesseg =  get_bayesseg_results("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/", "mw_news", results_beamseg, segtype_filer)
 merged_results = merge_results(results_beamseg, results_bayesseg)
 print_domain_results(merged_results)
 #print(json.dumps(results_dict, sort_keys=True, indent=4))
