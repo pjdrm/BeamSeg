@@ -6,42 +6,30 @@ Created on Mar 6, 2019
 import json
 import os
 import copy
-import shutil
 
 def get_topic_labels(topic_root_dir, file_name):
-    print(file_name)
-    topic_label_map = {}
-    file_name = file_name.replace("_cap_man_processed_annotated", "").replace("_processed_annotated", "").replace("_html", "").replace("_ppt", "").replace("_pdf", "")
     seg_labels = []
     i = 1
-    t = 0
     done_flag = False
     while not done_flag:
         done_flag = True
         for topic_dir in os.listdir(topic_root_dir):
             for doc in os.listdir(topic_root_dir+topic_dir):
-                if file_name+"_seg"+str(i)+".txt" == doc:
-                    if "topic" in topic_dir:
-                        t_label = int(topic_dir.replace("topic_", ""))
-                    else:
-                        if topic_dir not in topic_label_map:
-                            topic_label_map[topic_dir] = t
-                            t += 1
-                        t_label = topic_label_map[topic_dir]
+                if file_name+"seg"+str(i) in doc:
+                    t_label = int(topic_dir.replace("topic", ""))
                     seg_labels.append(t_label)
                     i += 1
                     done_flag = False
                     break
-    print(len(seg_labels))
     return seg_labels                  
         
-def gen_dataset(root_dir):
+def gen_dataset(root_dir, results_file):
     all_doc_txt = ""
     all_segment_label = []
     for doc_name in os.listdir(root_dir+"/doc_segs"):
         with open(root_dir+"/doc_segs/"+doc_name) as f:
             all_doc_txt += f.read()
-        all_segment_label += get_topic_labels(root_dir+"/doc_links/", doc_name.replace(".txt", ""))
+        all_segment_label += get_topic_labels(root_dir+"/doc_rels/", doc_name)
     all_doc_txt = all_doc_txt.replace("====================", "==========")   
     
     return all_segment_label, all_doc_txt
@@ -239,9 +227,6 @@ def find_best_params(results_file):
             minPts = get_val(l, "minPts: ")
             eps = get_val(l, "eps: ")
             metric = get_val(l, "metric: ")
-            var = "-1"
-            if metric == "gaussian":
-                var = get_val(l, "var: ")
             best_params[algo]["best_ari"] = ari
             best_params[algo]["minPts"] = minPts
             best_params[algo]["eps"] = eps
@@ -336,7 +321,7 @@ def gen_config(best_params, cfg_template_path):
             algo_cfg["bandwidth"] = '['+algo_params["bandwidth"]+']'
     return cfg_template
 
-def gen_experiment(algs_cfg, yaml_fp, domains_dir, domain_desc, out_dir):
+def gen_experiment(algs_cfg, yaml_fp, domains_dir, results_dir, domain_desc, out_dir):
     def get_res_fp(domain_id, domain_desc, results_dir):
         for r_fp in os.listdir(results_dir):
             if domain_id in r_fp and domain_desc in r_fp:
@@ -353,13 +338,6 @@ def gen_experiment(algs_cfg, yaml_fp, domains_dir, domain_desc, out_dir):
             final_yaml += l+"\n"
         return final_yaml
     
-    if os.path.isdir(out_dir+"/docs"):
-        shutil.rmtree(out_dir+"/docs")
-    if os.path.isdir(out_dir+"/configs"):
-        shutil.rmtree(out_dir+"/configs")
-    if os.path.isdir(out_dir+"/yalms"):
-        shutil.rmtree(out_dir+"/yalms")
-
     os.mkdir(out_dir+"/docs")
     os.mkdir(out_dir+"/configs")
     os.mkdir(out_dir+"/yalms")
@@ -373,7 +351,8 @@ def gen_experiment(algs_cfg, yaml_fp, domains_dir, domain_desc, out_dir):
             domain_id = domain_dir.replace("omain", "")+"_"
         else:
             domain_id = domain_dir+"_"
-        all_segment_label, all_doc_txt = gen_dataset(domains_dir+domain_dir)
+        result_fp = get_res_fp(domain_id, domain_desc, results_dir)
+        all_segment_label, all_doc_txt = gen_dataset(domains_dir+domain_dir, result_fp)
         cfg = copy.deepcopy(algs_cfg)
         cfg["slicing_true_labels"] =  str(all_segment_label)[1:-1]
         cfg_fp = domain_desc+"_"+domain_dir+".json"
@@ -400,7 +379,8 @@ best_params = find_best_params("/home/pjdrm/Dropbox/results_AVL_common_topics.tx
 cfg_final = gen_config(best_params, "/home/pjdrm/Dropbox/tests_bio_d0.json")
 gen_experiment(cfg_final,
                "/home/pjdrm/Dropbox/bio_d0.yaml",
-               "/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/dataset/MUSED/",
-               "mused",
-               "/home/pjdrm/Desktop/gcm_exps/MUSED/")
+               "/home/pjdrm/workspace/TopicTrackingSegmentation/dataset/Lectures/",
+               "/home/pjdrm/workspace/TopicTrackingSegmentation/thesis_exp/beamseg/",
+               "lectures",
+               "/home/pjdrm/Desktop/gcm_exps/Lectures/")
 #gen_dataset("/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/dataset/Biography/domain0/doc_segs", "/home/pjdrm/eclipse-workspace/TopicTrackingSegmentation/thesis_exp/beamseg/bio_d0_segbl_modality_bb.txt")
